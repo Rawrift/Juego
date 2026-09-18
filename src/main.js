@@ -456,6 +456,7 @@ dynamicBox('pallet',[9,1,7],[2.4,.35,1.7],18,materials.wood);
 setBoot('Creando jugador y cámara…', 48);
 
 const player = new pc.Entity('Player');
+player.userData = {};
 player.setPosition(0,1.15,17);
 player.addComponent('collision', { type:'capsule', radius:.42, height:1.8 });
 player.addComponent('rigidbody', {
@@ -587,6 +588,7 @@ spawnNpc([38,1.1,12],5);
 setBoot('Preparando herramientas…', 64);
 
 const viewRoot = new pc.Entity('Viewmodel');
+viewRoot.userData = {};
 camera.addChild(viewRoot);
 viewRoot.setLocalPosition(.32,-.33,-.62);
 
