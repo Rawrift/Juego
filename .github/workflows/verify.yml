@@ -1,0 +1,32 @@
+name: Verify RIGYARD
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install --no-audit --no-fund
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - name: Package verified build
+        run: |
+          cp release/ABRIR_RIGYARD.bat dist/ABRIR_RIGYARD.bat
+          cp release/server.ps1 dist/server.ps1
+          cp README.md dist/README.txt
+          cd dist && zip -r ../RIGYARD-verified.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RIGYARD-verified
+          path: RIGYARD-verified.zip
+          if-no-files-found: error
