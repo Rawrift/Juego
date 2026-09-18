@@ -58,10 +58,10 @@ app.scene.ambientLight = new pc.Color(0.22, 0.28, 0.31);
 app.scene.gammaCorrection = pc.GAMMA_SRGB;
 app.scene.toneMapping = pc.TONEMAP_ACES2;
 app.scene.exposure = 1.05;
-app.scene.fog = 'linear';
-app.scene.fogColor = new pc.Color(0.19, 0.25, 0.27);
-app.scene.fogStart = 60;
-app.scene.fogEnd = 155;
+app.scene.fog.type = pc.FOG_LINEAR;
+app.scene.fog.color = new pc.Color(0.19, 0.25, 0.27);
+app.scene.fog.start = 60;
+app.scene.fog.end = 155;
 app.systems.rigidbody.gravity.set(0, -17, 0);
 
 window.addEventListener('resize', () => app.resizeCanvas());
@@ -832,7 +832,7 @@ function cycleQuality() {
     const dpr=[.75,1,Math.min(1.5,window.devicePixelRatio||1)][state.quality];
     app.graphicsDevice.maxPixelRatio=dpr;
     sun.light.castShadows=state.quality>0;
-    app.scene.fogEnd=[105,145,180][state.quality];
+    app.scene.fog.end=[105,145,180][state.quality];
     toast(['BAJO','ALTO','ULTRA'][state.quality]);
 }
 
