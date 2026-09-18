@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <meta name="theme-color" content="#0d1417" />
+  <title>RIGYARD</title>
+  <link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="boot" class="overlay">
+    <div class="panel-card boot-card">
+      <div class="eyebrow">RIGYARD / PLAYCANVAS</div>
+      <h1>Industrial physics sandbox</h1>
+      <p id="bootStatus">Preparando motor…</p>
+      <div class="progress"><i id="bootProgress"></i></div>
+      <pre id="bootError"></pre>
+    </div>
+  </div>
+
+  <div id="start" class="overlay hidden">
+    <div class="panel-card start-card">
+      <div class="eyebrow">BUILD 0.5 / VERIFIED PIPELINE</div>
+      <h2>RIGYARD</h2>
+      <p>Un patio industrial construido para experimentar con física, objetos, NPCs y herramientas.</p>
+      <button id="enter">ENTRAR</button>
+      <small>WASD mover · Shift correr · Space saltar · C cámara · Q objetos · P personaje · 1–4 herramientas</small>
+    </div>
+  </div>
+
+  <div id="hud" class="hidden">
+    <div class="brand"><b>RIGYARD</b><span>PLAYCANVAS / BULLET</span></div>
+    <div id="perf">FPS —<br>DRAW —</div>
+    <div class="crosshair"></div>
+    <div id="hitmarker">×</div>
+    <div id="toast"></div>
+    <div class="sector"><span>SECTOR</span><b id="sector">SPAWN YARD</b><small id="status">IMÁN · listo</small></div>
+    <div class="toolbelt">
+      <button data-tool="0" class="active"><b>1 · IMÁN</b><small>agarrar / lanzar</small></button>
+      <button data-tool="1"><b>2 · KIT</b><small>soldar</small></button>
+      <button data-tool="2"><b>3 · ARMA</b><small>impacto</small></button>
+      <button data-tool="3"><b>4 · MANOS</b><small>empujar</small></button>
+    </div>
+    <div class="help">WASD · Space · Shift · Ctrl · C 1ª/3ª · Q objetos · P personaje · F3 calidad</div>
+  </div>
+
+  <div id="spawnMenu" class="side-panel hidden">
+    <header><div><span>Q / SPAWN</span><h3>OBJETOS</h3></div><button data-close="spawnMenu">×</button></header>
+    <div class="cards">
+      <button data-spawn="crate"><b>CAJA</b><small>12 kg</small></button>
+      <button data-spawn="barrel"><b>BARRIL</b><small>22 kg</small></button>
+      <button data-spawn="beam"><b>VIGA</b><small>30 kg</small></button>
+      <button data-spawn="ball"><b>ESFERA</b><small>9 kg</small></button>
+      <button data-spawn="pallet"><b>PALLET</b><small>18 kg</small></button>
+      <button data-spawn="npc"><b>NPC</b><small>humano</small></button>
+    </div>
+  </div>
+
+  <div id="characterMenu" class="side-panel hidden">
+    <header><div><span>P / PERSONAJE</span><h3>PERSONALIZACIÓN</h3></div><button data-close="characterMenu">×</button></header>
+    <div class="setting"><label>Modelo</label><button id="charModel">Operario</button></div>
+    <div class="setting"><label>Contextura</label><button id="charBuild">Media</button></div>
+    <div class="setting"><label>Altura</label><input id="charHeight" type="range" min="90" max="110" value="100"></div>
+    <div class="swatches" id="charColors"></div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
