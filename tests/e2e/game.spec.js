@@ -2,11 +2,28 @@ import { test, expect } from '@playwright/test';
 
 test('RIGYARD boots, simulates physics and exposes playable systems', async ({ page }) => {
   const errors = [];
-  page.on('pageerror', e => errors.push(String(e)));
-  page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+  page.on('pageerror', e => errors.push('pageerror: ' + String(e)));
+  page.on('console', m => {
+    if (m.type() === 'error') errors.push('console: ' + m.text());
+  });
 
   await page.goto('/');
-  await page.waitForFunction(() => window.__RIGYARD_TEST__?.ready === true, null, { timeout: 45_000 });
+  await page.waitForTimeout(3500);
+
+  const diagnostic = await page.evaluate(() => ({
+    ready: window.__RIGYARD_TEST__?.ready === true,
+    bootStatus: document.querySelector('#bootStatus')?.textContent || '',
+    bootError: document.querySelector('#bootError')?.textContent || '',
+    bootErrorDisplay: getComputedStyle(document.querySelector('#bootError')).display,
+    canvasWidth: document.querySelector('#game')?.width || 0,
+    canvasHeight: document.querySelector('#game')?.height || 0,
+    webgl: !!(document.querySelector('#game')?.getContext('webgl2') || document.querySelector('#game')?.getContext('webgl')),
+    href: location.href
+  }));
+  console.log('RIGYARD_DIAGNOSTIC=' + JSON.stringify({ diagnostic, errors }));
+
+  expect(diagnostic.ready, JSON.stringify({ diagnostic, errors }, null, 2)).toBe(true);
+  expect(diagnostic.bootError, diagnostic.bootError).toBe('');
 
   const initial = await page.evaluate(() => window.__RIGYARD_TEST__.snapshot());
   expect(initial.physics).toBe(true);
@@ -14,6 +31,7 @@ test('RIGYARD boots, simulates physics and exposes playable systems', async ({ p
   expect(initial.props).toBeGreaterThanOrEqual(5);
 
   await page.click('#enter');
+  await page.evaluate(() => window.__RIGYARD_TEST__.setPlaying(true));
   await page.keyboard.down('KeyW');
   await page.waitForTimeout(700);
   await page.keyboard.up('KeyW');
