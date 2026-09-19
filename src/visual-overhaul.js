@@ -195,14 +195,14 @@ export function applyVisualOverhaul({ pc, app, materials, box, cylinder, loadCon
     spot('work light',pos,target,color,intensity,range,38,intensity>1.8,flicker);
   }
 
-  app.scene.ambientLight=new pc.Color(.22,.245,.255);
-  app.scene.exposure=1.0;
+  app.scene.ambientLight=new pc.Color(.28,.30,.31);
+  app.scene.exposure=1.12;
   app.scene.fog.color=new pc.Color(.27,.34,.37);
   app.scene.fog.start=62;app.scene.fog.end=175;
   if(camera?.camera){camera.camera.clearColor=new pc.Color(.34,.43,.47);camera.camera.fov=74;camera.camera.farClip=240;}
-  if(sun?.light){sun.light.color=new pc.Color(1,.95,.88);sun.light.intensity=1.28;sun.light.shadowResolution=2048;sun.light.shadowDistance=95;sun.light.shadowBias=.12;}
+  if(sun?.light){sun.light.color=new pc.Color(1,.95,.88);sun.light.intensity=1.5;sun.light.shadowResolution=2048;sun.light.shadowDistance=95;sun.light.shadowBias=.12;}
   const skyFill=new pc.Entity('Cool sky fill');
-  skyFill.addComponent('light',{type:'directional',color:new pc.Color(.52,.62,.68),intensity:.78,castShadows:false});
+  skyFill.addComponent('light',{type:'directional',color:new pc.Color(.52,.62,.68),intensity:.92,castShadows:false});
   skyFill.setEulerAngles(38,145,0);
   app.root.addChild(skyFill);
   decor.push(skyFill);
@@ -225,8 +225,22 @@ export function applyVisualOverhaul({ pc, app, materials, box, cylinder, loadCon
     addBox('hangar beam',[x,10.7,15],[.28,.28,25],steel,false);
   }
   for(const z of [6,12,18,24]){
-    addBox('storage rack',[45.5,1.8,z],[1.8,3.4,4],black,false);
-    [1,2.2,3.4].forEach(y=>addBox('rack shelf',[45.5,y,z],[1.7,.12,3.9],rust,false));
+    for(const dz of [-1.82,1.82]) for(const dx of [-.76,.76]) addBox('rack upright',[45.5+dx,1.9,z+dz],[.1,3.8,.1],black,false);
+    [0.7,1.8,2.9,3.8].forEach(y=>addBox('rack shelf',[45.5,y,z],[1.65,.1,3.85],steel,false));
+    for(const y of [1.18,2.38,3.38]){
+      addBox('rack cargo',[45.5,y,z-.95],[1.2,.72,1.15],materials.wood,false);
+      if(y<3) addBox('rack cargo',[45.5,y,z+.9],[1.25,.7,1.05],materials.wood,false);
+    }
+  }
+  for(const x of [16,24,32,40,48]){
+    const a=addBox('hangar diagonal brace',[x,7.9,5.6],[.16,7.2,.16],yellow,false,false);a.setEulerAngles(52,0,0);
+    const b=addBox('hangar diagonal brace',[x,7.9,24.4],[.16,7.2,.16],yellow,false,false);b.setEulerAngles(-52,0,0);
+  }
+  for(const z of [4,10,16,22,27]) addBox('hangar roof rib',[30,10.55,z],[36,.16,.22],black,false,false);
+  for(const x of [17,23,29,35,41]){
+    addCyl('air tank',[x,1.05,25.4],[.55,1.8,.55],steel,false);
+    addCyl('air tank cap',[x,2.0,25.4],[.62,.16,.62],black,false);
+    addCyl('air pipe',[x,2.6,25.4],[.08,1.2,.08],yellow,false);
   }
   addCyl('hangar duct',[30,8.7,26.1],[.45,33,.45],steel,false,[0,0,90]);
   addCyl('duct branch',[18,7,22],[.28,8,.28],steel,false,[90,0,0]);
@@ -240,6 +254,14 @@ export function applyVisualOverhaul({ pc, app, materials, box, cylinder, loadCon
     addBox('stair glow',[29,y,-25],[.15,.14,2.4],cold,false,false);
   }
   sign('tower sign',[35,6.3,-24.24],[5.8,2.35,.07],[0,0,0],'TOWER 04','VERTICAL TEST / ACCESS','#f2a51d');
+  for(const x of [28.7,41.3]){
+    addBox('tower exo column',[x,9.5,-25.5],[.28,18.5,.28],steel,false);
+    addBox('tower exo column',[x,9.5,-36.5],[.28,18.5,.28],steel,false);
+  }
+  for(const y of [2.5,6.5,10.5,14.5,18.2]){
+    addBox('tower exo beam',[35,y,-25.5],[12.8,.22,.22],steel,false,false);
+    addBox('tower exo beam',[35,y,-36.5],[12.8,.22,.22],steel,false,false);
+  }
   addBox('tower floor stripe',[35,.13,-23.7],[12,.04,.36],yellow,false,false);
   addBox('tower floor stripe 2',[28.8,.13,-30],[.36,.04,12],yellow,false,false);
   [3.3,7.3,11.3,15.3].forEach((y)=>{
@@ -267,6 +289,16 @@ export function applyVisualOverhaul({ pc, app, materials, box, cylinder, loadCon
   [4,10,16,22].forEach(z=>addBox('spawn cross stripe',[0,.136,z],[20,.03,.12],yellow,false,false));
   [-7.5,-2.5,2.5,7.5].forEach(x=>{addBox('drain',[x,.17,3.2],[3.2,.04,.95],black,false,false);for(let gx=-1.2;gx<=1.2;gx+=.4)addBox('drain bar',[x+gx,.2,3.2],[.07,.035,.9],materials.metal,false,false);});
   [[-6,.18,6.5,4.5,2.2],[5,.18,5.3,3.2,1.6],[12,.17,8.3,2.8,1.3],[-12,.17,-3,4,1.5]].forEach(p=>addBox('puddle',[p[0],p[1],p[2]],[p[3],.025,p[4]],wet,false,false));
+  for(const p of [[-14,22],[-11,26],[11,25]]){const x=p[0],z=p[1];
+    addCyl('spawn cable reel',[x,.72,z],[.68,.22,.68],rust,false,[90,0,0]);
+    addCyl('spawn cable reel',[x,.72,z+.38],[.68,.22,.68],rust,false,[90,0,0]);
+    addCyl('spawn cable core',[x,.72,z+.19],[.24,.58,.24],black,false,[90,0,0]);
+  }
+  for(const p of [[-16,13],[14,11],[-13,4]]){const x=p[0],z=p[1];
+    addBox('service cabinet',[x,1.05,z],[.75,1.9,.45],steel,false);
+    addBox('cabinet door',[x,1.05,z-.24],[.64,1.55,.025],black,false,false);
+    addBox('cabinet lamp',[x,1.55,z-.27],[.08,.08,.025],warm,false,false);
+  }
   addBox('loading dock',[16,.75,20],[8,1.5,7],materials.concrete,true);
   addBox('dock bumper',[12.3,.8,16.55],[1.2,.7,.25],materials.rubber,false);
   addBox('dock bumper',[19.7,.8,16.55],[1.2,.7,.25],materials.rubber,false);
@@ -302,13 +334,13 @@ export function applyVisualOverhaul({ pc, app, materials, box, cylinder, loadCon
     loadTextureAsset('/textures/asphalt_01_diff_1k.jpg'),loadTextureAsset('/textures/asphalt_01_nor_gl_1k.jpg'),loadTextureAsset('/textures/asphalt_01_rough_1k.jpg'),loadTextureAsset('/textures/asphalt_01_ao_1k.jpg')
   ]).then((t)=>{
     const [cD,cN,cR,cA,mD,mN,mR,mA,mM,gD,gN,gR,gA,hD,hN,hR,hA,sD,sN,sR,sA,sM,aD,aN,aR,aA]=t;
-    applyPbrSet(materials.concrete,{normal:cN,rough:cR,ao:cA},5.5,.7);materials.concrete.diffuse=new pc.Color(.92,.93,.91);materials.concrete.update();
-    applyPbrSet(materials.darkConcrete,{normal:cN,rough:cR,ao:cA},5.5,.72);materials.darkConcrete.diffuse=new pc.Color(.68,.7,.69);materials.darkConcrete.update();
-    applyPbrSet(materials.plaster,{normal:cN,rough:cR,ao:cA},7,.28);materials.plaster.diffuse=new pc.Color(.98,.98,.96);materials.plaster.update();
-    applyPbrSet(materials.metal,{normal:mN,rough:mR,ao:mA,metal:mM},7,.88);materials.metal.diffuse=new pc.Color(.62,.66,.67);materials.metal.metalness=1;materials.metal.update();
+    applyPbrSet(materials.concrete,{diffuse:cD,normal:cN,rough:cR,ao:cA},5.5,.7);materials.concrete.diffuse=new pc.Color(.92,.93,.91);materials.concrete.update();
+    applyPbrSet(materials.darkConcrete,{diffuse:cD,normal:cN,rough:cR,ao:cA},5.5,.72);materials.darkConcrete.diffuse=new pc.Color(.68,.7,.69);materials.darkConcrete.update();
+    applyPbrSet(materials.plaster,{diffuse:cD,normal:cN,rough:cR,ao:cA},7,.28);materials.plaster.diffuse=new pc.Color(.98,.98,.96);materials.plaster.update();
+    applyPbrSet(materials.metal,{diffuse:mD,normal:mN,rough:mR,ao:mA,metal:mM},7,.88);materials.metal.diffuse=new pc.Color(.72,.75,.76);materials.metal.metalness=1;materials.metal.update();
     applyPbrSet(materials.grass,{diffuse:gD,normal:gN,rough:gR,ao:gA},8,.8);materials.grass.diffuse=new pc.Color(.9,.96,.86);materials.grass.update();
-    const hangar=materials.concrete.clone();hangar.name='Hangar PBR';hangar.diffuse=new pc.Color(.72,.74,.72);applyPbrSet(hangar,{normal:hN,rough:hR,ao:hA},7,.8);replaceEntityMaterial('Hangar floor',hangar);
-    const sheet=materials.metal.clone();sheet.name='Corrugated sheet PBR';sheet.diffuse=new pc.Color(.58,.62,.63);sheet.metalness=1;applyPbrSet(sheet,{normal:sN,rough:sR,ao:sA,metal:sM},5,.9);['Hangar east','Hangar north','Hangar south'].forEach(n=>replaceEntityMaterial(n,sheet));
+    const hangar=materials.concrete.clone();hangar.name='Hangar PBR';hangar.diffuse=new pc.Color(.86,.87,.84);applyPbrSet(hangar,{diffuse:hD,normal:hN,rough:hR,ao:hA},7,.8);replaceEntityMaterial('Hangar floor',hangar);
+    const sheet=materials.metal.clone();sheet.name='Corrugated sheet PBR';sheet.diffuse=new pc.Color(.76,.79,.8);sheet.metalness=1;applyPbrSet(sheet,{diffuse:sD,normal:sN,rough:sR,ao:sA,metal:sM},5,.9);['Hangar east','Hangar north','Hangar south'].forEach(n=>replaceEntityMaterial(n,sheet));
     const asphalt=materials.darkConcrete.clone();asphalt.name='Asphalt PBR';asphalt.diffuse=new pc.Color(.72,.72,.7);applyPbrSet(asphalt,{diffuse:aD,normal:aN,rough:aR,ao:aA},7,.85);replaceEntityMaterial('Spawn pad',asphalt);
     window.__RIGYARD_VISUAL__.pbrTexturesSettled=true;window.__RIGYARD_VISUAL__.pbrMapCount=26;return true;
   }).catch((err)=>{console.warn('[RIGYARD PBR textures]',err);window.__RIGYARD_VISUAL__.pbrTexturesSettled=false;window.__RIGYARD_VISUAL__.pbrError=String(err?.stack||err?.message||err);return false;});
@@ -354,10 +386,10 @@ export function applyVisualOverhaul({ pc, app, materials, box, cylinder, loadCon
   }
 
   const ready=Promise.all([Promise.allSettled(environmentLoads),pbrTextureReady]).then(()=>{
-    window.__RIGYARD_VISUAL__={...window.__RIGYARD_VISUAL__,version:'cinematic-industrial-v3',decorCount:decor.length,assetVisualCount:assetVisuals.length,materialsUpgraded:surface.length,environmentAssetsSettled:true,pbrTexturesSettled:window.__RIGYARD_VISUAL__?.pbrTexturesSettled===true,pbrMapCount:window.__RIGYARD_VISUAL__?.pbrMapCount||0,decals:7};
+    window.__RIGYARD_VISUAL__={...window.__RIGYARD_VISUAL__,version:'cinematic-industrial-v4',decorCount:decor.length,assetVisualCount:assetVisuals.length,materialsUpgraded:surface.length,environmentAssetsSettled:true,pbrTexturesSettled:window.__RIGYARD_VISUAL__?.pbrTexturesSettled===true,pbrMapCount:window.__RIGYARD_VISUAL__?.pbrMapCount||0,decals:7};
     console.info('[RIGYARD visual]',window.__RIGYARD_VISUAL__);
     return window.__RIGYARD_VISUAL__;
   });
-  window.__RIGYARD_VISUAL__={version:'cinematic-industrial-v3',decorCount:decor.length,assetVisualCount:0,materialsUpgraded:surface.length,environmentAssetsSettled:false,pbrTexturesSettled:false,pbrMapCount:0,decals:7};
+  window.__RIGYARD_VISUAL__={version:'cinematic-industrial-v4',decorCount:decor.length,assetVisualCount:0,materialsUpgraded:surface.length,environmentAssetsSettled:false,pbrTexturesSettled:false,pbrMapCount:0,decals:7};
   return {ready,startAudio};
 }
