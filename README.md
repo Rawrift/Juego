@@ -28,3 +28,19 @@ Cada build debe pasar:
 - smoke test del mismo `server.ps1` que se entrega para Windows.
 
 Una build que no pasa estos gates no se empaqueta como verificada.
+
+
+## Cinematic Industrial Visual Pass
+
+The current build adds a deliberately authored visual layer without replacing the verified physics core:
+
+- richer normal-mapped concrete, metal, grass, wood, tile and water,
+- warm/cool industrial lighting and hero spotlights,
+- hangar trusses, racks, ducts and work lights,
+- tower glazing and interior glow,
+- service tunnel utilities,
+- puddles, drains, signage and loading dock details,
+- skyline silhouettes and stacks,
+- CC0 vegetation plus parked utility vehicles,
+- subtle industrial ambient audio after user interaction,
+- automatic Chromium screenshot artifact used as a visual regression checkpoint.

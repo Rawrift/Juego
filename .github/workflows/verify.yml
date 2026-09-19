@@ -19,6 +19,13 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
 
+      - name: Upload visual preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: RIGYARD-VISUAL-PREVIEW
+          path: test-results/rigyard-visual.png
+          if-no-files-found: error
+
       - name: Add Windows launcher to build
         run: |
           cp release/ABRIR_RIGYARD.bat dist/ABRIR_RIGYARD.bat

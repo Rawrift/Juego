@@ -53,3 +53,22 @@ button{color:inherit}
 .setting{display:grid;grid-template-columns:105px 1fr;align-items:center;gap:10px;margin:10px 0}.setting label{color:#9aabaf;font-size:12px}.setting input{width:100%}
 .swatches{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}.swatches button{width:34px;height:34px;border-radius:50%;border:2px solid #ffffff22;cursor:pointer}.swatches button.active{border-color:white}
 @media(max-width:850px){.help{display:none}.sector{min-width:190px}.toolbelt{bottom:86px}.toolbelt button{min-width:74px}.toolbelt small{display:none}.brand{top:10px;left:10px}}
+
+
+/* cinematic visual pass */
+body:before{content:"";pointer-events:none;z-index:15;position:fixed;inset:0;background:radial-gradient(circle at 50% 46%,transparent 38%,rgba(0,7,10,.18) 72%,rgba(0,5,8,.42) 100%);mix-blend-mode:multiply}
+body:after{content:"";pointer-events:none;z-index:16;position:fixed;inset:0;opacity:.085;background-image:repeating-radial-gradient(circle at 12% 18%,rgba(255,255,255,.1) 0 1px,transparent 1px 3px);background-size:5px 5px;animation:rigyard-grain .3s steps(2) infinite}
+@keyframes rigyard-grain{0%{transform:translate(0,0)}25%{transform:translate(-1px,1px)}50%{transform:translate(1px,-1px)}75%{transform:translate(1px,1px)}100%{transform:translate(0,0)}}
+#game{filter:saturate(1.055) contrast(1.04)}
+#perf,.sector,.help,.toolbelt button,.side-panel{backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+#perf{background:linear-gradient(180deg,rgba(8,14,17,.9),rgba(4,8,10,.82));box-shadow:0 14px 38px rgba(0,0,0,.28),inset 0 1px rgba(255,255,255,.04)}
+.sector{background:linear-gradient(145deg,rgba(8,14,17,.94),rgba(5,9,11,.84));border-left:2px solid rgba(255,157,40,.68);box-shadow:0 18px 45px rgba(0,0,0,.25),inset 0 1px rgba(255,255,255,.04)}
+.toolbelt button{background:linear-gradient(180deg,rgba(13,21,25,.92),rgba(6,11,14,.92));box-shadow:0 16px 40px rgba(0,0,0,.25),inset 0 1px rgba(255,255,255,.035);transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease}
+.toolbelt button.active{transform:translateY(-4px);border-color:rgba(255,157,40,.92);box-shadow:0 14px 42px rgba(255,157,40,.12),inset 0 0 0 1px rgba(255,157,40,.28),inset 0 1px rgba(255,255,255,.06)}
+.crosshair:before,.crosshair:after{background:rgba(255,246,225,.9);box-shadow:0 0 1px #000,0 0 8px rgba(255,190,105,.2)}
+.start-card{position:relative;overflow:hidden;background:linear-gradient(145deg,rgba(11,19,23,.97),rgba(4,8,10,.98))}
+.start-card:before{content:"";position:absolute;inset:-30%;background:radial-gradient(circle at 70% 35%,rgba(255,157,40,.11),transparent 30%),radial-gradient(circle at 20% 70%,rgba(59,173,202,.08),transparent 32%);pointer-events:none}
+.start-card>*{position:relative}.start-card h2{background:linear-gradient(180deg,#fff,#aab8bd);-webkit-background-clip:text;background-clip:text;color:transparent}
+.side-panel{background:linear-gradient(160deg,rgba(9,16,19,.97),rgba(4,8,10,.96));box-shadow:0 30px 90px rgba(0,0,0,.5),inset 0 1px rgba(255,255,255,.04)}
+.cards button,.setting button{background:linear-gradient(180deg,rgba(16,27,31,.96),rgba(8,15,18,.96));transition:border-color .15s ease,transform .15s ease}
+.cards button:hover,.setting button:hover{transform:translateY(-1px);border-color:rgba(255,157,40,.5)}

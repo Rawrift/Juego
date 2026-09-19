@@ -1,5 +1,6 @@
 import * as pc from 'playcanvas';
 import Ammo from 'sync-ammo/dist/ammo.module.js';
+import { applyVisualOverhaul } from './visual-overhaul.js';
 
 globalThis.Ammo = Ammo;
 
@@ -480,6 +481,11 @@ camera.addComponent('camera', {
 });
 app.root.addChild(camera);
 
+const visualOverhaul = applyVisualOverhaul({
+    pc, app, materials, box, cylinder, loadContainer, camera, sun
+});
+window.__RIGYARD_VISUAL_READY__ = visualOverhaul.ready;
+
 function makeHumanoid(name, shirtMaterial) {
     const root = new pc.Entity(name);
     const part = (partName, pos, scale, material, type='box') => {
@@ -584,6 +590,8 @@ spawnNpc([-9,1.1,12],2);
 spawnNpc([13,1.1,9],3);
 spawnNpc([-24,1.1,-13],4);
 spawnNpc([38,1.1,12],5);
+spawnNpc([-18,1.1,-45],2);
+spawnNpc([34,3.8,-31],4);
 
 setBoot('Preparando herramientas…', 64);
 
@@ -839,6 +847,7 @@ function cycleQuality() {
 }
 
 $('enter').addEventListener('click',()=>{
+    visualOverhaul.startAudio?.();
     state.playing=true;
     startOverlay.classList.add('hidden');
     hud.classList.remove('hidden');
@@ -1009,7 +1018,7 @@ app.on('update',(dt)=>{
     }
 });
 
-Promise.allSettled([playerModelPromise]).finally(()=>{
+Promise.allSettled([playerModelPromise, visualOverhaul.ready]).finally(()=>{
     setBoot('Listo',100);
     setTimeout(()=>{
         boot.classList.add('hidden');
@@ -1028,11 +1037,21 @@ window.__RIGYARD_TEST__ = {
             npcs:npcs.length,
             thirdPerson:state.thirdPerson,
             tool:state.tool,
-            welds:welds.length
+            welds:welds.length,
+            visual:window.__RIGYARD_VISUAL__
         };
     },
     spawn(kind){ spawnAtPlayer(kind); },
     setThirdPerson(v){ state.thirdPerson=!!v; updateCamera(1/60); },
+    setPose(pose={}){
+        const x=Number.isFinite(pose.x)?pose.x:0;
+        const y=Number.isFinite(pose.y)?pose.y:1.15;
+        const z=Number.isFinite(pose.z)?pose.z:17;
+        player.rigidbody.teleport(x,y,z);
+        state.yaw=Number.isFinite(pose.yaw)?pose.yaw:0;
+        state.pitch=Number.isFinite(pose.pitch)?pose.pitch:-5;
+        updateCamera(1/60);
+    },
     setPlaying(v){ state.playing=!!v; },
     app
 };

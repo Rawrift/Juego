@@ -9,6 +9,7 @@ test('RIGYARD boots, simulates physics and exposes playable systems', async ({ p
 
   await page.goto('/');
   await page.waitForTimeout(3500);
+  await page.waitForFunction(() => window.__RIGYARD_VISUAL__?.environmentAssetsSettled === true, null, { timeout: 20_000 });
 
   const diagnostic = await page.evaluate(() => ({
     ready: window.__RIGYARD_TEST__?.ready === true,
@@ -29,6 +30,10 @@ test('RIGYARD boots, simulates physics and exposes playable systems', async ({ p
   expect(initial.physics).toBe(true);
   expect(initial.npcs).toBeGreaterThanOrEqual(4);
   expect(initial.props).toBeGreaterThanOrEqual(5);
+  expect(initial.npcs).toBeGreaterThanOrEqual(6);
+  expect(initial.visual?.version).toBe('cinematic-industrial-v1');
+  expect(initial.visual?.decorCount).toBeGreaterThan(80);
+  expect(initial.visual?.assetVisualCount).toBeGreaterThan(20);
 
   await page.click('#enter');
   await page.evaluate(() => window.__RIGYARD_TEST__.setPlaying(true));
@@ -48,6 +53,13 @@ test('RIGYARD boots, simulates physics and exposes playable systems', async ({ p
   await page.evaluate(() => window.__RIGYARD_TEST__.setThirdPerson(true));
   const third = await page.evaluate(() => window.__RIGYARD_TEST__.snapshot());
   expect(third.thirdPerson).toBe(true);
+
+  await page.evaluate(() => {
+    window.__RIGYARD_TEST__.setThirdPerson(false);
+    window.__RIGYARD_TEST__.setPose({ x: 0, y: 1.15, z: 23, yaw: 0, pitch: -7 });
+  });
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: 'test-results/rigyard-visual.png', fullPage: true });
 
   expect(errors, errors.join('\n')).toEqual([]);
 });

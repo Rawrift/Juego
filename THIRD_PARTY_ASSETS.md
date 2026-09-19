@@ -23,3 +23,11 @@ Original Quaternius packs are CC0.
 ## WebXR generic hands
 Pinned from immersive-web/webxr-input-profiles commit f4992299601614adbfefd398dc8e281556bb7444.
 Repository licensing: W3C Software and Document License.
+
+
+## Environment visual pass
+
+- Quaternius Stylized Nature MegaKit: grass, shrub and fern GLB assets. License: CC0 1.0.
+  Source: https://quaternius.com/packs/stylizednature.html
+- Quaternius Cars Pack / compatible CC0 vehicle assets repacked by WorldExplorer3D: Utility Pickup and Service Truck. License: CC0 1.0.
+  Source catalog and attribution: RRG314/WorldExplorer3D at commit b5a6a32448fcaa7c5e079ccb78d9d6030de29a00.
