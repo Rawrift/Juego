@@ -38,3 +38,11 @@ The visual overhaul packages 1K CC0 diffuse and OpenGL normal maps locally:
 - Concrete Floor — eye-candy.xyz — CC0 1.0 — https://polyhaven.com/a/concrete_floor
 - Metal Plate — Rob Tuytel — CC0 1.0 — https://polyhaven.com/a/metal_plate
 - Sparse Grass — Amal Kumar — CC0 1.0 — https://polyhaven.com/a/sparse_grass
+
+
+### Additional Poly Haven PBR surfaces
+All are CC0 1.0 and packaged locally at 1K:
+- Hangar Concrete Floor — Dimitrios Savva — https://polyhaven.com/a/hangar_concrete_floor
+- Box Profile Metal Sheet — Amal Kumar — https://polyhaven.com/a/box_profile_metal_sheet
+- Asphalt 01 — Rob Tuytel — https://polyhaven.com/a/asphalt_01
+The build uses diffuse, OpenGL normal, roughness and AO maps, plus metalness for metal surfaces.

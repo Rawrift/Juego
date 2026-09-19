@@ -481,6 +481,19 @@ camera.addComponent('camera', {
 });
 app.root.addChild(camera);
 
+const cameraFrame = (() => {
+    try {
+        const cf=new pc.CameraFrame(app,camera.camera);
+        cf.rendering.toneMapping=pc.TONEMAP_ACES2;cf.rendering.samples=1;cf.rendering.sharpness=.16;
+        cf.ssao.type='lighting';cf.ssao.blurEnabled=true;cf.ssao.intensity=.52;cf.ssao.radius=3.6;cf.ssao.samples=16;cf.ssao.power=4.2;cf.ssao.minAngle=12;cf.ssao.scale=.75;
+        cf.bloom.intensity=.016;cf.bloom.blurLevel=8;
+        cf.grading.enabled=true;cf.grading.brightness=1.02;cf.grading.contrast=1.06;cf.grading.saturation=1.04;cf.grading.tint=new pc.Color(1,.985,.96);
+        cf.vignette.intensity=.12;cf.vignette.inner=.62;cf.vignette.outer=1.25;cf.vignette.curvature=.7;cf.vignette.color=new pc.Color(.025,.035,.04);
+        cf.colorEnhance.enabled=true;cf.colorEnhance.shadows=.05;cf.colorEnhance.highlights=-.04;cf.colorEnhance.midtones=.035;cf.colorEnhance.vibrance=.08;cf.colorEnhance.dehaze=.05;
+        cf.update();return cf;
+    } catch(err){console.warn('[RIGYARD CameraFrame]',err);return null;}
+})();
+
 const visualOverhaul = applyVisualOverhaul({
     pc, app, materials, box, cylinder, loadContainer, camera, sun
 });
@@ -613,29 +626,21 @@ const vmBody = vmBox('Tool body',[0,0,0],[.18,.22,.52],materials.metal);
 const vmCore = vmBox('Tool core',[0,.03,-.29],[.11,.11,.16],materials.cyan);
 vmBox('Grip',[0,-.16,.11],[.12,.28,.13],materials.rubber);
 const vmHand = vmBox('Hand',[.13,-.12,.18],[.12,.16,.14],materials.skin);
-
+const vmSleeveR=vmBox('Sleeve R',[.19,-.22,.27],[.16,.16,.34],materials.cloth);
+const vmSleeveL=vmBox('Sleeve L',[-.28,-.22,.2],[.16,.16,.38],materials.cloth);vmSleeveL.setLocalEulerAngles(0,0,-12);
+function styleViewAsset(entity,kind='tool'){const cloned=new Map();entity.findComponents('render').forEach(r=>r.meshInstances.forEach(mi=>{let m=mi.material;if(!cloned.has(m)){const n=m.clone();if(kind==='hand'){n.diffuse=new pc.Color(.72,.5,.39);n.metalness=0;n.gloss=.32;}else{n.useMetalness=true;n.metalness=Math.max(.55,n.metalness||0);n.gloss=Math.max(.38,n.gloss||0);n.clearCoat=.18;n.clearCoatGloss=.55;}n.update();cloned.set(m,n);}mi.material=cloned.get(m);}));}
+function attachVmAsset(asset,name,pos,scale,rot,kind='tool'){if(!asset)return null;const v=asset.resource.instantiateRenderEntity({castShadows:false});v.name=name;v.setLocalScale(scale,scale,scale);v.setLocalEulerAngles(...rot);v.setLocalPosition(...pos);styleViewAsset(v,kind);viewRoot.addChild(v);return v;}
 Promise.all([
     loadContainer('/models/pulse-sidearm.glb').catch(()=>null),
-    loadContainer('/models/laser-rifle.glb').catch(()=>null)
-]).then(([pistol,rifle]) => {
-    if (pistol) {
-        const v = pistol.resource.instantiateRenderEntity({castShadows:false});
-        v.setLocalScale(.8,.8,.8);
-        v.setLocalEulerAngles(0,90,90);
-        v.setLocalPosition(.02,-.04,-.1);
-        viewRoot.addChild(v);
-        v.enabled = false;
-        viewRoot.userData.pistol = v;
-    }
-    if (rifle) {
-        const v = rifle.resource.instantiateRenderEntity({castShadows:false});
-        v.setLocalScale(.75,.75,.75);
-        v.setLocalEulerAngles(0,90,90);
-        v.setLocalPosition(.02,-.03,-.1);
-        viewRoot.addChild(v);
-        viewRoot.userData.rifle = v;
-    }
-    updateToolVisual();
+    loadContainer('/models/laser-rifle.glb').catch(()=>null),
+    loadContainer('/models/hand-left.glb').catch(()=>null),
+    loadContainer('/models/hand-right.glb').catch(()=>null)
+]).then(([pistol,rifle,leftHand,rightHand]) => {
+    const p=attachVmAsset(pistol,'Pulse sidearm',[.02,-.04,-.1],.8,[0,90,90]);if(p){p.enabled=false;viewRoot.userData.pistol=p;}
+    const r=attachVmAsset(rifle,'Magnet chassis',[.02,-.03,-.1],.75,[0,90,90]);if(r)viewRoot.userData.rifle=r;
+    const lh=attachVmAsset(leftHand,'Left hand',[-.23,-.13,-.04],.72,[18,178,-18],'hand');
+    const rh=attachVmAsset(rightHand,'Right hand',[.15,-.13,.09],.72,[12,178,12],'hand');
+    if(lh)viewRoot.userData.leftHand=lh;if(rh)viewRoot.userData.rightHand=rh;vmHand.enabled=!(lh||rh);updateToolVisual();
 });
 
 function updateToolVisual() {
@@ -702,6 +707,12 @@ function damageNpc(npc, impulse) {
         npc.rigidbody.applyImpulse(impulse.clone().mulScalar(1.5));
     }
 }
+let recoilKick=0;
+const fxMat=new pc.StandardMaterial();fxMat.diffuse=new pc.Color(.08,.65,1);fxMat.emissive=new pc.Color(.08,.65,1);fxMat.emissiveIntensity=7;fxMat.gloss=.7;fxMat.update();
+const sparkMat=new pc.StandardMaterial();sparkMat.diffuse=new pc.Color(1,.55,.12);sparkMat.emissive=new pc.Color(1,.28,.03);sparkMat.emissiveIntensity=12;sparkMat.update();
+const muzzle=vmBox('Muzzle flash',[0,.015,-.56],[.12,.12,.08],sparkMat);muzzle.enabled=false;
+function flashMuzzle(){muzzle.enabled=true;recoilKick=Math.max(recoilKick,.075);clearTimeout(flashMuzzle._t);flashMuzzle._t=setTimeout(()=>muzzle.enabled=false,48);}
+function spawnImpactFx(point,normal,material=sparkMat){if(!point)return;const group=new pc.Entity('Impact FX');group.setPosition(point);app.root.addChild(group);for(let i=0;i<6;i++){const s=new pc.Entity('spark');s.addComponent('render',{type:'sphere',castShadows:false,receiveShadows:false});s.setLocalScale(.035,.035,.035);s.render.meshInstances.forEach(mi=>mi.material=material);group.addChild(s);s.userData.vel=new pc.Vec3((Math.random()-.5)*2.6,Math.random()*2.2+.4,(Math.random()-.5)*2.6).add(normal.clone().mulScalar(.8));}let age=0;const tick=(dt)=>{age+=dt;group.children.forEach(s=>{const p=s.getLocalPosition();s.userData.vel.y-=6*dt;s.setLocalPosition(p.x+s.userData.vel.x*dt,p.y+s.userData.vel.y*dt,p.z+s.userData.vel.z*dt);const k=Math.max(.01,.035*(1-age/.38));s.setLocalScale(k,k,k);});if(age>.38){app.off('update',tick);group.destroy();}};app.on('update',tick);}
 function fireTool(button=0) {
     const hit = rayFromCamera(24);
     const forward = cameraForward();
@@ -727,16 +738,19 @@ function fireTool(button=0) {
             state.weldFirst = null;
         }
     } else if (state.tool === 2) {
+        flashMuzzle();
         if (!hit) return;
         const impulse = forward.mulScalar(23);
         if (hit.entity && hit.entity.rigidbody && isDynamicTarget(hit.entity)) hit.entity.rigidbody.applyImpulse(impulse);
         if (npcs.includes(hit.entity)) damageNpc(hit.entity,impulse);
+        spawnImpactFx(hit.point,hit.normal||pc.Vec3.UP,sparkMat);
         markHit();
     } else {
         if (!hit) return;
         const impulse = forward.mulScalar(11);
         if (hit.entity && hit.entity.rigidbody && isDynamicTarget(hit.entity)) hit.entity.rigidbody.applyImpulse(impulse);
         if (npcs.includes(hit.entity)) damageNpc(hit.entity,impulse);
+        spawnImpactFx(hit.point,hit.normal||pc.Vec3.UP,fxMat);recoilKick=Math.max(recoilKick,.035);
     }
 }
 
@@ -843,6 +857,7 @@ function cycleQuality() {
     app.graphicsDevice.maxPixelRatio=dpr;
     sun.light.castShadows=state.quality>0;
     app.scene.fog.end=[105,145,180][state.quality];
+    if(cameraFrame){cameraFrame.ssao.type=state.quality===0?'none':'lighting';cameraFrame.ssao.samples=[4,8,16][state.quality];cameraFrame.ssao.scale=[.5,.65,.75][state.quality];cameraFrame.bloom.intensity=[0,.009,.016][state.quality];cameraFrame.rendering.sharpness=[.06,.11,.16][state.quality];cameraFrame.update();}
     toast(['BAJO','ALTO','ULTRA'][state.quality]);
 }
 
@@ -906,6 +921,11 @@ function updateCamera(dt) {
         camera.setPosition(eye);
         camera.setEulerAngles(state.pitch,state.yaw,0);
         viewRoot.enabled=true;
+        const speed2d=Math.hypot(player.rigidbody.linearVelocity.x,player.rigidbody.linearVelocity.z);
+        const bob=Math.sin(state.elapsed*8.5)*Math.min(.018,speed2d*.0032);
+        recoilKick*=Math.exp(-dt*18);
+        viewRoot.setLocalPosition(.32,-.33+bob,-.62+recoilKick);
+        viewRoot.setLocalEulerAngles(bob*45,Math.sin(state.elapsed*4.2)*.45,Math.cos(state.elapsed*4.2)*.32);
         if (player.userData.modelVisual) player.userData.modelVisual.enabled=false;
         else playerFallback.enabled=false;
     } else {
@@ -1038,7 +1058,8 @@ window.__RIGYARD_TEST__ = {
             thirdPerson:state.thirdPerson,
             tool:state.tool,
             welds:welds.length,
-            visual:window.__RIGYARD_VISUAL__
+            visual:window.__RIGYARD_VISUAL__,
+            post:{cameraFrame:!!cameraFrame,ssao:cameraFrame?.ssao?.type||'none',bloom:cameraFrame?.bloom?.intensity||0}
         };
     },
     spawn(kind){ spawnAtPlayer(kind); },

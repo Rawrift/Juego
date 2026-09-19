@@ -47,7 +47,27 @@ const textureSources = [
   ['metal_plate_diff_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/metal_plate/metal_plate_diff_1k.jpg'],
   ['metal_plate_nor_gl_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/metal_plate/metal_plate_nor_gl_1k.jpg'],
   ['sparse_grass_diff_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/sparse_grass/sparse_grass_diff_1k.jpg'],
-  ['sparse_grass_nor_gl_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/sparse_grass/sparse_grass_nor_gl_1k.jpg']
+  ['sparse_grass_nor_gl_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/sparse_grass/sparse_grass_nor_gl_1k.jpg'],
+  ['concrete_floor_rough_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/concrete_floor/concrete_floor_rough_1k.jpg'],
+  ['concrete_floor_ao_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/concrete_floor/concrete_floor_ao_1k.jpg'],
+  ['metal_plate_rough_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/metal_plate/metal_plate_rough_1k.jpg'],
+  ['metal_plate_ao_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/metal_plate/metal_plate_ao_1k.jpg'],
+  ['metal_plate_metal_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/metal_plate/metal_plate_metal_1k.jpg'],
+  ['sparse_grass_rough_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/sparse_grass/sparse_grass_rough_1k.jpg'],
+  ['sparse_grass_ao_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/sparse_grass/sparse_grass_ao_1k.jpg'],
+  ['hangar_concrete_floor_diff_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/hangar_concrete_floor/hangar_concrete_floor_diff_1k.jpg'],
+  ['hangar_concrete_floor_nor_gl_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/hangar_concrete_floor/hangar_concrete_floor_nor_gl_1k.jpg'],
+  ['hangar_concrete_floor_rough_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/hangar_concrete_floor/hangar_concrete_floor_rough_1k.jpg'],
+  ['hangar_concrete_floor_ao_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/hangar_concrete_floor/hangar_concrete_floor_ao_1k.jpg'],
+  ['box_profile_metal_sheet_diff_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/box_profile_metal_sheet/box_profile_metal_sheet_diff_1k.jpg'],
+  ['box_profile_metal_sheet_nor_gl_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/box_profile_metal_sheet/box_profile_metal_sheet_nor_gl_1k.jpg'],
+  ['box_profile_metal_sheet_rough_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/box_profile_metal_sheet/box_profile_metal_sheet_rough_1k.jpg'],
+  ['box_profile_metal_sheet_ao_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/box_profile_metal_sheet/box_profile_metal_sheet_ao_1k.jpg'],
+  ['box_profile_metal_sheet_metal_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/box_profile_metal_sheet/box_profile_metal_sheet_metal_1k.jpg'],
+  ['asphalt_01_diff_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/asphalt_01/asphalt_01_diff_1k.jpg'],
+  ['asphalt_01_nor_gl_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/asphalt_01/asphalt_01_nor_gl_1k.jpg'],
+  ['asphalt_01_rough_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/asphalt_01/asphalt_01_rough_1k.jpg'],
+  ['asphalt_01_ao_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/asphalt_01/asphalt_01_ao_1k.jpg']
 ];
 
 for (const [name,url] of textureSources) {

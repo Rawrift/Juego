@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test('RIGYARD boots, simulates physics and exposes playable systems', async ({ page }) => {
   test.setTimeout(120_000);
-  await page.setViewportSize({ width: 1200, height: 750 });
+  await page.setViewportSize({ width: 1000, height: 625 });
   const errors = [];
   page.on('pageerror', e => errors.push('pageerror: ' + String(e)));
   page.on('console', m => {
@@ -33,10 +33,15 @@ test('RIGYARD boots, simulates physics and exposes playable systems', async ({ p
   expect(initial.npcs).toBeGreaterThanOrEqual(4);
   expect(initial.props).toBeGreaterThanOrEqual(5);
   expect(initial.npcs).toBeGreaterThanOrEqual(6);
-  expect(initial.visual?.version).toBe('cinematic-industrial-v2');
+  expect(initial.visual?.version).toBe('cinematic-industrial-v3');
   expect(initial.visual?.pbrTexturesSettled).toBe(true);
   expect(initial.visual?.decorCount).toBeGreaterThan(80);
   expect(initial.visual?.assetVisualCount).toBeGreaterThan(20);
+  expect(initial.visual?.pbrMapCount).toBeGreaterThanOrEqual(26);
+  expect(initial.visual?.decals).toBeGreaterThanOrEqual(7);
+  expect(initial.post?.cameraFrame).toBe(true);
+  expect(initial.post?.ssao).toBe('lighting');
+  expect(initial.post?.bloom).toBeGreaterThan(0);
 
   await page.click('#enter');
   await page.evaluate(() => window.__RIGYARD_TEST__.setPlaying(true));
@@ -61,16 +66,16 @@ test('RIGYARD boots, simulates physics and exposes playable systems', async ({ p
     window.__RIGYARD_TEST__.setThirdPerson(false);
     window.__RIGYARD_TEST__.setPose({ x: 0, y: 1.15, z: 17, yaw: 0, pitch: -6 });
   });
-  await page.waitForTimeout(900);
-  await page.locator('#game').screenshot({ path: 'test-results/rigyard-spawn.png' });
+  await page.waitForTimeout(550);
+  await page.screenshot({ path: 'test-results/rigyard-spawn.png' });
 
   await page.evaluate(() => window.__RIGYARD_TEST__.setPose({ x: 10, y: 1.15, z: 15, yaw: -90, pitch: -5 }));
-  await page.waitForTimeout(900);
-  await page.locator('#game').screenshot({ path: 'test-results/rigyard-hangar.png' });
+  await page.waitForTimeout(550);
+  await page.screenshot({ path: 'test-results/rigyard-hangar.png' });
 
   await page.evaluate(() => window.__RIGYARD_TEST__.setPose({ x: 14, y: 1.15, z: -16, yaw: -55, pitch: -6 }));
-  await page.waitForTimeout(900);
-  await page.locator('#game').screenshot({ path: 'test-results/rigyard-tower.png' });
+  await page.waitForTimeout(550);
+  await page.screenshot({ path: 'test-results/rigyard-tower.png' });
 
   expect(errors, errors.join('\n')).toEqual([]);
 });

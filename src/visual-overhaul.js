@@ -145,6 +145,18 @@ export function applyVisualOverhaul({ pc, app, materials, box, cylinder, loadCon
   function sign(name,pos,scale,rot,text,sub,accent){
     const e=addBox(name,pos,scale,signMat(text,sub,accent),false,false); if(rot)e.setEulerAngles(...rot); return e;
   }
+  function decalMat(name,kind){
+    const tex=texture('decal:'+name,(g,s)=>{
+      g.clearRect(0,0,s,s); const random=rng(name.length*971+kind.length*37);
+      if(kind==='oil'){const grad=g.createRadialGradient(s*.5,s*.5,5,s*.5,s*.5,s*.48);grad.addColorStop(0,'rgba(8,10,10,.72)');grad.addColorStop(.55,'rgba(18,20,18,.42)');grad.addColorStop(1,'rgba(20,20,18,0)');g.fillStyle=grad;g.beginPath();g.ellipse(s*.5,s*.5,s*.44,s*.3,-.22,0,TAU);g.fill();for(let i=0;i<35;i++){g.fillStyle='rgba(6,8,8,'+(.08+random()*.18)+')';g.beginPath();g.arc(random()*s,random()*s,1+random()*5,0,TAU);g.fill();}}
+      else if(kind==='tire'){g.strokeStyle='rgba(15,17,17,.45)';g.lineWidth=12;for(let x=35;x<s;x+=58){g.beginPath();g.moveTo(x,0);g.lineTo(x+30,s);g.stroke();}g.strokeStyle='rgba(0,0,0,.18)';g.lineWidth=3;for(let y=8;y<s;y+=18){g.beginPath();g.moveTo(0,y);g.lineTo(s,y+10);g.stroke();}}
+      else if(kind==='rust'){for(let i=0;i<70;i++){const x=random()*s,y=random()*s*.8,r=3+random()*20,gr=g.createRadialGradient(x,y,0,x,y,r);gr.addColorStop(0,'rgba(118,49,18,'+(.18+random()*.28)+')');gr.addColorStop(1,'rgba(92,38,14,0)');g.fillStyle=gr;g.fillRect(x-r,y-r,r*2,r*2);}for(let i=0;i<10;i++){const x=random()*s;g.fillStyle='rgba(94,39,17,.22)';g.fillRect(x,random()*s*.4,2+random()*5,s*(.18+random()*.45));}}
+      else{g.strokeStyle='rgba(25,28,27,.42)';g.lineWidth=2;for(let i=0;i<18;i++){let x=random()*s,y=random()*s;g.beginPath();g.moveTo(x,y);for(let j=0;j<5;j++){x+=random()*34-17;y+=random()*32;g.lineTo(x,y);}g.stroke();}}
+    },256,false);
+    const m=makeMat('decal:'+name,{gloss:.12});m.diffuseMap=tex;m.opacityMap=tex;m.opacityMapChannel='a';m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;m.depthBias=-.18;m.update();return m;
+  }
+  function floorDecal(name,pos,scale,material,rot=0){const e=new pc.Entity(name);e.setPosition(...pos);e.setLocalScale(scale[0],1,scale[1]);e.setEulerAngles(0,rot,0);e.addComponent('render',{type:'plane',castShadows:false,receiveShadows:false});e.render.meshInstances.forEach(mi=>mi.material=material);app.root.addChild(e);decor.push(e);return e;}
+  function wallDecal(name,pos,scale,rot,material){const e=new pc.Entity(name);e.setPosition(...pos);e.setLocalScale(scale[0],1,scale[1]);e.setEulerAngles(...rot);e.addComponent('render',{type:'plane',castShadows:false,receiveShadows:false});e.render.meshInstances.forEach(mi=>mi.material=material);app.root.addChild(e);decor.push(e);return e;}
 
   function spot(name,pos,target,color,intensity,range,cone=34,shadows=true,flicker=0){
     const e=new pc.Entity(name);e.setPosition(...pos);
@@ -243,34 +255,37 @@ export function applyVisualOverhaul({ pc, app, materials, box, cylinder, loadCon
   for(let i=0;i<9;i++){const x=-43+i*4.2,z=-2-(i%3)*6;const e=addBox('old foundation',[x,.12,z],[2.6,.28,1.8],i%2?rust:materials.concrete,false,false);e.setEulerAngles(0,(i*17)%45-20,0);}
   [-43,-35,-27,-19].forEach(x=>{addCyl('old riser',[x,1.1,-28],[.2,2.2,.2],rust,false);addCyl('old header',[x+2,2.1,-28],[.18,4,.18],rust,false,[0,0,90]);});
 
+  const oilDecal=decalMat('oil','oil'),tireDecal=decalMat('tire','tire'),rustDecal=decalMat('rust','rust'),crackDecal=decalMat('cracks','crack');
+  floorDecal('oil spill A',[-4,.195,8],[4.8,3.2],oilDecal,-18);
+  floorDecal('oil spill B',[27,.19,13],[5.2,3.4],oilDecal,22);
+  floorDecal('tire marks',[18,.195,19],[4.5,13],tireDecal,-8);
+  floorDecal('cracked apron',[-13,.19,27],[6.5,5.5],crackDecal,14);
+  wallDecal('hangar rust',[50.0,5.5,14],[8,6],[0,0,90],rustDecal);
+  wallDecal('tower rust',[41.62,10,-31],[7,11],[0,0,90],rustDecal);
+  wallDecal('tunnel stain',[-14,3.1,-52.72],[11,4],[90,0,0],rustDecal);
   spot('spawn hero',[0,13,28],[0,0,8],new pc.Color(.72,.86,1),1.4,38,28,true);
   spot('tower hero',[47,17,-17],[35,7,-31],new pc.Color(1,.52,.23),1.15,44,24,true);
   spot('grass hero',[-47,12,-5],[-28,0,-17],new pc.Color(.35,.56,.68),.72,42,30,false);
 
   const pbrTextureReady=Promise.all([
-    loadTextureAsset('/textures/concrete_floor_diff_1k.jpg'),
-    loadTextureAsset('/textures/concrete_floor_nor_gl_1k.jpg'),
-    loadTextureAsset('/textures/metal_plate_diff_1k.jpg'),
-    loadTextureAsset('/textures/metal_plate_nor_gl_1k.jpg'),
-    loadTextureAsset('/textures/sparse_grass_diff_1k.jpg'),
-    loadTextureAsset('/textures/sparse_grass_nor_gl_1k.jpg')
-  ]).then(([concreteDiff,concreteNormal,metalDiff,metalNormal,grassDiff,grassNormal])=>{
-    applyPbrPair(materials.concrete,concreteDiff,concreteNormal,5.5,.62);
-    applyPbrPair(materials.darkConcrete,concreteDiff,concreteNormal,5.5,.66);
-    materials.darkConcrete.diffuse=new pc.Color(.57,.61,.62); materials.darkConcrete.update();
-    applyPbrPair(materials.plaster,concreteDiff,concreteNormal,7,.25);
-    materials.plaster.diffuse=new pc.Color(.96,.96,.93); materials.plaster.update();
-    applyPbrPair(materials.metal,metalDiff,metalNormal,9,.82);
-    materials.metal.metalness=.72; materials.metal.gloss=.34; materials.metal.update();
-    applyPbrPair(materials.grass,grassDiff,grassNormal,8,.76);
-    materials.grass.diffuse=new pc.Color(.92,.96,.88); materials.grass.gloss=.16; materials.grass.update();
-    window.__RIGYARD_VISUAL__.pbrTexturesSettled=true;
-    return true;
-  }).catch((err)=>{
-    console.warn('[RIGYARD PBR textures]',err);
-    window.__RIGYARD_VISUAL__.pbrTexturesSettled=false;
-    return false;
-  });
+    loadTextureAsset('/textures/concrete_floor_diff_1k.jpg'),loadTextureAsset('/textures/concrete_floor_nor_gl_1k.jpg'),loadTextureAsset('/textures/concrete_floor_rough_1k.jpg'),loadTextureAsset('/textures/concrete_floor_ao_1k.jpg'),
+    loadTextureAsset('/textures/metal_plate_diff_1k.jpg'),loadTextureAsset('/textures/metal_plate_nor_gl_1k.jpg'),loadTextureAsset('/textures/metal_plate_rough_1k.jpg'),loadTextureAsset('/textures/metal_plate_ao_1k.jpg'),loadTextureAsset('/textures/metal_plate_metal_1k.jpg'),
+    loadTextureAsset('/textures/sparse_grass_diff_1k.jpg'),loadTextureAsset('/textures/sparse_grass_nor_gl_1k.jpg'),loadTextureAsset('/textures/sparse_grass_rough_1k.jpg'),loadTextureAsset('/textures/sparse_grass_ao_1k.jpg'),
+    loadTextureAsset('/textures/hangar_concrete_floor_diff_1k.jpg'),loadTextureAsset('/textures/hangar_concrete_floor_nor_gl_1k.jpg'),loadTextureAsset('/textures/hangar_concrete_floor_rough_1k.jpg'),loadTextureAsset('/textures/hangar_concrete_floor_ao_1k.jpg'),
+    loadTextureAsset('/textures/box_profile_metal_sheet_diff_1k.jpg'),loadTextureAsset('/textures/box_profile_metal_sheet_nor_gl_1k.jpg'),loadTextureAsset('/textures/box_profile_metal_sheet_rough_1k.jpg'),loadTextureAsset('/textures/box_profile_metal_sheet_ao_1k.jpg'),loadTextureAsset('/textures/box_profile_metal_sheet_metal_1k.jpg'),
+    loadTextureAsset('/textures/asphalt_01_diff_1k.jpg'),loadTextureAsset('/textures/asphalt_01_nor_gl_1k.jpg'),loadTextureAsset('/textures/asphalt_01_rough_1k.jpg'),loadTextureAsset('/textures/asphalt_01_ao_1k.jpg')
+  ]).then((t)=>{
+    const [cD,cN,cR,cA,mD,mN,mR,mA,mM,gD,gN,gR,gA,hD,hN,hR,hA,sD,sN,sR,sA,sM,aD,aN,aR,aA]=t;
+    applyPbrSet(materials.concrete,{diffuse:cD,normal:cN,rough:cR,ao:cA},5.5,.7);
+    applyPbrSet(materials.darkConcrete,{diffuse:cD,normal:cN,rough:cR,ao:cA},5.5,.72);materials.darkConcrete.diffuse=new pc.Color(.52,.55,.55);materials.darkConcrete.update();
+    applyPbrSet(materials.plaster,{diffuse:cD,normal:cN,rough:cR,ao:cA},7,.28);materials.plaster.diffuse=new pc.Color(.94,.95,.92);materials.plaster.update();
+    applyPbrSet(materials.metal,{diffuse:mD,normal:mN,rough:mR,ao:mA,metal:mM},7,.88);materials.metal.metalness=1;materials.metal.update();
+    applyPbrSet(materials.grass,{diffuse:gD,normal:gN,rough:gR,ao:gA},8,.8);materials.grass.diffuse=new pc.Color(.9,.96,.86);materials.grass.update();
+    const hangar=materials.concrete.clone();hangar.name='Hangar PBR';hangar.diffuse=new pc.Color(.9,.91,.89);applyPbrSet(hangar,{diffuse:hD,normal:hN,rough:hR,ao:hA},7,.8);replaceEntityMaterial('Hangar floor',hangar);
+    const sheet=materials.metal.clone();sheet.name='Corrugated sheet PBR';sheet.diffuse=new pc.Color(.78,.8,.78);sheet.metalness=1;applyPbrSet(sheet,{diffuse:sD,normal:sN,rough:sR,ao:sA,metal:sM},5,.9);['Hangar east','Hangar north','Hangar south'].forEach(n=>replaceEntityMaterial(n,sheet));
+    const asphalt=materials.darkConcrete.clone();asphalt.name='Asphalt PBR';asphalt.diffuse=new pc.Color(.72,.72,.7);applyPbrSet(asphalt,{diffuse:aD,normal:aN,rough:aR,ao:aA},7,.85);replaceEntityMaterial('Spawn pad',asphalt);
+    window.__RIGYARD_VISUAL__.pbrTexturesSettled=true;window.__RIGYARD_VISUAL__.pbrMapCount=26;return true;
+  }).catch((err)=>{console.warn('[RIGYARD PBR textures]',err);window.__RIGYARD_VISUAL__.pbrTexturesSettled=false;return false;});
 
   const environmentLoads=[
     ['/models/grass.glb','grass'],['/models/shrub.glb','shrub'],['/models/fern.glb','fern'],
@@ -313,10 +328,10 @@ export function applyVisualOverhaul({ pc, app, materials, box, cylinder, loadCon
   }
 
   const ready=Promise.all([Promise.allSettled(environmentLoads),pbrTextureReady]).then(()=>{
-    window.__RIGYARD_VISUAL__={...window.__RIGYARD_VISUAL__,version:'cinematic-industrial-v2',decorCount:decor.length,assetVisualCount:assetVisuals.length,materialsUpgraded:surface.length,environmentAssetsSettled:true,pbrTexturesSettled:window.__RIGYARD_VISUAL__?.pbrTexturesSettled===true};
+    window.__RIGYARD_VISUAL__={...window.__RIGYARD_VISUAL__,version:'cinematic-industrial-v3',decorCount:decor.length,assetVisualCount:assetVisuals.length,materialsUpgraded:surface.length,environmentAssetsSettled:true,pbrTexturesSettled:window.__RIGYARD_VISUAL__?.pbrTexturesSettled===true,pbrMapCount:window.__RIGYARD_VISUAL__?.pbrMapCount||0,decals:7};
     console.info('[RIGYARD visual]',window.__RIGYARD_VISUAL__);
     return window.__RIGYARD_VISUAL__;
   });
-  window.__RIGYARD_VISUAL__={version:'cinematic-industrial-v2',decorCount:decor.length,assetVisualCount:0,materialsUpgraded:surface.length,environmentAssetsSettled:false,pbrTexturesSettled:false};
+  window.__RIGYARD_VISUAL__={version:'cinematic-industrial-v3',decorCount:decor.length,assetVisualCount:0,materialsUpgraded:surface.length,environmentAssetsSettled:false,pbrTexturesSettled:false,pbrMapCount:0,decals:7};
   return {ready,startAudio};
 }
