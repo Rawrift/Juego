@@ -31,3 +31,10 @@ Repository licensing: W3C Software and Document License.
   Source: https://quaternius.com/packs/stylizednature.html
 - Quaternius Cars Pack / compatible CC0 vehicle assets repacked by WorldExplorer3D: Utility Pickup and Service Truck. License: CC0 1.0.
   Source catalog and attribution: RRG314/WorldExplorer3D at commit b5a6a32448fcaa7c5e079ccb78d9d6030de29a00.
+
+## Poly Haven PBR surfaces
+
+The visual overhaul packages 1K CC0 diffuse and OpenGL normal maps locally:
+- Concrete Floor — eye-candy.xyz — CC0 1.0 — https://polyhaven.com/a/concrete_floor
+- Metal Plate — Rob Tuytel — CC0 1.0 — https://polyhaven.com/a/metal_plate
+- Sparse Grass — Amal Kumar — CC0 1.0 — https://polyhaven.com/a/sparse_grass

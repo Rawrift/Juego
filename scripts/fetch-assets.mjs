@@ -37,3 +37,28 @@ for (const [name,url] of sources) {
   await fs.writeFile(dest,buf);
   console.log('asset',name,buf.length);
 }
+
+const textureOut = path.resolve('public/textures');
+await fs.mkdir(textureOut, { recursive: true });
+
+const textureSources = [
+  ['concrete_floor_diff_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/concrete_floor/concrete_floor_diff_1k.jpg'],
+  ['concrete_floor_nor_gl_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/concrete_floor/concrete_floor_nor_gl_1k.jpg'],
+  ['metal_plate_diff_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/metal_plate/metal_plate_diff_1k.jpg'],
+  ['metal_plate_nor_gl_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/metal_plate/metal_plate_nor_gl_1k.jpg'],
+  ['sparse_grass_diff_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/sparse_grass/sparse_grass_diff_1k.jpg'],
+  ['sparse_grass_nor_gl_1k.jpg','https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/sparse_grass/sparse_grass_nor_gl_1k.jpg']
+];
+
+for (const [name,url] of textureSources) {
+  const dest = path.join(textureOut,name);
+  let ok = false;
+  try { const stat = await fs.stat(dest); ok = stat.size > 10000; } catch {}
+  if (ok) continue;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('texture ' + name + ': HTTP ' + res.status);
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.length < 10000) throw new Error('texture ' + name + ': suspiciously small (' + buf.length + ')');
+  await fs.writeFile(dest,buf);
+  console.log('texture',name,buf.length);
+}

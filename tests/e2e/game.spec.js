@@ -33,7 +33,8 @@ test('RIGYARD boots, simulates physics and exposes playable systems', async ({ p
   expect(initial.npcs).toBeGreaterThanOrEqual(4);
   expect(initial.props).toBeGreaterThanOrEqual(5);
   expect(initial.npcs).toBeGreaterThanOrEqual(6);
-  expect(initial.visual?.version).toBe('cinematic-industrial-v1');
+  expect(initial.visual?.version).toBe('cinematic-industrial-v2');
+  expect(initial.visual?.pbrTexturesSettled).toBe(true);
   expect(initial.visual?.decorCount).toBeGreaterThan(80);
   expect(initial.visual?.assetVisualCount).toBeGreaterThan(20);
 
