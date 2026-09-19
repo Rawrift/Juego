@@ -71,6 +71,18 @@ export function applyVisualOverhaul({ pc, app, materials, box, cylinder, loadCon
     m.normalMapTiling=new pc.Vec2(tile,tile);
     m.bumpiness=bump; m.update();
   }
+  // surfaceTintPass: diffuse textures should carry the color; avoid multiplying them into darkness.
+  const surfaceTints = {
+    concrete:[.98,.99,.98], darkConcrete:[.78,.82,.83], plaster:[1,1,.98],
+    metal:[.93,.96,.96], grass:[.96,1,.91], wood:[1,.94,.86], tile:[1,1,1], hazard:[1,1,1]
+  };
+  for (const [name,rgb] of Object.entries(surfaceTints)) {
+    const m=materials[name];
+    if(!m) continue;
+    m.diffuse=new pc.Color(rgb[0],rgb[1],rgb[2]);
+    m.update();
+  }
+
   if(materials.water){
     materials.water.normalMap=waterNormal;
     materials.water.normalMapTiling=new pc.Vec2(5,4);
@@ -124,12 +136,22 @@ export function applyVisualOverhaul({ pc, app, materials, box, cylinder, loadCon
     spot('work light',pos,target,color,intensity,range,38,intensity>1.8,flicker);
   }
 
-  app.scene.ambientLight=new pc.Color(.09,.115,.13);
-  app.scene.exposure=1.13;
-  app.scene.fog.color=new pc.Color(.085,.125,.145);
-  app.scene.fog.start=50;app.scene.fog.end=155;
-  if(camera?.camera){camera.camera.clearColor=new pc.Color(.045,.07,.09);camera.camera.fov=74;camera.camera.farClip=240;}
-  if(sun?.light){sun.light.color=new pc.Color(1,.78,.59);sun.light.intensity=2.05;sun.light.shadowResolution=2048;sun.light.shadowDistance=95;sun.light.shadowBias=.12;}
+  app.scene.ambientLight=new pc.Color(.15,.17,.18);
+  app.scene.exposure=1.09;
+  app.scene.fog.color=new pc.Color(.14,.18,.2);
+  app.scene.fog.start=58;app.scene.fog.end=165;
+  if(camera?.camera){camera.camera.clearColor=new pc.Color(.15,.205,.23);camera.camera.fov=74;camera.camera.farClip=240;}
+  if(sun?.light){sun.light.color=new pc.Color(1,.9,.76);sun.light.intensity=1.65;sun.light.shadowResolution=2048;sun.light.shadowDistance=95;sun.light.shadowBias=.12;}
+  const skyFill=new pc.Entity('Cool sky fill');
+  skyFill.addComponent('light',{type:'directional',color:new pc.Color(.38,.53,.65),intensity:.62,castShadows:false});
+  skyFill.setEulerAngles(38,145,0);
+  app.root.addChild(skyFill);
+  decor.push(skyFill);
+  const spawnFill=new pc.Entity('Spawn ambient fill');
+  spawnFill.setPosition(0,8,6);
+  spawnFill.addComponent('light',{type:'omni',color:new pc.Color(.55,.68,.74),intensity:1.1,range:32,castShadows:false});
+  app.root.addChild(spawnFill);
+  decor.push(spawnFill);
 
   const skyline=[
     [-47,11,-59,14,22,7],[-27,9,-60,14,18,5],[-5,14,-61,20,28,8],[22,10,-61,15,20,7],[47,13,-60,18,26,8],
@@ -170,7 +192,7 @@ export function applyVisualOverhaul({ pc, app, materials, box, cylinder, loadCon
   sign('tunnel sign',[-28.64,3.4,-48],[.07,2.3,4.8],[0,90,0],'SERVICE','UTILITIES / MAINTENANCE','#e0a11b');
 
   [-9,-6,6,9].forEach((x,i)=>addCyl('bollard',[x,.65,19.6],[.18,1.3,.18],i<2?yellow:steel,true));
-  sign('yard sign',[0,3.2,20.55],[8.6,3.2,.1],[0,0,0],'RIGYARD','PHYSICS / FABRICATION / TEST','#f4a11b');
+  sign('yard sign',[0,4.3,41.35],[8.6,3.2,.1],[0,0,0],'RIGYARD','PHYSICS / FABRICATION / TEST','#f4a11b');
   [-7.5,-2.5,2.5,7.5].forEach(x=>{addBox('drain',[x,.17,3.2],[3.2,.04,.95],black,false,false);for(let gx=-1.2;gx<=1.2;gx+=.4)addBox('drain bar',[x+gx,.2,3.2],[.07,.035,.9],materials.metal,false,false);});
   [[-6,.18,6.5,4.5,2.2],[5,.18,5.3,3.2,1.6],[12,.17,8.3,2.8,1.3],[-12,.17,-3,4,1.5]].forEach(p=>addBox('puddle',[p[0],p[1],p[2]],[p[3],.025,p[4]],wet,false,false));
   addBox('loading dock',[16,.75,20],[8,1.5,7],materials.concrete,true);

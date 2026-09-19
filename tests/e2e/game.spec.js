@@ -56,10 +56,18 @@ test('RIGYARD boots, simulates physics and exposes playable systems', async ({ p
 
   await page.evaluate(() => {
     window.__RIGYARD_TEST__.setThirdPerson(false);
-    window.__RIGYARD_TEST__.setPose({ x: 0, y: 1.15, z: 23, yaw: 0, pitch: -7 });
+    window.__RIGYARD_TEST__.setPose({ x: 0, y: 1.15, z: 17, yaw: 0, pitch: -6 });
   });
-  await page.waitForTimeout(1200);
-  await page.screenshot({ path: 'test-results/rigyard-visual.png', fullPage: true });
+  await page.waitForTimeout(900);
+  await page.screenshot({ path: 'test-results/rigyard-spawn.png', fullPage: true });
+
+  await page.evaluate(() => window.__RIGYARD_TEST__.setPose({ x: 10, y: 1.15, z: 15, yaw: -90, pitch: -5 }));
+  await page.waitForTimeout(900);
+  await page.screenshot({ path: 'test-results/rigyard-hangar.png', fullPage: true });
+
+  await page.evaluate(() => window.__RIGYARD_TEST__.setPose({ x: 14, y: 1.15, z: -16, yaw: -55, pitch: -6 }));
+  await page.waitForTimeout(900);
+  await page.screenshot({ path: 'test-results/rigyard-tower.png', fullPage: true });
 
   expect(errors, errors.join('\n')).toEqual([]);
 });

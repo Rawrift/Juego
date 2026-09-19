@@ -23,7 +23,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: RIGYARD-VISUAL-PREVIEW
-          path: test-results/rigyard-visual.png
+          path: test-results/rigyard-*.png
           if-no-files-found: error
 
       - name: Add Windows launcher to build
