@@ -313,7 +313,7 @@ export function applyVisualOverhaul({ pc, app, materials, box, cylinder, loadCon
   }
 
   const ready=Promise.all([Promise.allSettled(environmentLoads),pbrTextureReady]).then(()=>{
-    window.__RIGYARD_VISUAL__={version:'cinematic-industrial-v2',decorCount:decor.length,assetVisualCount:assetVisuals.length,materialsUpgraded:surface.length,environmentAssetsSettled:true};
+    window.__RIGYARD_VISUAL__={...window.__RIGYARD_VISUAL__,version:'cinematic-industrial-v2',decorCount:decor.length,assetVisualCount:assetVisuals.length,materialsUpgraded:surface.length,environmentAssetsSettled:true,pbrTexturesSettled:window.__RIGYARD_VISUAL__?.pbrTexturesSettled===true};
     console.info('[RIGYARD visual]',window.__RIGYARD_VISUAL__);
     return window.__RIGYARD_VISUAL__;
   });
