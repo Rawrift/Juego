@@ -30,7 +30,7 @@ export function applyVisualOverhaul({ pc, app, materials, box, cylinder, loadCon
   function applyPbrSet(material,maps,tile=6,bump=.65) {
     if(!material) return;
     const tiling=new pc.Vec2(tile,tile);
-    material.diffuseMap=maps.diffuse||null;
+    if(maps.diffuse!==undefined) material.diffuseMap=maps.diffuse;
     material.normalMap=maps.normal||null;
     material.glossMap=maps.rough||null;
     material.glossInvert=!!maps.rough;
@@ -144,7 +144,7 @@ export function applyVisualOverhaul({ pc, app, materials, box, cylinder, loadCon
   const glass=makeMat('glass',{color:new pc.Color(.11,.2,.23),gloss:.94,opacity:.38});
   const wet=makeMat('wet',{color:new pc.Color(.055,.075,.082),gloss:.92,opacity:.58,normal:waterNormal,bump:.24});
   const yellow=makeMat('safety-yellow',{color:new pc.Color(.92,.56,.025),metalness:.28,gloss:.38,normal:noiseNormal('yellow',8,34),bump:.2});
-  const warm=makeMat('warm-light',{color:new pc.Color(.4,.17,.045),gloss:.6,emissive:new pc.Color(1,.35,.08),emissiveIntensity:3});
+  const warm=makeMat('warm-light',{color:new pc.Color(.42,.28,.12),gloss:.6,emissive:new pc.Color(1,.68,.32),emissiveIntensity:1.8});
   const cold=makeMat('cold-light',{color:new pc.Color(.045,.15,.2),gloss:.6,emissive:new pc.Color(.12,.62,1),emissiveIntensity:2.6});
 
   const addBox=(name,pos,scale,mat,solid=false,shadow=true)=>{
@@ -195,20 +195,20 @@ export function applyVisualOverhaul({ pc, app, materials, box, cylinder, loadCon
     spot('work light',pos,target,color,intensity,range,38,intensity>1.8,flicker);
   }
 
-  app.scene.ambientLight=new pc.Color(.15,.17,.18);
-  app.scene.exposure=1.09;
-  app.scene.fog.color=new pc.Color(.14,.18,.2);
-  app.scene.fog.start=58;app.scene.fog.end=165;
-  if(camera?.camera){camera.camera.clearColor=new pc.Color(.15,.205,.23);camera.camera.fov=74;camera.camera.farClip=240;}
-  if(sun?.light){sun.light.color=new pc.Color(1,.9,.76);sun.light.intensity=1.65;sun.light.shadowResolution=2048;sun.light.shadowDistance=95;sun.light.shadowBias=.12;}
+  app.scene.ambientLight=new pc.Color(.22,.245,.255);
+  app.scene.exposure=1.0;
+  app.scene.fog.color=new pc.Color(.27,.34,.37);
+  app.scene.fog.start=62;app.scene.fog.end=175;
+  if(camera?.camera){camera.camera.clearColor=new pc.Color(.34,.43,.47);camera.camera.fov=74;camera.camera.farClip=240;}
+  if(sun?.light){sun.light.color=new pc.Color(1,.95,.88);sun.light.intensity=1.28;sun.light.shadowResolution=2048;sun.light.shadowDistance=95;sun.light.shadowBias=.12;}
   const skyFill=new pc.Entity('Cool sky fill');
-  skyFill.addComponent('light',{type:'directional',color:new pc.Color(.38,.53,.65),intensity:.62,castShadows:false});
+  skyFill.addComponent('light',{type:'directional',color:new pc.Color(.52,.62,.68),intensity=.78,castShadows:false});
   skyFill.setEulerAngles(38,145,0);
   app.root.addChild(skyFill);
   decor.push(skyFill);
   const spawnFill=new pc.Entity('Spawn ambient fill');
   spawnFill.setPosition(0,8,6);
-  spawnFill.addComponent('light',{type:'omni',color:new pc.Color(.55,.68,.74),intensity:1.1,range:32,castShadows:false});
+  spawnFill.addComponent('light',{type:'omni',color:new pc.Color(.72,.8,.82),intensity:.8,range:32,castShadows:false});
   app.root.addChild(spawnFill);
   decor.push(spawnFill);
 
@@ -231,7 +231,7 @@ export function applyVisualOverhaul({ pc, app, materials, box, cylinder, loadCon
   addCyl('hangar duct',[30,8.7,26.1],[.45,33,.45],steel,false,[0,0,90]);
   addCyl('duct branch',[18,7,22],[.28,8,.28],steel,false,[90,0,0]);
   addCyl('duct branch',[38,7,22],[.28,8,.28],steel,false,[90,0,0]);
-  fixture([19,10.5,8],warm,[19,0,8],new pc.Color(1,.55,.27),2.05,22);
+  fixture([19,10.5,8],warm,[19,0,8],new pc.Color(1,.78,.58),1.35,22);
   fixture([30,10.5,16],warm,[30,0,16],new pc.Color(1,.56,.28),2.3,24,.04);
   fixture([41,10.5,23],warm,[41,0,23],new pc.Color(1,.52,.25),2,22);
 
@@ -248,7 +248,7 @@ export function applyVisualOverhaul({ pc, app, materials, box, cylinder, loadCon
   });
   addCyl('tower red conduit',[42.2,8.8,-31.5],[.18,17.2,.18],rust,false);
   addCyl('tower steel conduit',[43,8.8,-31.5],[.12,17.2,.12],steel,false);
-  fixture([31,4.1,-25.4],warm,[35,1,-31],new pc.Color(1,.58,.3),1.8,18);
+  fixture([31,4.1,-25.4],warm,[35,1,-31],new pc.Color(1,.78,.58),1.25,18);
   fixture([39,12.1,-25.4],cold,[35,7,-31],new pc.Color(.45,.75,1),1.5,18);
 
   [-43,-37,-31,-25].forEach(x=>fixture([x,8.8,18],cold,[x,0,18],new pc.Color(.72,.87,1),1.5,14));
@@ -302,13 +302,13 @@ export function applyVisualOverhaul({ pc, app, materials, box, cylinder, loadCon
     loadTextureAsset('/textures/asphalt_01_diff_1k.jpg'),loadTextureAsset('/textures/asphalt_01_nor_gl_1k.jpg'),loadTextureAsset('/textures/asphalt_01_rough_1k.jpg'),loadTextureAsset('/textures/asphalt_01_ao_1k.jpg')
   ]).then((t)=>{
     const [cD,cN,cR,cA,mD,mN,mR,mA,mM,gD,gN,gR,gA,hD,hN,hR,hA,sD,sN,sR,sA,sM,aD,aN,aR,aA]=t;
-    applyPbrSet(materials.concrete,{diffuse:cD,normal:cN,rough:cR,ao:cA},5.5,.7);
-    applyPbrSet(materials.darkConcrete,{diffuse:cD,normal:cN,rough:cR,ao:cA},5.5,.72);materials.darkConcrete.diffuse=new pc.Color(.52,.55,.55);materials.darkConcrete.update();
-    applyPbrSet(materials.plaster,{diffuse:cD,normal:cN,rough:cR,ao:cA},7,.28);materials.plaster.diffuse=new pc.Color(.94,.95,.92);materials.plaster.update();
-    applyPbrSet(materials.metal,{diffuse:mD,normal:mN,rough:mR,ao:mA,metal:mM},7,.88);materials.metal.metalness=1;materials.metal.update();
+    applyPbrSet(materials.concrete,{normal:cN,rough:cR,ao:cA},5.5,.7);materials.concrete.diffuse=new pc.Color(.92,.93,.91);materials.concrete.update();
+    applyPbrSet(materials.darkConcrete,{normal:cN,rough:cR,ao:cA},5.5,.72);materials.darkConcrete.diffuse=new pc.Color(.68,.7,.69);materials.darkConcrete.update();
+    applyPbrSet(materials.plaster,{normal:cN,rough:cR,ao:cA},7,.28);materials.plaster.diffuse=new pc.Color(.98,.98,.96);materials.plaster.update();
+    applyPbrSet(materials.metal,{normal:mN,rough:mR,ao:mA,metal:mM},7,.88);materials.metal.diffuse=new pc.Color(.62,.66,.67);materials.metal.metalness=1;materials.metal.update();
     applyPbrSet(materials.grass,{diffuse:gD,normal:gN,rough:gR,ao:gA},8,.8);materials.grass.diffuse=new pc.Color(.9,.96,.86);materials.grass.update();
-    const hangar=materials.concrete.clone();hangar.name='Hangar PBR';hangar.diffuse=new pc.Color(.9,.91,.89);applyPbrSet(hangar,{diffuse:hD,normal:hN,rough:hR,ao:hA},7,.8);replaceEntityMaterial('Hangar floor',hangar);
-    const sheet=materials.metal.clone();sheet.name='Corrugated sheet PBR';sheet.diffuse=new pc.Color(.78,.8,.78);sheet.metalness=1;applyPbrSet(sheet,{diffuse:sD,normal:sN,rough:sR,ao:sA,metal:sM},5,.9);['Hangar east','Hangar north','Hangar south'].forEach(n=>replaceEntityMaterial(n,sheet));
+    const hangar=materials.concrete.clone();hangar.name='Hangar PBR';hangar.diffuse=new pc.Color(.72,.74,.72);applyPbrSet(hangar,{normal:hN,rough:hR,ao:hA},7,.8);replaceEntityMaterial('Hangar floor',hangar);
+    const sheet=materials.metal.clone();sheet.name='Corrugated sheet PBR';sheet.diffuse=new pc.Color(.58,.62,.63);sheet.metalness=1;applyPbrSet(sheet,{normal:sN,rough:sR,ao:sA,metal:sM},5,.9);['Hangar east','Hangar north','Hangar south'].forEach(n=>replaceEntityMaterial(n,sheet));
     const asphalt=materials.darkConcrete.clone();asphalt.name='Asphalt PBR';asphalt.diffuse=new pc.Color(.72,.72,.7);applyPbrSet(asphalt,{diffuse:aD,normal:aN,rough:aR,ao:aA},7,.85);replaceEntityMaterial('Spawn pad',asphalt);
     window.__RIGYARD_VISUAL__.pbrTexturesSettled=true;window.__RIGYARD_VISUAL__.pbrMapCount=26;return true;
   }).catch((err)=>{console.warn('[RIGYARD PBR textures]',err);window.__RIGYARD_VISUAL__.pbrTexturesSettled=false;window.__RIGYARD_VISUAL__.pbrError=String(err?.stack||err?.message||err);return false;});

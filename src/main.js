@@ -484,12 +484,12 @@ app.root.addChild(camera);
 const cameraFrame = (() => {
     try {
         const cf=new pc.CameraFrame(app,camera.camera);
-        cf.rendering.toneMapping=pc.TONEMAP_ACES2;cf.rendering.samples=1;cf.rendering.sharpness=.16;
-        cf.ssao.type='lighting';cf.ssao.blurEnabled=true;cf.ssao.intensity=.52;cf.ssao.radius=3.6;cf.ssao.samples=16;cf.ssao.power=4.2;cf.ssao.minAngle=12;cf.ssao.scale=.75;
-        cf.bloom.intensity=.016;cf.bloom.blurLevel=8;
-        cf.grading.enabled=true;cf.grading.brightness=1.02;cf.grading.contrast=1.06;cf.grading.saturation=1.04;cf.grading.tint=new pc.Color(1,.985,.96);
-        cf.vignette.intensity=.12;cf.vignette.inner=.62;cf.vignette.outer=1.25;cf.vignette.curvature=.7;cf.vignette.color=new pc.Color(.025,.035,.04);
-        cf.colorEnhance.enabled=true;cf.colorEnhance.shadows=.05;cf.colorEnhance.highlights=-.04;cf.colorEnhance.midtones=.035;cf.colorEnhance.vibrance=.08;cf.colorEnhance.dehaze=.05;
+        cf.rendering.toneMapping=pc.TONEMAP_NEUTRAL;cf.rendering.samples=1;cf.rendering.sharpness=.1;
+        cf.ssao.type='lighting';cf.ssao.blurEnabled=true;cf.ssao.intensity=.26;cf.ssao.radius=2.4;cf.ssao.samples=12;cf.ssao.power=2.6;cf.ssao.minAngle=14;cf.ssao.scale=.7;
+        cf.bloom.intensity=.006;cf.bloom.blurLevel=6;
+        cf.grading.enabled=true;cf.grading.brightness=1.06;cf.grading.contrast=.96;cf.grading.saturation=.9;cf.grading.tint=new pc.Color(.99,1,1);
+        cf.vignette.intensity=.055;cf.vignette.inner=.72;cf.vignette.outer=1.35;cf.vignette.curvature=.62;cf.vignette.color=new pc.Color(.025,.035,.04);
+        cf.colorEnhance.enabled=true;cf.colorEnhance.shadows=.12;cf.colorEnhance.highlights=-.08;cf.colorEnhance.midtones=.02;cf.colorEnhance.vibrance=-.03;cf.colorEnhance.dehaze=-.02;
         cf.update();return cf;
     } catch(err){console.warn('[RIGYARD CameraFrame]',err);return null;}
 })();
@@ -636,10 +636,10 @@ Promise.all([
     loadContainer('/models/hand-left.glb').catch(()=>null),
     loadContainer('/models/hand-right.glb').catch(()=>null)
 ]).then(([pistol,rifle,leftHand,rightHand]) => {
-    const p=attachVmAsset(pistol,'Pulse sidearm',[.02,-.04,-.1],.8,[0,90,90]);if(p){p.enabled=false;viewRoot.userData.pistol=p;}
-    const r=attachVmAsset(rifle,'Magnet chassis',[.02,-.03,-.1],.75,[0,90,90]);if(r)viewRoot.userData.rifle=r;
-    const lh=attachVmAsset(leftHand,'Left hand',[-.23,-.13,-.04],.72,[18,178,-18],'hand');
-    const rh=attachVmAsset(rightHand,'Right hand',[.15,-.13,.09],.72,[12,178,12],'hand');
+    const p=attachVmAsset(pistol,'Pulse sidearm',[.03,-.06,-.12],.55,[0,90,90]);if(p){p.enabled=false;viewRoot.userData.pistol=p;}
+    const r=attachVmAsset(rifle,'Magnet chassis',[.03,-.06,-.12],.48,[0,90,90]);if(r)viewRoot.userData.rifle=r;
+    const lh=attachVmAsset(leftHand,'Left hand',[-.19,-.16,-.03],.54,[18,178,-18],'hand');
+    const rh=attachVmAsset(rightHand,'Right hand',[.13,-.16,.08],.54,[12,178,12],'hand');
     if(lh)viewRoot.userData.leftHand=lh;if(rh)viewRoot.userData.rightHand=rh;vmHand.enabled=!(lh||rh);updateToolVisual();
 });
 
@@ -857,7 +857,7 @@ function cycleQuality() {
     app.graphicsDevice.maxPixelRatio=dpr;
     sun.light.castShadows=state.quality>0;
     app.scene.fog.end=[105,145,180][state.quality];
-    if(cameraFrame){cameraFrame.ssao.type=state.quality===0?'none':'lighting';cameraFrame.ssao.samples=[4,8,16][state.quality];cameraFrame.ssao.scale=[.5,.65,.75][state.quality];cameraFrame.bloom.intensity=[0,.009,.016][state.quality];cameraFrame.rendering.sharpness=[.06,.11,.16][state.quality];cameraFrame.update();}
+    if(cameraFrame){cameraFrame.ssao.type=state.quality===0?'none':'lighting';cameraFrame.ssao.samples=[4,8,12][state.quality];cameraFrame.ssao.scale=[.5,.62,.7][state.quality];cameraFrame.bloom.intensity=[0,.003,.006][state.quality];cameraFrame.rendering.sharpness=[.04,.07,.1][state.quality];cameraFrame.update();}
     toast(['BAJO','ALTO','ULTRA'][state.quality]);
 }
 
@@ -924,7 +924,7 @@ function updateCamera(dt) {
         const speed2d=Math.hypot(player.rigidbody.linearVelocity.x,player.rigidbody.linearVelocity.z);
         const bob=Math.sin(state.elapsed*8.5)*Math.min(.018,speed2d*.0032);
         recoilKick*=Math.exp(-dt*18);
-        viewRoot.setLocalPosition(.32,-.33+bob,-.62+recoilKick);
+        viewRoot.setLocalPosition(.34,-.39+bob,-.73+recoilKick);
         viewRoot.setLocalEulerAngles(bob*45,Math.sin(state.elapsed*4.2)*.45,Math.cos(state.elapsed*4.2)*.32);
         if (player.userData.modelVisual) player.userData.modelVisual.enabled=false;
         else playerFallback.enabled=false;
