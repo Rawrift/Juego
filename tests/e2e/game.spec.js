@@ -29,6 +29,8 @@ test('RIGYARD boots, simulates physics and exposes playable systems', async ({ p
   expect(diagnostic.bootError, diagnostic.bootError).toBe('');
 
   const initial = await page.evaluate(() => window.__RIGYARD_TEST__.snapshot());
+  console.log('RIGYARD_VISUAL_STATE=' + JSON.stringify(initial.visual));
+  console.log('RIGYARD_POST_STATE=' + JSON.stringify(initial.post));
   expect(initial.physics).toBe(true);
   expect(initial.npcs).toBeGreaterThanOrEqual(4);
   expect(initial.props).toBeGreaterThanOrEqual(5);

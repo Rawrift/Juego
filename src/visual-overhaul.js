@@ -285,7 +285,7 @@ export function applyVisualOverhaul({ pc, app, materials, box, cylinder, loadCon
     const sheet=materials.metal.clone();sheet.name='Corrugated sheet PBR';sheet.diffuse=new pc.Color(.78,.8,.78);sheet.metalness=1;applyPbrSet(sheet,{diffuse:sD,normal:sN,rough:sR,ao:sA,metal:sM},5,.9);['Hangar east','Hangar north','Hangar south'].forEach(n=>replaceEntityMaterial(n,sheet));
     const asphalt=materials.darkConcrete.clone();asphalt.name='Asphalt PBR';asphalt.diffuse=new pc.Color(.72,.72,.7);applyPbrSet(asphalt,{diffuse:aD,normal:aN,rough:aR,ao:aA},7,.85);replaceEntityMaterial('Spawn pad',asphalt);
     window.__RIGYARD_VISUAL__.pbrTexturesSettled=true;window.__RIGYARD_VISUAL__.pbrMapCount=26;return true;
-  }).catch((err)=>{console.warn('[RIGYARD PBR textures]',err);window.__RIGYARD_VISUAL__.pbrTexturesSettled=false;return false;});
+  }).catch((err)=>{console.warn('[RIGYARD PBR textures]',err);window.__RIGYARD_VISUAL__.pbrTexturesSettled=false;window.__RIGYARD_VISUAL__.pbrError=String(err?.stack||err?.message||err);return false;});
 
   const environmentLoads=[
     ['/models/grass.glb','grass'],['/models/shrub.glb','shrub'],['/models/fern.glb','fern'],
