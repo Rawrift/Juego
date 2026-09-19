@@ -202,7 +202,7 @@ export function applyVisualOverhaul({ pc, app, materials, box, cylinder, loadCon
   if(camera?.camera){camera.camera.clearColor=new pc.Color(.34,.43,.47);camera.camera.fov=74;camera.camera.farClip=240;}
   if(sun?.light){sun.light.color=new pc.Color(1,.95,.88);sun.light.intensity=1.28;sun.light.shadowResolution=2048;sun.light.shadowDistance=95;sun.light.shadowBias=.12;}
   const skyFill=new pc.Entity('Cool sky fill');
-  skyFill.addComponent('light',{type:'directional',color:new pc.Color(.52,.62,.68),intensity=.78,castShadows:false});
+  skyFill.addComponent('light',{type:'directional',color:new pc.Color(.52,.62,.68),intensity:.78,castShadows:false});
   skyFill.setEulerAngles(38,145,0);
   app.root.addChild(skyFill);
   decor.push(skyFill);
