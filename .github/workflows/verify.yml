@@ -18,15 +18,49 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
-      - name: Package verified build
+
+      - name: Add Windows launcher to build
         run: |
           cp release/ABRIR_RIGYARD.bat dist/ABRIR_RIGYARD.bat
           cp release/server.ps1 dist/server.ps1
           cp README.md dist/README.txt
           cp THIRD_PARTY_ASSETS.md dist/THIRD_PARTY_ASSETS.txt
-          cd dist && zip -r ../RIGYARD-verified.zip .
+
+      - name: Smoke test packaged PowerShell server
+        shell: bash
+        run: |
+          set -euo pipefail
+          pwsh -NoLogo -NoProfile -File dist/server.ps1 -NoBrowser -Port 8765 > /tmp/rigyard-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+
+          OK=0
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 2 http://127.0.0.1:8765/ >/tmp/rigyard-index.html 2>/dev/null; then
+              OK=1
+              break
+            fi
+            sleep 0.5
+          done
+
+          if [ "$OK" -ne 1 ]; then
+            cat /tmp/rigyard-server.log
+            exit 1
+          fi
+
+          grep -q '<canvas' /tmp/rigyard-index.html
+          curl -fsS --max-time 5 http://127.0.0.1:8765/assets/$(basename "$(find dist/assets -name '*.js' | head -n 1)") >/dev/null
+          kill $SERVER_PID
+          wait $SERVER_PID || true
+          trap - EXIT
+
+      - name: Package verified build
+        run: |
+          cd dist
+          zip -r ../RIGYARD-WINDOWS-VERIFIED.zip .
+
       - uses: actions/upload-artifact@v4
         with:
-          name: RIGYARD-verified
-          path: RIGYARD-verified.zip
+          name: RIGYARD-WINDOWS-VERIFIED
+          path: RIGYARD-WINDOWS-VERIFIED.zip
           if-no-files-found: error
