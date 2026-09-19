@@ -35,7 +35,7 @@ test('RIGYARD boots, simulates physics and exposes playable systems', async ({ p
   expect(initial.npcs).toBeGreaterThanOrEqual(4);
   expect(initial.props).toBeGreaterThanOrEqual(5);
   expect(initial.npcs).toBeGreaterThanOrEqual(6);
-  expect(initial.visual?.version).toBe('cinematic-industrial-v3');
+  expect(initial.visual?.version).toBe('cinematic-industrial-v4');
   expect(initial.visual?.pbrTexturesSettled).toBe(true);
   expect(initial.visual?.decorCount).toBeGreaterThan(80);
   expect(initial.visual?.assetVisualCount).toBeGreaterThan(20);
@@ -66,16 +66,16 @@ test('RIGYARD boots, simulates physics and exposes playable systems', async ({ p
 
   await page.evaluate(() => {
     window.__RIGYARD_TEST__.setThirdPerson(false);
-    window.__RIGYARD_TEST__.setPose({ x: 0, y: 1.15, z: 17, yaw: 0, pitch: -6 });
+    window.__RIGYARD_TEST__.setPose({ x: -3, y: 1.15, z: 20, yaw: 18, pitch: -5 });
   });
   await page.waitForTimeout(450);
   await page.screenshot({ path: 'test-results/rigyard-spawn.png' });
 
-  await page.evaluate(() => window.__RIGYARD_TEST__.setPose({ x: 27, y: 1.15, z: 15, yaw: -90, pitch: -4 }));
+  await page.evaluate(() => window.__RIGYARD_TEST__.setPose({ x: 15, y: 1.15, z: 14, yaw: -88, pitch: -7 }));
   await page.waitForTimeout(450);
   await page.screenshot({ path: 'test-results/rigyard-hangar.png' });
 
-  await page.evaluate(() => window.__RIGYARD_TEST__.setPose({ x: 34, y: 1.15, z: -20, yaw: -42, pitch: -5 }));
+  await page.evaluate(() => window.__RIGYARD_TEST__.setPose({ x: 18, y: 1.15, z: -19, yaw: -72, pitch: -8 }));
   await page.waitForTimeout(450);
   await page.screenshot({ path: 'test-results/rigyard-tower.png' });
 
