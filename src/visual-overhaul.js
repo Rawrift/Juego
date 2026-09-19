@@ -27,6 +27,32 @@ export function applyVisualOverhaul({ pc, app, materials, box, cylinder, loadCon
     material.bumpiness=bump; material.update();
   }
 
+  function applyPbrSet(material,maps,tile=6,bump=.65) {
+    if(!material) return;
+    const tiling=new pc.Vec2(tile,tile);
+    material.diffuseMap=maps.diffuse||null;
+    material.normalMap=maps.normal||null;
+    material.glossMap=maps.rough||null;
+    material.glossInvert=!!maps.rough;
+    material.aoMap=maps.ao||null;
+    material.metalnessMap=maps.metal||null;
+    material.diffuseMapTiling=tiling;
+    material.normalMapTiling=tiling;
+    material.glossMapTiling=tiling;
+    material.aoMapTiling=tiling;
+    material.metalnessMapTiling=tiling;
+    material.bumpiness=bump;
+    material.aoIntensity=.82;
+    material.gloss=maps.rough?1:material.gloss;
+    material.update();
+  }
+  function replaceEntityMaterial(name,material) {
+    const e=app.root.findByName(name);
+    if(!e?.render) return false;
+    e.render.meshInstances.forEach(mi=>mi.material=material);
+    return true;
+  }
+
   const rng = (seed = 1) => {
     let s = seed >>> 0;
     return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
