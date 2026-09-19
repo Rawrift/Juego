@@ -37,3 +37,6 @@ The production build has no runtime dependency on a PlayCanvas CDN. PlayCanvas a
 - F3: graphics preset
 
 Use `ABRIR_RIGYARD.bat` from a packaged build on Windows instead of opening index.html directly.
+
+
+Verification trigger: 2026-09-18 — browser gate enabled.
