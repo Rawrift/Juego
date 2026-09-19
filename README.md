@@ -1,42 +1,30 @@
 # RIGYARD
 
-Industrial physics sandbox rebuilt on PlayCanvas 2.22.2 + Bullet/Ammo.
+Build PlayCanvas + Ammo verificada automáticamente.
 
-## Development
+## Windows
 
-```bash
-npm install
-npm run dev
-```
+1. Extraé TODO el contenido del ZIP a una carpeta normal.
+2. Hacé doble click en `ABRIR_RIGYARD.bat`.
+3. Dejá abierta la ventana negra del servidor mientras jugás.
+4. El navegador se abre solo cuando el servidor YA está escuchando.
+5. Si el puerto 8765 está ocupado, el launcher elige automáticamente otro entre 8766 y 8785.
 
-## Verified build
+El servidor incluido usa .NET `TcpListener`: no necesita Python, Node, permisos de administrador ni reservas de URL de Windows.
 
-```bash
-npm test
-npm run build
-npm run test:e2e
-```
+## Verificación automática
 
-The production build has no runtime dependency on a PlayCanvas CDN. PlayCanvas and Ammo are bundled by Vite. Required GLB assets are downloaded at build time into `public/models` and copied into `dist/models`.
+Cada build debe pasar:
 
-## Controls
+- instalación de dependencias,
+- tests estáticos,
+- Vite build,
+- Chromium/Playwright E2E con WebGL,
+- PlayCanvas + Ammo,
+- movimiento del jugador,
+- props,
+- NPCs,
+- tercera persona,
+- smoke test del mismo `server.ps1` que se entrega para Windows.
 
-- WASD: move
-- Shift: sprint
-- Ctrl: crouch
-- Space: jump
-- Mouse: look
-- C: first/third person
-- Q: spawn menu
-- P: character menu
-- 1: magnet
-- 2: weld kit
-- 3: impulse weapon
-- 4: hands
-- X: remove last weld
-- F3: graphics preset
-
-Use `ABRIR_RIGYARD.bat` from a packaged build on Windows instead of opening index.html directly.
-
-
-Verification trigger: 2026-09-18 — browser gate enabled.
+Una build que no pasa estos gates no se empaqueta como verificada.
