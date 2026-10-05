@@ -82,6 +82,22 @@ riftfall/
 | `npm run balance -- 8 spark 1` | Juega 8 partidas con el bot para medir dificultad y recompensas |
 | `npm run economy -- --md` | Proyección económica a 24 meses (regenera `docs/PROYECCION.md`) |
 
+## Estado actual: red de pruebas de BNB
+
+El juego publicado está conectado a un despliegue completo en **BNB Smart Chain Testnet** (`deployments/97.json`,
+copiado en `public/deployment.json`). Todos los contratos pertenecen a la wallet del creador desde el constructor;
+el gas lo pagó una clave descartable cargada con un faucet, que quedó sin tokens, sin roles y sin tBNB.
+Los tokens y las naves de esta versión **no tienen valor real**, y el juego lo indica en pantalla.
+
+| Contrato | Dirección (testnet) |
+|---|---|
+| RiftToken (RIFT) | `0x55370eb683f41fADe8DDFeE96c6351CC802b5d10` |
+| RewardVault | `0x7A0aa316BD6FBB9aEfD444c97c677180e0457aBB` |
+| RiftShips | `0x17b3196F4146F4Ad50c27cBBc2B2Cb544e62CA2A` |
+| RiftMarket | `0x71A383B0DE7bFdf0e7586753D5f614AaB4EB56D7` |
+| RiftArena | `0xD7b0D131e7CD8eB0308D9B7AA34E46729785939A` |
+| TeamVesting | `0xF53382973a7D50298541218Db9595f84cF181CfF` |
+
 ## Lanzar en BNB Chain desde el celular (Lanzador)
 
 La forma más simple, sin computadora y sin compartir claves:
