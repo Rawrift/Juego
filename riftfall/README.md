@@ -96,6 +96,11 @@ La forma más simple, sin computadora y sin compartir claves:
    Copia la configuración: es el `DEPLOYMENT_FILE` del servidor.
 5. Desde la sección **Administración** del Lanzador cobras las ventas de naves y registras la dirección del servidor como firmante.
 
+**Dominio propio antes de vender:** el escáner de seguridad de MetaMask marca como "drainer" a *cualquier* subdominio
+gratuito no verificado (`*.vercel.app`, `*.netlify.app`, `*.pages.dev`, `*.github.io`), aunque no exista. Los dominios
+propios (`.com`, `.app`, `.fun`…) no tienen ese bloqueo. Mientras el juego no use la wallet no afecta a nadie; antes de abrir
+la tienda conviene un dominio propio o pedir la verificación con "Informar sobre un problema de detección".
+
 **Sin servidor también vende:** si publicas el juego con el `deployment.json` que genera el Lanzador (en `public/`),
 la tienda de naves, la forja y el mercado funcionan directamente con la wallet, y las partidas corren en modo práctica.
 El canje de Shards, el ranking y la Arena se activan al publicar el servidor.
