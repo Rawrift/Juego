@@ -33,7 +33,9 @@
     </div>
     <div id="loadout"></div>
     <button id="pauseBtn" class="icon-btn" aria-label="Pausa">❚❚</button>
+    <div id="combo" class="hidden"><b>x0</b><small>COMBO</small></div>
     <div id="announce"></div>
+    <div id="tutorial" class="hidden"></div>
     <div id="joystick" class="hidden"><i></i></div>
   </div>
 
@@ -106,7 +108,7 @@
   <!-- ===================================================== SUBIDA DE NIVEL -->
   <div id="levelup" class="overlay hidden">
     <div class="levelup-inner">
-      <div class="eyebrow">SUBISTE DE NIVEL</div>
+      <div class="eyebrow" id="levelupKicker">SUBISTE DE NIVEL</div>
       <h2 id="levelupTitle">NIVEL 2</h2>
       <div id="choices" class="choices"></div>
       <p class="hint">Elige con clic, toque o las teclas 1 · 2 · 3</p>

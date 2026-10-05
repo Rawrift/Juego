@@ -268,6 +268,11 @@ export function createAudio() {
           if (ev.kind === 'bomb') return SFX.bomb();
           return SFX.heal();
         case 'levelup': return SFX.levelup();
+        case 'chest':
+          SFX.shard();
+          return SFX.levelup();
+        case 'evolve': return SFX.victory();
+        case 'combo': return SFX.shard();
         case 'hurt': return SFX.hurt();
         case 'nova': return SFX.nova();
         case 'arc': return SFX.arc();

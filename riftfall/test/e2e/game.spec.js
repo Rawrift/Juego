@@ -10,7 +10,7 @@ test('partida completa en el navegador verificada por el servidor', async ({ pag
   await page.goto('/');
   await expect(page.locator('.logo')).toBeVisible();
   await expect(page.locator('#netStatus')).toContainText('En línea');
-  await expect(page.locator('#missionList li')).toHaveCount(4);
+  await expect(page.locator('#missionList li')).toHaveCount(5);
   await page.screenshot({ path: 'test-results/riftfall-menu.png' });
 
   await page.click('#playBtn');

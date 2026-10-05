@@ -4,7 +4,8 @@ export const MISSIONS = [
   { id: 'runs3', name: 'Juega 3 partidas', goal: 3, metric: 'runs', reward: 30 },
   { id: 'kills500', name: 'Elimina 500 enemigos', goal: 500, metric: 'kills', reward: 40 },
   { id: 'survive5', name: 'Sobrevive 5:00 en una partida', goal: 300, metric: 'bestTime', reward: 60 },
-  { id: 'boss1', name: 'Derrota a un Guardián del Rift', goal: 1, metric: 'bosses', reward: 80 }
+  { id: 'boss1', name: 'Derrota a un Guardián del Rift', goal: 1, metric: 'bosses', reward: 80 },
+  { id: 'combo200', name: 'Haz un combo de 200', goal: 200, metric: 'bestCombo', reward: 50 }
 ];
 
 export function dayKey(ts = Date.now()) {
@@ -20,7 +21,7 @@ export function streakBonus(streak) {
 }
 
 export function freshDaily(day) {
-  return { day, runs: 0, kills: 0, bestTime: 0, bosses: 0, done: [] };
+  return { day, runs: 0, kills: 0, bestTime: 0, bosses: 0, bestCombo: 0, done: [] };
 }
 
 /** Actualiza progreso diario con una partida verificada. Devuelve misiones completadas ahora. */
@@ -29,6 +30,7 @@ export function applyRunToDaily(daily, summary) {
   daily.kills += summary.kills;
   daily.bosses += summary.bossesKilled;
   daily.bestTime = Math.max(daily.bestTime, summary.timeSec);
+  daily.bestCombo = Math.max(daily.bestCombo ?? 0, summary.bestCombo ?? 0);
   const completed = [];
   for (const m of MISSIONS) {
     if (daily.done.includes(m.id)) continue;

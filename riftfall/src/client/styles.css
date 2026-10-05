@@ -514,3 +514,29 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .levelup-inner h2 { margin-bottom: 12px; }
   .gameover-card { padding: 20px 16px; }
 }
+
+/* ------------------------------------------------------------------ evoluciones, combos, tutorial */
+.choice.evo { border-color: #ffd23d; box-shadow: 0 0 0 1px #ffd23d, 0 0 40px -6px rgba(255, 210, 61, 0.7); animation: cardIn 0.4s cubic-bezier(0.2, 1.3, 0.4, 1) backwards, evoPulse 1.4s ease-in-out infinite; }
+.choice .tag.evo { background: linear-gradient(135deg, #fff2b3, #ffd23d, #ff8a1f); color: #1a0d00; }
+@keyframes evoPulse { 50% { box-shadow: 0 0 0 1px #ffd23d, 0 0 70px -4px rgba(255, 210, 61, 0.95); } }
+.levelup-inner.chest h2 { color: #ffe9a3; text-shadow: 0 0 30px #ff9d2e; }
+.slot.evo { border-color: #ffd23d; box-shadow: 0 0 14px rgba(255, 210, 61, 0.6); }
+.slot.evo b { color: #ffd23d; border-color: #ffd23d; }
+#combo {
+  position: absolute; right: 16px; top: calc(78px + var(--safe-top));
+  text-align: right; font-family: var(--display); pointer-events: none;
+  transform-origin: right center;
+}
+#combo b { display: block; font-size: 34px; font-weight: 900; color: #fff3c4; text-shadow: 0 0 18px #ff9d2e, 0 0 40px #ff4dd2; }
+#combo small { font-size: 11px; letter-spacing: 0.4em; color: var(--gold); }
+#combo.bump { animation: comboBump 0.18s ease-out; }
+@keyframes comboBump { from { transform: scale(1.25); } }
+#tutorial {
+  position: absolute; left: 50%; bottom: calc(90px + var(--safe-bottom)); transform: translateX(-50%);
+  width: min(460px, calc(100vw - 32px)); padding: 14px 18px; border-radius: 16px;
+  background: rgba(10, 14, 32, 0.88); border: 1px solid var(--line-strong);
+  font-family: var(--ui); font-size: 17px; text-align: center; line-height: 1.4;
+  animation: toastIn 0.4s cubic-bezier(0.2, 1.3, 0.4, 1);
+}
+#tutorial b { color: var(--cyan); }
+@media (max-width: 520px) { #combo { top: calc(70px + var(--safe-top)); } #combo b { font-size: 26px; } }

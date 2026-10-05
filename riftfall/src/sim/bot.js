@@ -72,7 +72,7 @@ export function botInput(s) {
   return bestDir;
 }
 
-const PRIORITY = { weapon: 3, passive: 2, repair: 1, cache: 0 };
+const PRIORITY = { evolve: 5, weapon: 3, passive: 2, repair: 1, cache: 0 };
 
 export function botChoice(s) {
   let best = 0;

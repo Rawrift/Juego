@@ -366,18 +366,24 @@ function renderDone(st) {
   const labels = { RiftToken: `Token ${st.symbol}`, RewardVault: 'Pool de recompensas', RiftShips: 'Naves NFT', RiftMarket: 'Mercado', RiftArena: 'Arena', TeamVesting: 'Tu vesting' };
   $('#doneBody').replaceChildren(
     el('p', {}, `${st.name} (${st.symbol}) quedó creado en ${ui.network.label}. Eres el dueño de todos los contratos y la tesorería es tu wallet.`),
+    el('div', { class: 'notice' }, [
+      el('b', {}, 'Último paso: '),
+      'toca "Copiar configuración" y pégala en el chat con Claude. Con eso se conecta tu token al juego y se activa la tienda de naves.'
+    ]),
+    el('div', { class: 'lx-actions' }, [
+      el('button', { class: 'btn gold big', id: 'copyConfig', onclick: () => copy(json) }, 'Copiar configuración'),
+      el('button', { class: 'btn primary', onclick: () => watchToken(st) }, `Agregar ${st.symbol} a mi wallet`)
+    ]),
     el('div', { class: 'lx-addr' }, Object.entries(dep.contracts).map(([k, v]) => el('div', {}, [el('span', {}, labels[k]), link(v)]))),
     el('div', { class: 'lx-actions' }, [
-      el('button', { class: 'btn primary', onclick: () => watchToken(st) }, `Agregar ${st.symbol} a mi wallet`),
-      el('button', { class: 'btn ghost', onclick: () => copy(json) }, 'Copiar configuración'),
+      el('a', { class: 'btn ghost', href: '/' }, 'Abrir el juego'),
       el('button', { class: 'btn ghost', onclick: () => download(`deployment-${ui.network.id}.json`, json) }, 'Descargar configuración')
     ]),
-    el('details', {}, [el('summary', { class: 'lx-note' }, 'Ver configuración (para el servidor del juego)'), el('pre', { class: 'lx-mono' }, json)]),
-    el('h3', {}, 'Próximos pasos'),
+    el('details', {}, [el('summary', { class: 'lx-note' }, 'Ver configuración'), el('pre', { class: 'lx-mono' }, json)]),
+    el('h3', {}, 'Después'),
     el('ol', { class: 'lx-steps' }, [
-      el('li', {}, 'Guarda la configuración: el servidor del juego la necesita para conectarse a tus contratos.'),
-      el('li', {}, 'Publica el servidor del juego y registra su dirección como firmante (abajo).'),
-      el('li', {}, 'Cuando haya ventas de naves, cobra el BNB con el botón de abajo.')
+      el('li', {}, 'Cada venta de naves se acumula en el contrato: cóbrala con el botón de Administración (abajo).'),
+      el('li', {}, 'Cuando el servidor de recompensas esté publicado, registra su dirección como firmante (abajo) para que los jugadores puedan canjear.')
     ])
   );
   renderAdmin(st);

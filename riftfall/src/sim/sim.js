@@ -16,7 +16,8 @@ import {
   ENEMY_ORDER,
   BASE_STATS,
   xpToNext,
-  shipYield
+  shipYield,
+  weaponStats
 } from './content.js';
 
 export const TICK_RATE = 60;
@@ -70,6 +71,11 @@ export function createSim({ seed, ship = 'spark', shipLevel = 1 } = {}) {
     boss: null,
     choice: null,
     pendingLevels: 0,
+    pendingChests: 0,
+    choiceSource: null,
+    combo: 0,
+    comboTimer: 0,
+    bestCombo: 0,
     gemCount: 0,
     nextId: 1,
     events: [],
@@ -83,7 +89,7 @@ export function createSim({ seed, ship = 'spark', shipLevel = 1 } = {}) {
 }
 
 function addWeapon(s, id) {
-  s.player.weapons.push({ id, level: 1, cd: 20, angle: 0, radius: 0, count: 0 });
+  s.player.weapons.push({ id, level: 1, evolved: false, cd: 20, angle: 0, radius: 0, count: 0 });
 }
 
 function recomputeStats(s) {
@@ -106,6 +112,7 @@ function recomputeStats(s) {
 export function stepSim(s, dir) {
   if (s.phase !== 'running') return;
   s.tick++;
+  if (s.comboTimer > 0 && --s.comboTimer === 0) s.combo = 0;
   movePlayer(s, dir);
   director(s);
   updateEnemies(s);
@@ -126,7 +133,7 @@ export function stepSim(s, dir) {
   } else if (s.tick >= MAX_TICKS) {
     s.phase = 'victory';
     s.events.push({ t: 'victory' });
-  } else if (s.pendingLevels > 0) {
+  } else if (s.pendingLevels > 0 || s.pendingChests > 0) {
     openChoice(s);
   }
 }
@@ -507,6 +514,10 @@ function damageEnemy(s, e, base, kx, ky, kb) {
 function killEnemy(s, e) {
   e.dead = true;
   s.kills++;
+  s.combo = s.comboTimer > 0 ? s.combo + 1 : 1;
+  s.comboTimer = 90;
+  if (s.combo > s.bestCombo) s.bestCombo = s.combo;
+  if (s.combo === 50 || s.combo % 100 === 0) s.events.push({ t: 'combo', n: s.combo });
   if (e.elite) s.elitesKilled++;
   s.events.push({ t: 'kill', x: e.x, y: e.y, kind: e.kind, elite: e.elite, boss: e.boss, r: e.r });
   if (e.def.split) {
@@ -530,6 +541,7 @@ function dropLoot(s, e) {
     addPickup(s, 'shard', e.x + 20, e.y, 50 + 25 * s.bossesKilled);
     addPickup(s, 'heal', e.x - 20, e.y, 1);
     addPickup(s, 'magnet', e.x, e.y + 20, 1);
+    addPickup(s, 'chest', e.x, e.y - 26, 1).mag = true; // el cofre vuela hacia la nave
     return;
   }
   if (e.elite) {
@@ -558,7 +570,9 @@ function spawnGem(s, x, y, value) {
 }
 
 function addPickup(s, kind, x, y, value) {
-  s.pickups.push({ id: s.nextId++, kind, x, y, px: x, py: y, value, mag: false, spd: 0 });
+  const o = { id: s.nextId++, kind, x, y, px: x, py: y, value, mag: false, spd: 0 };
+  s.pickups.push(o);
+  return o;
 }
 
 function hurtPlayer(s, amount) {
@@ -577,7 +591,7 @@ function hurtPlayer(s, amount) {
 function updateWeapons(s) {
   const st = s.player.stats;
   for (const w of s.player.weapons) {
-    const L = WEAPONS[w.id].levels[w.level - 1];
+    const L = weaponStats(w);
     if (w.id === 'orbit') {
       orbitTick(s, w, L);
       continue;
@@ -894,6 +908,8 @@ function collect(s, o) {
     }
   } else if (o.kind === 'shard') {
     s.shards += o.value;
+  } else if (o.kind === 'chest') {
+    s.pendingChests++;
   } else if (o.kind === 'heal') {
     p.hp = Math.min(p.stats.maxHp, p.hp + p.stats.maxHp * 0.3);
   } else if (o.kind === 'magnet') {
@@ -915,7 +931,15 @@ function collect(s, o) {
 
 function openChoice(s) {
   const p = s.player;
-  const cands = [];
+  const chest = s.pendingChests > 0;
+  const evos = [];
+  for (const w of p.weapons) {
+    const evo = WEAPONS[w.id].evo;
+    if (!w.evolved && w.level >= 5 && p.passives.some((x) => x.id === evo.passive)) {
+      evos.push({ kind: 'evolve', id: w.id, level: 6, wgt: 4 });
+    }
+  }
+  const cands = [...evos];
   for (const w of p.weapons) if (w.level < 5) cands.push({ kind: 'weapon', id: w.id, level: w.level + 1, wgt: 1.3 });
   if (p.weapons.length < RUN.weaponSlots) {
     for (const id of WEAPON_ORDER) {
@@ -931,6 +955,11 @@ function openChoice(s) {
     }
   }
   const picked = [];
+  if (chest && evos.length) {
+    // El cofre del Guardián garantiza una evolución si hay alguna disponible.
+    const [c] = cands.splice(0, 1);
+    picked.push({ kind: c.kind, id: c.id, level: c.level });
+  }
   while (picked.length < 3 && cands.length > 0) {
     let total = 0;
     for (const c of cands) total += c.wgt;
@@ -949,8 +978,9 @@ function openChoice(s) {
   if (picked.length < 3) picked.push({ kind: 'repair', id: 'repair', level: 0 });
   if (picked.length < 3) picked.push({ kind: 'cache', id: 'cache', level: 0 });
   s.choice = picked;
+  s.choiceSource = chest ? 'chest' : 'level';
   s.phase = 'choice';
-  s.events.push({ t: 'levelup', level: p.level });
+  s.events.push({ t: chest ? 'chest' : 'levelup', level: p.level });
 }
 
 /** Aplica la opción elegida (0..2) cuando la fase es 'choice'. */
@@ -963,6 +993,10 @@ export function chooseUpgrade(s, index) {
     const w = p.weapons.find((x) => x.id === o.id);
     if (w) w.level++;
     else addWeapon(s, o.id);
+  } else if (o.kind === 'evolve') {
+    const w = p.weapons.find((x) => x.id === o.id);
+    if (w) w.evolved = true;
+    s.events.push({ t: 'evolve', id: o.id });
   } else if (o.kind === 'passive') {
     const ps = p.passives.find((x) => x.id === o.id);
     if (ps) ps.level++;
@@ -974,9 +1008,11 @@ export function chooseUpgrade(s, index) {
     s.shards += 2;
   }
   s.choice = null;
-  s.pendingLevels--;
+  if (s.choiceSource === 'chest') s.pendingChests--;
+  else s.pendingLevels--;
+  s.choiceSource = null;
   s.phase = 'running';
-  if (s.pendingLevels > 0) openChoice(s);
+  if (s.pendingLevels > 0 || s.pendingChests > 0) openChoice(s);
   return true;
 }
 
@@ -998,7 +1034,8 @@ export function summarize(s) {
     shardsCollected: s.shards,
     shardsEarned: Math.floor(base * mult),
     yieldMult: mult,
-    score: s.kills + timeSec * 2 + s.player.level * 25 + s.bossesKilled * 500 + (victory ? 2000 : 0)
+    bestCombo: s.bestCombo,
+    score: s.kills + timeSec * 2 + s.player.level * 25 + s.bossesKilled * 500 + Math.floor(s.bestCombo / 2) + (victory ? 2000 : 0)
   };
 }
 

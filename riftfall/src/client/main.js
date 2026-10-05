@@ -18,7 +18,8 @@ import {
   SHIPS,
   WEAPONS,
   PASSIVES,
-  shipYield
+  shipYield,
+  weaponStats
 } from '../sim/index.js';
 import { createRenderer } from './renderer.js';
 import { createAudio } from './audio.js';
@@ -27,6 +28,7 @@ import { createApi } from './api.js';
 import { createWallet, explainError } from './wallet.js';
 import { iconCanvas, drawShipPreview } from './sprites.js';
 import { createPanels } from './panels.js';
+import { chainConfigFromDeployment } from '../shared/networks.js';
 import { $, el, toast, fmtTime, fmtNum, shortAddr, fmtRift, brandText } from './dom.js';
 
 const canvas = $('#game');
@@ -115,8 +117,9 @@ function updateMenu() {
     $('#menuRift').textContent = fmtRift(app.balances.rift);
   }
   const wb = $('#walletBtn');
-  if (p?.wallet) {
-    wb.textContent = shortAddr(p.wallet);
+  const walletAddr = p?.wallet ?? (app.wallet?.connected ? app.wallet.address : null);
+  if (walletAddr) {
+    wb.textContent = shortAddr(walletAddr);
     wb.classList.add('connected');
   } else {
     wb.textContent = app.config?.chain ? 'Conectar wallet' : 'Wallet (sin red)';
@@ -132,7 +135,7 @@ function updateMenu() {
       ])
     )
   );
-  if (!p) list.replaceChildren(el('li', {}, [el('span', {}, 'Conecta con el servidor para ver tus misiones.')]));
+  if (!p) list.replaceChildren(el('li', {}, [el('span', {}, 'Las misiones diarias se activan cuando el servidor de recompensas esté en línea.')]));
 }
 
 function setNet(text, cls) {
@@ -164,6 +167,12 @@ async function connectWallet() {
   }
   try {
     const address = await app.wallet.connect();
+    if (app.config.staticMode) {
+      app.balances = await app.wallet.balances();
+      toast(`Wallet conectada: ${shortAddr(address)}`, 'ok');
+      updateMenu();
+      return true;
+    }
     const { message } = await api.nonce(address);
     const signature = await app.wallet.signMessage(message);
     app.profile = await api.loginWallet(address, signature);
@@ -199,7 +208,9 @@ async function startRun(mode = 'normal') {
       return;
     }
     game.offline = true;
-    run = { runId: null, seed: (Math.random() * 2 ** 32) >>> 0, ship: 'spark', shipLevel: 1, mode: 'normal' };
+    // En práctica puedes volar tu nave NFT (no hay recompensas que verificar).
+    const own = app.config?.staticMode && app.wallet?.connected && app.ship.tokenId ? app.ship : { key: 'spark', level: 1 };
+    run = { runId: null, seed: (Math.random() * 2 ** 32) >>> 0, ship: own.key, shipLevel: own.level, mode: 'normal' };
     toast('Modo práctica: el servidor de recompensas no está conectado, esta partida no da Shards.', 'err');
   }
   game.run = run;
@@ -218,6 +229,36 @@ async function startRun(mode = 'normal') {
   $('#bossBar').classList.add('hidden');
   input.setEnabled(true);
   announce(run.mode === 'arena' ? 'ARENA' : 'SOBREVIVE', run.mode === 'arena' ? 'el mejor puntaje se lleva el bote' : 'el Rift se está abriendo', 'good');
+  showTutorial();
+}
+
+const TUTORIAL = [
+  () => (matchMedia('(pointer: coarse)').matches ? '<b>Arrastra el dedo</b> en cualquier parte para moverte.' : 'Muévete con <b>WASD</b> o las <b>flechas</b>.'),
+  () => 'Tus armas <b>disparan solas</b>. Tú solo esquiva y sobrevive.',
+  () => 'Recoge los <b>cristales</b> para subir de nivel y elegir mejoras.',
+  () => 'Arma al <b>nivel 5</b> + su mejora pareja = <b>EVOLUCIÓN</b>. Los jefes sueltan cofres.'
+];
+function showTutorial() {
+  let seen = false;
+  try {
+    seen = localStorage.getItem('riftfall.tutorial') === '1';
+    localStorage.setItem('riftfall.tutorial', '1');
+  } catch {
+    seen = false;
+  }
+  if (seen) return;
+  const box = $('#tutorial');
+  TUTORIAL.forEach((line, i) => {
+    setTimeout(() => {
+      if (game.mode !== 'play') return box.classList.add('hidden');
+      box.innerHTML = line();
+      box.classList.remove('hidden');
+      box.style.animation = 'none';
+      void box.offsetWidth;
+      box.style.animation = '';
+    }, 1800 + i * 4200);
+  });
+  setTimeout(() => box.classList.add('hidden'), 1800 + TUTORIAL.length * 4200);
 }
 
 function pickChoice(i) {
@@ -241,6 +282,10 @@ function describeChoice(o) {
     const p = PASSIVES[o.id];
     return { title: p.name, text: p.desc, color: '#ffc94d', icon: o.id, max: p.max };
   }
+  if (o.kind === 'evolve') {
+    const w = WEAPONS[o.id];
+    return { title: w.evo.name, text: `${w.evo.desc}. Evoluciona tu ${w.name}.`, color: '#ffd23d', icon: o.id, max: 0, evo: true };
+  }
   if (o.kind === 'repair') return { title: 'Kit de reparación', text: 'Recupera 40% de la vida', color: '#4dff9a', icon: 'repair', max: 0 };
   return { title: 'Alijo de Shards', text: '+2 Shards', color: '#ffc94d', icon: 'cache', max: 0 };
 }
@@ -248,13 +293,18 @@ function describeChoice(o) {
 function openChoice() {
   const s = game.sim;
   game.choiceOpen = true;
-  $('#levelupTitle').textContent = `NIVEL ${s.player.level - s.pendingLevels + 1}`;
+  const chest = s.choiceSource === 'chest';
+  $('.levelup-inner').classList.toggle('chest', chest);
+  $('#levelupKicker').textContent = chest ? 'BOTÍN DE JEFE' : 'SUBISTE DE NIVEL';
+  $('#levelupTitle').textContent = chest ? 'COFRE DEL GUARDIÁN' : `NIVEL ${s.player.level - s.pendingLevels + 1}`;
   const box = $('#choices');
   box.replaceChildren(
     ...s.choice.map((o, i) => {
       const d = describeChoice(o);
-      const card = el('button', { class: 'choice', style: `--accent:${d.color}` }, [
-        o.level === 1 && o.kind !== 'repair' && o.kind !== 'cache'
+      const card = el('button', { class: `choice${d.evo ? ' evo' : ''}`, style: `--accent:${d.color}` }, [
+        d.evo
+          ? el('span', { class: 'tag evo' }, 'EVOLUCIÓN')
+          : o.level === 1 && o.kind !== 'repair' && o.kind !== 'cache'
           ? el('span', { class: 'tag new' }, 'NUEVO')
           : o.level
             ? el('span', { class: 'tag' }, `NV ${o.level}`)
@@ -294,7 +344,7 @@ async function showGameOver(local, victory) {
     ...[
       ['TIEMPO', fmtTime(local.timeSec)],
       ['BAJAS', fmtNum(local.kills)],
-      ['NIVEL', local.level],
+      ['COMBO MÁX', `x${fmtNum(local.bestCombo ?? 0)}`],
       ['PUNTAJE', fmtNum(local.score)]
     ].map(([k, v]) => el('div', {}, [el('small', {}, k), el('b', {}, String(v))]))
   );
@@ -388,7 +438,13 @@ function announce(title, sub, cls = 'good') {
 function loadoutSlots(s) {
   const slots = [];
   for (const w of s.player.weapons) {
-    slots.push(el('div', { class: 'slot', title: WEAPONS[w.id].name }, [iconCanvas(w.id, WEAPONS[w.id].color, 60), el('b', {}, String(w.level))]));
+    const name = w.evolved ? WEAPONS[w.id].evo.name : WEAPONS[w.id].name;
+    slots.push(
+      el('div', { class: `slot${w.evolved ? ' evo' : ''}`, title: name }, [
+        iconCanvas(w.id, w.evolved ? '#ffd23d' : WEAPONS[w.id].color, 60),
+        el('b', {}, w.evolved ? '★' : String(w.level))
+      ])
+    );
   }
   for (const p of s.player.passives) {
     slots.push(el('div', { class: 'slot passive', title: PASSIVES[p.id].name }, [iconCanvas(p.id, '#ffc94d', 60), el('b', {}, String(p.level))]));
@@ -422,7 +478,20 @@ function updateHud(s) {
   const boss = s.boss && !s.boss.dead ? s.boss : null;
   $('#bossBar').classList.toggle('hidden', !boss);
   if (boss) setWidth('bossFill', (boss.hp / boss.maxHp) * 100);
-  const sig = [...p.weapons.map((w) => w.id + w.level), ...p.passives.map((x) => x.id + x.level)].join();
+  const combo = $('#combo');
+  if (s.combo >= 10) {
+    combo.classList.remove('hidden');
+    if (hudCache.combo !== s.combo) {
+      hudCache.combo = s.combo;
+      combo.firstChild.textContent = `x${s.combo}`;
+      combo.classList.remove('bump');
+      void combo.offsetWidth;
+      combo.classList.add('bump');
+    }
+  } else if (!combo.classList.contains('hidden')) {
+    combo.classList.add('hidden');
+  }
+  const sig = [...p.weapons.map((w) => w.id + w.level + (w.evolved ? '*' : '')), ...p.passives.map((x) => x.id + x.level)].join();
   if (sig !== game.hudSig) {
     game.hudSig = sig;
     $('#loadout').replaceChildren(...loadoutSlots(s));
@@ -439,7 +508,10 @@ function onSimEvent(ev, s, live) {
       else announce('ENJAMBRE', 'te están rodeando', 'danger');
       break;
     case 'bossDead':
-      announce('GUARDIÁN DERROTADO', '+ Shards de jefe', 'good');
+      announce('GUARDIÁN DERROTADO', 'recoge su cofre', 'good');
+      break;
+    case 'evolve':
+      announce(WEAPONS[ev.id].evo.name.toUpperCase(), 'arma evolucionada', 'good');
       break;
     case 'hurt': {
       const f = $('#hurtFlash');
@@ -533,7 +605,7 @@ $('#quitBtn').addEventListener('click', () => {
 });
 $('#walletBtn').addEventListener('click', async () => {
   audio.unlock();
-  if (app.profile?.wallet && app.wallet?.connected) panels.open('profile');
+  if (app.wallet?.connected) panels.open(app.config?.staticMode ? 'hangar' : 'profile');
   else await connectWallet();
 });
 $('#muteBtn').addEventListener('click', () => {
@@ -588,7 +660,21 @@ async function boot() {
     }
     if (app.ship.tokenId && !app.config.chain) selectShip({ key: 'spark', tokenId: null, level: 1 });
   } catch {
-    setNet('● Sin servidor: modo práctica sin recompensas', 'warn');
+    // Sin servidor del juego: si junto al juego está publicada la configuración del token
+    // (deployment.json, generada por el Lanzador), la tienda de naves, la forja y el mercado
+    // funcionan igual directamente con la wallet.
+    const dep = await fetch('/deployment.json')
+      .then((r) => (r.ok && (r.headers.get('content-type') ?? '').includes('json') ? r.json() : null))
+      .catch(() => null);
+    if (dep?.contracts?.RiftShips) {
+      app.config = { chain: chainConfigFromDeployment(dep), staticMode: true, riftPerShard: 1, minClaimShards: 100, demoShips: false, missions: [] };
+      brandText($('#menu'), app.config.chain.tokenSymbol);
+      app.wallet = createWallet(app.config.chain);
+      app.wallet.onChange(() => location.reload());
+      setNet('● Tienda de naves activa · partidas en modo práctica', 'warn');
+    } else {
+      setNet('● Sin servidor: modo práctica sin recompensas', 'warn');
+    }
   }
   updateMenu();
 }

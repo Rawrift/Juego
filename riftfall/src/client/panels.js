@@ -262,6 +262,7 @@ export function createPanels(app) {
       kicker: 'TORNEOS',
       title: 'Arena',
       async render() {
+        if (app.config?.staticMode) return [serverNotice('Los torneos de la Arena se activan cuando el servidor de recompensas esté en línea.')];
         const out = [
           el('p', {}, 'Paga la inscripción en RIFT y compite por el bote. Todos usan la nave SPARK (habilidad pura). Cuenta tu mejor puntaje; puedes jugar todas las veces que quieras hasta el cierre.')
         ];
@@ -317,6 +318,7 @@ export function createPanels(app) {
       kicker: 'TOP PILOTOS',
       title: 'Ranking',
       async render() {
+        if (app.config?.staticMode) return [serverNotice('El ranking se activa cuando el servidor de recompensas esté en línea.')];
         const wrap = el('div', {});
         const tabs = el('div', { class: 'tabs' });
         const load = async (scope) => {
@@ -339,6 +341,7 @@ export function createPanels(app) {
       kicker: 'SHARDS → $RIFT',
       title: 'Canjear',
       async render() {
+        if (app.config?.staticMode) return [serverNotice('El canje de Shards por tu token se activa cuando el servidor de recompensas esté en línea. Mientras tanto la tienda de naves y el mercado ya funcionan.')];
         const p = app.profile;
         const cfg = app.config;
         const out = [];
@@ -472,6 +475,7 @@ export function createPanels(app) {
       kicker: 'PERFIL',
       title: 'Piloto',
       async render() {
+        if (app.config?.staticMode) return [serverNotice('El perfil, las misiones y la racha se activan cuando el servidor de recompensas esté en línea.')];
         await app.refreshProfile();
         const p = app.profile;
         if (!p) return [el('div', { class: 'notice' }, 'Sin conexión con el servidor.')];
@@ -509,6 +513,10 @@ export function createPanels(app) {
       }
     }
   };
+
+  function serverNotice(text) {
+    return el('div', { class: 'notice info' }, text);
+  }
 
   function stat(label, value, cls = '') {
     return el('div', { class: 'stat' }, [el('small', {}, label), el('b', { class: cls }, String(value))]);

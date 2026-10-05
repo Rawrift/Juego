@@ -107,6 +107,7 @@ export const WEAPONS = {
     name: 'Pulse Blaster',
     color: '#4de8ff',
     desc: ['Dispara al enemigo más cercano', '+1 proyectil', '+40% daño', '+1 proyectil y perfora 1', '+55% daño, -15% recarga'],
+    evo: { name: 'Tormenta de Pulsos', passive: 'haste', desc: 'Ráfaga continua que atraviesa enemigos', stats: { cd: 9, dmg: 22, count: 3, pierce: 2 } },
     levels: [
       { cd: 32, dmg: 10, count: 1, pierce: 0 },
       { cd: 32, dmg: 10, count: 2, pierce: 0 },
@@ -119,6 +120,7 @@ export const WEAPONS = {
     name: 'Cuchillas Orbitales',
     color: '#b36bff',
     desc: ['Cuchillas giran a tu alrededor', '+1 cuchilla', '+50% daño, más radio', '+1 cuchilla, más rápidas', '+1 cuchilla, +40% daño'],
+    evo: { name: 'Singularidad', passive: 'area', desc: 'Siete cuchillas gigantes a toda velocidad', stats: { count: 7, dmg: 30, radius: 132, speed: 4.6, hitCd: 14 } },
     levels: [
       { count: 2, dmg: 9, radius: 78, speed: 3.0, hitCd: 24 },
       { count: 3, dmg: 9, radius: 78, speed: 3.0, hitCd: 24 },
@@ -131,6 +133,7 @@ export const WEAPONS = {
     name: 'Bobina de Arco',
     color: '#7fe9ff',
     desc: ['Rayo que salta entre enemigos', '+2 saltos', '+60% daño', '-22% recarga, +1 salto', '+45% daño, +3 saltos'],
+    evo: { name: 'Tempestad', passive: 'crit', desc: 'Rayos que saltan entre 14 enemigos', stats: { cd: 34, dmg: 50, chains: 14 } },
     levels: [
       { cd: 70, dmg: 16, chains: 3 },
       { cd: 70, dmg: 16, chains: 5 },
@@ -143,6 +146,7 @@ export const WEAPONS = {
     name: 'Nova Pulse',
     color: '#4dff9a',
     desc: ['Onda expansiva que repele', '+25% radio', '+60% daño', '-20% recarga, más radio', '+50% daño, +20% radio'],
+    evo: { name: 'Supernova', passive: 'hull', desc: 'Explosión gigante y frecuente', stats: { cd: 88, dmg: 80, radius: 270, kb: 380 } },
     levels: [
       { cd: 150, dmg: 20, radius: 130, kb: 260 },
       { cd: 150, dmg: 20, radius: 160, kb: 270 },
@@ -155,6 +159,7 @@ export const WEAPONS = {
     name: 'Misiles Buscadores',
     color: '#ffb02e',
     desc: ['Misiles que persiguen y explotan', '+1 misil', '+45% daño', '+1 misil, explosión mayor', '+40% daño, -15% recarga'],
+    evo: { name: 'Enjambre', passive: 'might', desc: 'Cinco misiles de explosión enorme', stats: { cd: 50, dmg: 64, count: 5, splash: 112 } },
     levels: [
       { cd: 96, dmg: 26, count: 1, splash: 62 },
       { cd: 96, dmg: 26, count: 2, splash: 62 },
@@ -167,6 +172,7 @@ export const WEAPONS = {
     name: 'Lanza del Rift',
     color: '#ff4dd2',
     desc: ['Rayo perforante hacia donde miras', '+45% ancho', '+55% daño', '-20% recarga, dispara también atrás', '+45% daño, +25% alcance'],
+    evo: { name: 'Rayo del Vacío', passive: 'thrust', desc: 'Rayo colosal hacia adelante y atrás', stats: { cd: 60, dmg: 95, length: 920, width: 58, back: true } },
     levels: [
       { cd: 118, dmg: 30, length: 520, width: 22, back: false },
       { cd: 118, dmg: 30, length: 540, width: 32, back: false },
@@ -176,6 +182,12 @@ export const WEAPONS = {
     ]
   }
 };
+
+/** Estadísticas activas de un arma (las de su evolución si ya evolucionó). */
+export function weaponStats(w) {
+  const def = WEAPONS[w.id];
+  return w.evolved ? def.evo.stats : def.levels[w.level - 1];
+}
 
 export const WEAPON_ORDER = ['blaster', 'orbit', 'arc', 'nova', 'missile', 'lance'];
 

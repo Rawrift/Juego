@@ -258,6 +258,26 @@ export function pickupSprite(kind, tier = 0) {
       g.fillStyle = '#ff4d6a';
       g.fillRect(-10.5, -12, 5, 4);
       g.fillRect(5.5, -12, 5, 4);
+    } else if (kind === 'chest') {
+      g.shadowColor = '#ffd23d';
+      g.shadowBlur = 18;
+      const grad = g.createLinearGradient(0, -10, 0, 12);
+      grad.addColorStop(0, '#fff2b3');
+      grad.addColorStop(0.5, '#ffc94d');
+      grad.addColorStop(1, '#c46a12');
+      g.fillStyle = grad;
+      g.beginPath();
+      g.roundRect(-15, -6, 30, 18, 3);
+      g.fill();
+      g.beginPath();
+      g.roundRect(-16, -14, 32, 10, 4);
+      g.fill();
+      g.shadowBlur = 0;
+      g.strokeStyle = '#5a2c00';
+      g.lineWidth = 1.6;
+      g.strokeRect(-15, -6, 30, 18);
+      g.fillStyle = '#ffffff';
+      g.fillRect(-3, -8, 6, 8);
     } else if (kind === 'bomb') {
       g.shadowColor = '#ff4d6a';
       g.shadowBlur = 16;

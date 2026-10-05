@@ -1,7 +1,7 @@
 // Renderizador Canvas2D: fondo en parallax, entidades interpoladas entre ticks y efectos.
 // Todo lo visual es cosmético (puede usar Math.random): no afecta a la simulación.
 
-import { WEAPONS, SHIPS } from '../sim/index.js';
+import { SHIPS, weaponStats } from '../sim/index.js';
 import {
   glow,
   rgba,
@@ -244,6 +244,28 @@ export function createRenderer(canvas) {
         addShake(9);
         burst(sim.player.x, sim.player.y, '#ff4d6a', 12, 260, 3, 0.4);
         break;
+      case 'chest': {
+        const p = sim.player;
+        ring(p.x, p.y, 10, 300, '#ffd23d', 0.8, 10);
+        burst(p.x, p.y, '#ffd23d', 60, 460, 3.6, 1);
+        R.flash = 0.5;
+        break;
+      }
+      case 'evolve': {
+        const p = sim.player;
+        ring(p.x, p.y, 10, 420, '#ffd23d', 0.9, 14);
+        ring(p.x, p.y, 10, 260, '#ffffff', 0.6, 6);
+        burst(p.x, p.y, '#ffd23d', 90, 600, 4, 1.2);
+        addShake(16);
+        R.flash = 0.8;
+        break;
+      }
+      case 'combo': {
+        const p = sim.player;
+        text(p.x, p.y - 60, `COMBO x${ev.n}!`, '#ffd23d', 26, 1.3);
+        ring(p.x, p.y, 20, 160, '#ff9d2e', 0.4, 5);
+        break;
+      }
       case 'levelup': {
         const p = sim.player;
         ring(p.x, p.y, 10, 220, '#4dff9a', 0.6, 8);
@@ -354,7 +376,8 @@ export function createRenderer(canvas) {
         drawSprite(pickupSprite('gem', gemTier(o.value)), x, y + bob, 0);
       } else {
         ctx.globalCompositeOperation = 'lighter';
-        drawSprite(glow(o.kind === 'shard' ? '#ffc94d' : o.kind === 'heal' ? '#4dff9a' : o.kind === 'bomb' ? '#ff4d6a' : '#6c8cff', 26, 0.5 + 0.2 * Math.sin(R.time * 6)), x, y + bob);
+        const gc = o.kind === 'shard' || o.kind === 'chest' ? '#ffc94d' : o.kind === 'heal' ? '#4dff9a' : o.kind === 'bomb' ? '#ff4d6a' : '#6c8cff';
+        drawSprite(glow(gc, o.kind === 'chest' ? 48 : 26, 0.5 + 0.2 * Math.sin(R.time * 6)), x, y + bob);
         ctx.globalCompositeOperation = 'source-over';
         drawSprite(pickupSprite(o.kind), x, y + bob, o.kind === 'shard' ? Math.sin(R.time * 3 + o.id) * 0.4 : 0);
       }
@@ -417,16 +440,17 @@ export function createRenderer(canvas) {
     // armas del jugador: cuchillas orbitales
     for (const wpn of p.weapons) {
       if (wpn.id !== 'orbit' || !wpn.count) continue;
-      const L = WEAPONS.orbit.levels[wpn.level - 1];
+      const L = weaponStats(wpn);
       const angle = wpn.angle + (L.speed / 60) * alpha;
       for (let b = 0; b < wpn.count; b++) {
         const a = angle + (b * Math.PI * 2) / wpn.count;
         const bx = px + Math.cos(a) * wpn.radius;
         const by = py + Math.sin(a) * wpn.radius;
         ctx.globalCompositeOperation = 'lighter';
-        drawSprite(glow('#b36bff', 26, 0.6), bx, by);
+        const bladeColor = wpn.evolved ? '#ffd23d' : '#b36bff';
+        drawSprite(glow(bladeColor, wpn.evolved ? 34 : 26, 0.6), bx, by);
         ctx.globalCompositeOperation = 'source-over';
-        drawSprite(bladeSprite('#b36bff'), bx, by, a + R.time * 14);
+        drawSprite(bladeSprite(bladeColor), bx, by, a + R.time * 14, 1, wpn.evolved ? 1.35 : 1);
       }
     }
 
@@ -449,6 +473,9 @@ export function createRenderer(canvas) {
     // proyectiles
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
+    const goldBolts = p.weapons.some((w) => w.id === 'blaster' && w.evolved);
+    const boltOuter = goldBolts ? 'rgba(255, 210, 61, 0.4)' : 'rgba(77, 232, 255, 0.35)';
+    const boltInner = goldBolts ? '#fff6cf' : '#e6fdff';
     for (const b of sim.projectiles) {
       const x = lerp(b.px, b.x, alpha);
       const y = lerp(b.py, b.y, alpha);
@@ -457,13 +484,13 @@ export function createRenderer(canvas) {
         const sp = Math.hypot(b.vx, b.vy) || 1;
         const tx2 = x - (b.vx / sp) * 26;
         const ty2 = y - (b.vy / sp) * 26;
-        ctx.strokeStyle = 'rgba(77, 232, 255, 0.35)';
+        ctx.strokeStyle = boltOuter;
         ctx.lineWidth = 9;
         ctx.beginPath();
         ctx.moveTo(tx2, ty2);
         ctx.lineTo(x, y);
         ctx.stroke();
-        ctx.strokeStyle = '#e6fdff';
+        ctx.strokeStyle = boltInner;
         ctx.lineWidth = 3;
         ctx.stroke();
       } else {

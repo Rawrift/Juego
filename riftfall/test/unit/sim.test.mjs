@@ -13,7 +13,9 @@ import {
   InputRecorder,
   replayRun,
   dsin,
-  MAX_TICKS
+  MAX_TICKS,
+  weaponStats,
+  WEAPONS
 } from '../../src/sim/index.js';
 import { dsin as dsin2, dcos } from '../../src/sim/dmath.js';
 
@@ -108,4 +110,36 @@ test('las naves NFT multiplican la recompensa según clase y nivel de forja', ()
   assert.equal(summarize(s1).shardsEarned, 100);
   assert.equal(summarize(s2).shardsEarned, Math.floor(100 * (1 + 0.5 + 0.27)));
   assert.equal(createSim({ seed: 1, ship: 'spark', shipLevel: 10 }).shipLevel, 1);
+});
+
+test('el cofre del Guardián garantiza una evolución cuando hay arma al máximo + pasiva', () => {
+  const s = createSim({ seed: 3 });
+  const blaster = s.player.weapons[0];
+  blaster.level = 5;
+  s.player.passives.push({ id: 'haste', level: 1 });
+  s.pendingChests = 1;
+  stepSim(s, 0);
+  assert.equal(s.phase, 'choice');
+  assert.equal(s.choiceSource, 'chest');
+  assert.deepEqual(s.choice[0], { kind: 'evolve', id: 'blaster', level: 6 });
+  chooseUpgrade(s, 0);
+  assert.equal(blaster.evolved, true);
+  assert.deepEqual(weaponStats(blaster), WEAPONS.blaster.evo.stats);
+  assert.equal(s.pendingChests, 0);
+  assert.equal(s.phase, 'running');
+});
+
+test('los combos se encadenan con bajas seguidas y se cortan tras 1,5 s', () => {
+  const s = createSim({ seed: 11 });
+  let guard = 0;
+  while (s.bestCombo < 5 && guard++ < 60 * 120) {
+    if (s.phase === 'choice') chooseUpgrade(s, botChoice(s));
+    else stepSim(s, botInput(s));
+    s.events.length = 0;
+  }
+  assert.ok(s.bestCombo >= 5);
+  s.enemies.length = 0;
+  for (let i = 0; i < 95 && s.phase === 'running'; i++) stepSim(s, 0);
+  assert.equal(s.combo, 0);
+  assert.ok(summarize(s).bestCombo >= 5);
 });

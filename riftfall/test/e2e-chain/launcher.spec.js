@@ -1,4 +1,7 @@
 import { test, expect } from '@playwright/test';
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
 import { JsonRpcProvider, Contract, Interface, formatEther, parseEther } from 'ethers';
 import generated from '../../src/generated/contracts.json' with { type: 'json' };
 
@@ -105,6 +108,51 @@ test('Lanzador: crea token y contratos desde la wallet, reanuda tras un rechazo 
   await expect(page.locator('.toast.ok', { hasText: 'Firmante' })).toBeVisible({ timeout: 30_000 });
   expect(await c('RewardVault').signer()).toBe(SERVER);
   expect(await c('RiftArena').operator()).toBe(SERVER);
+
+  // Juego publicado SIN servidor (hosting estático + deployment.json del Lanzador):
+  // la tienda de naves funciona y la nave comprada se puede usar en modo práctica.
+  const DIST = path.resolve('dist-e2e');
+  const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.woff': 'font/woff' };
+  const site = http.createServer((req, res) => {
+    const url = new URL(req.url, 'http://x');
+    if (url.pathname === '/deployment.json') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      return res.end(JSON.stringify(dep));
+    }
+    const file = path.join(DIST, url.pathname === '/' ? 'index.html' : url.pathname);
+    if (!file.startsWith(DIST) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+      res.writeHead(404, { 'content-type': 'text/plain' });
+      return res.end('not found');
+    }
+    res.writeHead(200, { 'content-type': TYPES[path.extname(file)] ?? 'application/octet-stream' });
+    fs.createReadStream(file).pipe(res);
+  });
+  await new Promise((r) => site.listen(4176, '127.0.0.1', r));
+  try {
+    const game = await ctx.newPage();
+    game.on('pageerror', (e) => errors.push(e.message));
+    await injectWallet(game, 0);
+    await game.goto('http://127.0.0.1:4176/');
+    await expect(game.locator('#netStatus')).toContainText('Tienda de naves activa');
+    await game.click('#walletBtn');
+    await expect(game.locator('#walletBtn')).toContainText('0x9965', { timeout: 20_000 });
+    await expect(game.locator('#menuRift')).not.toHaveText('0');
+    await game.click('.nav-grid [data-open="hangar"]');
+    await game.locator('.ship-card', { hasText: 'VANGUARD' }).locator('button', { hasText: 'ETH' }).click();
+    await expect(game.locator('.toast.ok', { hasText: 'VANGUARD es tuya' })).toBeVisible({ timeout: 30_000 });
+    const owned = game.locator('.ship-card', { hasText: '#2 · NV 1' });
+    await expect(owned).toBeVisible({ timeout: 20_000 });
+    await owned.locator('button', { hasText: 'Usar' }).click();
+    await game.click('#sheetClose');
+    await expect(game.locator('#shipName')).toHaveText('VANGUARD · NV 1');
+    await game.click('#playBtn');
+    await expect(game.locator('#hud')).toBeVisible();
+    expect(await game.evaluate(() => window.__RIFTFALL__.game.sim.shipKey)).toBe('vanguard');
+    expect(await provider.getBalance(dep.contracts.RiftShips)).toBe(parseEther('0.004'));
+    await game.screenshot({ path: 'test-results/riftfall-static-ship.png' });
+  } finally {
+    site.close();
+  }
 
   expect(errors).toEqual([]);
   await ctx.close();

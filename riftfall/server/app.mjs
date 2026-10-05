@@ -19,6 +19,7 @@ import { createReplayPool } from './replay-pool.mjs';
 import { initChain } from './chain.mjs';
 import { MISSIONS, dayKey, previousDayKey, streakBonus, freshDaily, applyRunToDaily, missionView } from './economy.mjs';
 import { SHIPS, SHIP_BY_CLASS, TICK_RATE, MAX_INPUT_NUMBERS } from '../src/sim/index.js';
+import { chainConfigFromDeployment } from '../src/shared/networks.js';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -43,14 +44,7 @@ class HttpError extends Error {
 
 const bad = (msg) => new HttpError(400, msg);
 
-/** Datos públicos por red: moneda nativa, explorador y RPC público para los navegadores. */
-const NETWORK_INFO = {
-  56: { nativeSymbol: 'BNB', explorer: 'https://bscscan.com', rpc: 'https://bsc-dataseed.bnbchain.org' },
-  97: { nativeSymbol: 'tBNB', explorer: 'https://testnet.bscscan.com', rpc: 'https://bsc-testnet-rpc.publicnode.com' },
-  8453: { nativeSymbol: 'ETH', explorer: 'https://basescan.org', rpc: 'https://mainnet.base.org' },
-  84532: { nativeSymbol: 'ETH', explorer: 'https://sepolia.basescan.org', rpc: 'https://sepolia.base.org' },
-  31337: { nativeSymbol: 'ETH', explorer: '', rpc: '' }
-};
+
 const ARENA_PAYOUT = [3000, 2000, 1200, 900, 800, 700, 500, 400, 300, 200];
 
 export async function createApp(options = {}) {
@@ -243,15 +237,10 @@ export async function createApp(options = {}) {
 
     'GET /api/config': async () => ({
       chain: chain
-        ? {
-            chainId: chain.deployment.chainId,
-            network: chain.deployment.network,
-            contracts: chain.deployment.contracts,
-            rpcUrl: cfg.publicRpcUrl || NETWORK_INFO[chain.deployment.chainId]?.rpc || cfg.rpcUrl,
-            explorerUrl: cfg.explorerUrl || NETWORK_INFO[chain.deployment.chainId]?.explorer || '',
-            nativeSymbol: NETWORK_INFO[chain.deployment.chainId]?.nativeSymbol ?? 'ETH',
-            tokenSymbol: chain.deployment.token?.symbol ?? 'RIFT'
-          }
+        ? chainConfigFromDeployment(chain.deployment, {
+            rpcUrl: cfg.publicRpcUrl || (chain.deployment.chainId === 31337 ? cfg.rpcUrl : ''),
+            explorerUrl: cfg.explorerUrl
+          })
         : null,
       riftPerShard: cfg.riftPerShard,
       minClaimShards: cfg.minClaimShards,

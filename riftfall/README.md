@@ -11,7 +11,7 @@ Las naves son **NFT** que se compran, se forjan y se revenden. En la **Arena** s
 | ![Partida](docs/img/gameplay.jpg) | ![Jefe](docs/img/boss.jpg) | ![Móvil](docs/img/mobile.jpg) |
 
 - **Jugable en cualquier navegador** (escritorio y móvil con joystick táctil). No requiere instalar nada; la wallet solo se pide para cobrar.
-- **Adictivo por diseño:** partidas de 3 a 10 minutos, 6 armas y 11 mejoras combinables, 3 jefes, misiones diarias, racha de días, ranking y torneos.
+- **Adictivo por diseño:** partidas de 3 a 10 minutos, 6 armas y 11 mejoras combinables, **6 evoluciones de armas**, 3 jefes que sueltan **cofres**, **combos**, tutorial, misiones diarias, racha de días, ranking y torneos.
 - **Economía con anti-trampas real ("Proof of Play"):** el servidor re-simula cada partida tick a tick antes de pagar.
 - **Ingresos para el creador:** venta de naves, comisiones de Forja, Mercado y Arena, regalías y liquidez. Detalle en [`docs/ECONOMIA.md`](docs/ECONOMIA.md).
 
@@ -90,6 +90,10 @@ La forma más simple, sin computadora y sin compartir claves:
 4. Al terminar: eres dueño de todos los contratos, la tesorería es tu wallet y tienes el 45% del suministro + 15% en vesting.
    Copia la configuración: es el `DEPLOYMENT_FILE` del servidor.
 5. Desde la sección **Administración** del Lanzador cobras las ventas de naves y registras la dirección del servidor como firmante.
+
+**Sin servidor también vende:** si publicas el juego con el `deployment.json` que genera el Lanzador (en `public/`),
+la tienda de naves, la forja y el mercado funcionan directamente con la wallet, y las partidas corren en modo práctica.
+El canje de Shards, el ranking y la Arena se activan al publicar el servidor.
 
 ## Lanzar desde la terminal (alternativa)
 
