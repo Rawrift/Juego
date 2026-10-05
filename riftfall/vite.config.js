@@ -30,7 +30,8 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         input: withLauncher ? { main: 'index.html', lanzar: 'lanzar.html' } : { main: 'index.html' }
       },
-      sourcemap: true,
+      // El portal no publica los mapas de código (pesan 4 veces el juego).
+      sourcemap: mode !== 'portal',
       chunkSizeWarningLimit: 900
     }
   };

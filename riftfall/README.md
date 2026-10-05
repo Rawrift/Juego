@@ -22,6 +22,15 @@ Las naves son **NFT** que se compran, se forjan y se revenden. En la **Arena** s
 - **Viral:** al terminar, el botón **Compartir** genera una imagen con tu resultado y la manda por WhatsApp, Instagram o lo que tenga el celular.
 - **Economía con anti-trampas real ("Proof of Play"):** el servidor re-simula cada partida tick a tick antes de pagar.
 - **Ingresos para el creador:** venta de naves, comisiones de Forja, Mercado y Arena, regalías y liquidez. Detalle en [`docs/ECONOMIA.md`](docs/ECONOMIA.md).
+- **Se instala como app** (PWA) desde el navegador del celular o de la PC, y la partida funciona sin conexión.
+- **Desafío diario:** la misma semilla y las mismas reglas para todos, con ranking propio y resultado para compartir.
+- **Taller:** 20 piezas coleccionables (cañón, motor, alas y núcleo, 5 niveles cada una) que salen de cajas, cambian
+  el aspecto de la nave y dan bonificaciones pequeñas.
+- **Cobra antes del token:**
+  - **Pase Fundador:** se paga en USDT o BNB en la red principal, directo a la wallet del creador, y el juego verifica
+    el pago en la cadena. Da beneficios cosméticos.
+  - **Versión para portales** (CrazyGames) con anuncios opcionales, sin cripto: `npm run zip:portal`.
+  - Guía completa, grants de BNB Chain y borrador de postulación: [`docs/FINANCIAMIENTO.md`](docs/FINANCIAMIENTO.md).
 
 ## Inicio rápido (todo en local, con blockchain)
 
@@ -79,6 +88,7 @@ riftfall/
 | `npm run server` / `npm start` | Solo el servidor (lee `.env`) |
 | `npm run dev` | Cliente con recarga en caliente (proxy `/api` → 8787) |
 | `npm run build` | Compila el cliente en `dist/` |
+| `npm run zip:portal` | Versión para CrazyGames sin cripto, empaquetada en `riftfall-crazygames.zip` |
 | `npm test` | Tests de simulación y servidor |
 | `npm run test:contracts` | Tests de los contratos (26) |
 | `npm run test:integration` | Flujo on-chain completo contra un nodo Hardhat |
