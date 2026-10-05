@@ -1127,9 +1127,26 @@ function shipLights(g, art, t) {
 
 }
 
+/**
+ * Pinturas exclusivas del Pase Fundador: cambian la paleta de cualquier nave y el color del
+ * fuego de los motores. Son solo cosméticas.
+ */
+export const SKINS = {
+  founder: { pal: { main: '#ffcf3d', dark: '#9a5a10', light: '#fff6cf', accent: '#ff4dd2', glass: '#bff7ff' }, flame: '#ffd23d' },
+  prisma: { pal: { main: '#b98bff', dark: '#3a1d8a', light: '#e8fbff', accent: '#4de8ff', glass: '#ffe1fb' }, flame: '#ff6ae0' }
+};
+
+/** Arte de la nave con la pintura aplicada y color de fuego resultante. */
+function skinned(key, color, skin) {
+  const base = SHIP_ART[key] ?? SHIP_ART.spark;
+  const sk = SKINS[skin];
+  return sk ? [{ ...base, pal: sk.pal }, sk.flame] : [base, color];
+}
+
 /** Dibuja la nave en el contexto ya trasladado y rotado (todo con trazos; para el menú). */
-export function drawShipShape(g, key, color, t = 0, thrust = 1) {
-  const art = SHIP_ART[key] ?? SHIP_ART.spark;
+export function drawShipShape(g, key, color, t = 0, thrust = 1, skin = 'original') {
+  let art;
+  [art, color] = skinned(key, color, skin);
   g.save();
   shipFlames(g, art, color, t, thrust); // el fuego va detrás de todo
   shipBody(g, art, color);
@@ -1144,9 +1161,10 @@ const SHIP_HALF = 48;
  * Igual que drawShipShape pero con el cuerpo pre-dibujado en una imagen (una sola llamada en vez
  * de decenas de trazos, degradados y un desenfoque por cuadro). Es la que usa el juego.
  */
-export function drawShipFast(g, key, color, t = 0, thrust = 1) {
-  const art = SHIP_ART[key] ?? SHIP_ART.spark;
-  const body = cached(`ship|${key}|${color}`, () => {
+export function drawShipFast(g, key, color, t = 0, thrust = 1, skin = 'original') {
+  let art;
+  [art, color] = skinned(key, color, skin);
+  const body = cached(`ship|${key}|${color}|${skin}`, () => {
     const c = makeCanvas(SHIP_HALF * 2 * SHIP_RES, SHIP_HALF * 2 * SHIP_RES);
     const cg = c.getContext('2d');
     cg.scale(SHIP_RES, SHIP_RES);
@@ -1162,7 +1180,8 @@ export function drawShipFast(g, key, color, t = 0, thrust = 1) {
   g.restore();
 }
 
-export function drawShipPreview(canvas, key, color, t = 0) {
+export function drawShipPreview(canvas, key, color, t = 0, skin = 'original') {
+  if (SKINS[skin]) color = SKINS[skin].flame;
   const g = canvas.getContext('2d');
   const w = canvas.width;
   const h = canvas.height;
@@ -1177,7 +1196,7 @@ export function drawShipPreview(canvas, key, color, t = 0) {
   g.rotate(-Math.PI / 2 + Math.sin(t * 1.3) * 0.08);
   const k = (w / 80) * 1.1;
   g.scale(k, k);
-  drawShipShape(g, key, color, t, 0.8);
+  drawShipShape(g, key, color, t, 0.8, skin);
   g.restore();
 }
 

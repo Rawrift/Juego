@@ -712,3 +712,57 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .owner-row b { grid-column: 1 / -1; }
   .owner-row .btn { grid-column: 1 / -1; }
 }
+
+/* ------------------------------------------------------------------ Pase Fundador */
+.founder-banner {
+  display: grid; gap: 2px; text-align: left; padding: 12px 16px; border-radius: 14px;
+  border: 1px solid rgba(255, 210, 61, 0.6);
+  background: linear-gradient(110deg, rgba(255, 210, 61, 0.2), rgba(255, 77, 210, 0.14) 60%, rgba(12, 15, 34, 0.8));
+  box-shadow: 0 0 28px -10px rgba(255, 210, 61, 0.8), inset 0 0 22px -12px rgba(255, 210, 61, 0.9);
+  position: relative; overflow: hidden;
+}
+.founder-banner::after {
+  content: ''; position: absolute; inset: 0; transform: translateX(-120%);
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.22) 50%, transparent 70%);
+  animation: shine 4.5s ease-in-out infinite;
+}
+@keyframes shine { 0%, 60% { transform: translateX(-120%); } 85%, 100% { transform: translateX(120%); } }
+.founder-banner b { font-family: var(--display); letter-spacing: 0.16em; color: var(--gold); text-shadow: 0 0 12px rgba(255, 210, 61, 0.8); }
+.founder-banner span { font-size: 14px; color: #ffe9c2; }
+.founder-chip { cursor: pointer; color: var(--gold); border-color: rgba(255, 210, 61, 0.55) !important; text-shadow: 0 0 10px rgba(255, 210, 61, 0.7); }
+.founder-chip b { font-family: var(--display); font-size: 11px; letter-spacing: 0.18em; }
+.tier-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.tier-card {
+  display: grid; gap: 8px; align-content: start; padding: 16px; border-radius: 16px;
+  background: rgba(12, 15, 34, 0.85); border: 1px solid var(--line);
+}
+.tier-card.tier-gold { border-color: rgba(255, 210, 61, 0.55); box-shadow: 0 10px 40px -18px rgba(255, 210, 61, 0.9); }
+.tier-card.tier-legend {
+  border-color: rgba(185, 139, 255, 0.7);
+  background: linear-gradient(160deg, rgba(185, 139, 255, 0.16), rgba(77, 232, 255, 0.08) 60%, rgba(12, 15, 34, 0.9));
+  box-shadow: 0 10px 40px -16px rgba(185, 139, 255, 0.9);
+}
+.tier-card.owned { opacity: 0.75; }
+.tier-name { font-family: var(--display); font-size: 12px; letter-spacing: 0.2em; color: var(--muted); text-transform: uppercase; }
+.tier-gold .tier-name { color: var(--gold); }
+.tier-legend .tier-name { color: #d9c2ff; }
+.tier-price { font-family: var(--display); font-size: 28px; }
+.tier-card ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: #c9d6f5; font-size: 15px; }
+.tier-card .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.tier-owned { color: var(--green); font-weight: 700; }
+.founder-status {
+  display: grid; gap: 8px; padding: 14px 16px; border-radius: 14px;
+  background: rgba(255, 210, 61, 0.08); border: 1px solid rgba(255, 210, 61, 0.45);
+}
+.founder-status b { font-family: var(--display); letter-spacing: 0.1em; color: var(--gold); }
+.founder-status a, .notice a { color: var(--cyan); }
+.skin-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.skin-row small { color: var(--muted); letter-spacing: 0.15em; font-family: var(--display); font-size: 11px; text-transform: uppercase; }
+.chip-btn { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line-strong); background: rgba(10, 14, 32, 0.7); }
+.chip-btn.on { border-color: var(--gold); color: var(--gold); box-shadow: 0 0 14px -4px var(--gold); }
+.restore-row { display: flex; gap: 8px; }
+.hash-input {
+  flex: 1; min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line-strong);
+  background: rgba(4, 8, 20, 0.8); color: var(--text); font-family: ui-monospace, monospace; font-size: 13px;
+  user-select: text; -webkit-user-select: text;
+}

@@ -52,7 +52,10 @@ export function createRenderer(canvas) {
     flashColor: '255,255,255',
     trail: [],
     debris: [],
-    smoke: []
+    smoke: [],
+    // cosméticos del Pase Fundador
+    skin: 'original',
+    trailColor: null
   };
 
   /** Mezcla dos colores hex (t = 0 → a, t = 1 → b). */
@@ -734,7 +737,7 @@ export function createRenderer(canvas) {
       if (tr.length > 1) {
         ctx.globalCompositeOperation = 'lighter';
         ctx.lineCap = 'round';
-        ctx.strokeStyle = shipColor;
+        ctx.strokeStyle = R.trailColor ?? shipColor;
         for (let i = 1; i < tr.length; i++) {
           const k = i / tr.length;
           ctx.globalAlpha = k * 0.42;
@@ -752,7 +755,7 @@ export function createRenderer(canvas) {
         const c = p.fx * k;
         const sn = p.fy * k;
         ctx.setTransform(c, sn, -sn, c, R.k * px + R.ox, R.k * py + R.oy);
-        drawShipFast(ctx, sim.shipKey, shipColor, R.time, p.moving ? 1 : 0.35);
+        drawShipFast(ctx, sim.shipKey, shipColor, R.time, p.moving ? 1 : 0.35, R.skin);
         ctx.setTransform(R.k, 0, 0, R.k, R.ox, R.oy);
       }
       if (p.invuln > 0) {

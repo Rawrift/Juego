@@ -3,6 +3,8 @@
 import { formatEther, parseEther } from 'ethers';
 import { SHIPS, SHIP_BY_CLASS, shipYield, TALENT_ORDER, TALENT_MAX, TALENTS, talentCost } from '../sim/index.js';
 import { drawShipPreview, iconCopy } from './sprites.js';
+import { FOUNDER, tierRank, bnbWeiForUsd } from '../shared/founder.js';
+import { loadFounder, founderRank, buyFounder, verifyPayment, bnbPrice, currentSkin, setSkin, SKIN_TIER } from './founder.js';
 import { explainError } from './wallet.js';
 import { $, el, toast, fmtTime, fmtNum, shortAddr, fmtRift, brandText } from './dom.js';
 import { t, tx, locale } from './i18n.js';
@@ -123,7 +125,128 @@ export function createPanels(app) {
 
   // ------------------------------------------------------------------ vistas
 
+  // Beneficios acumulados de cada nivel del Pase Fundador.
+  const FOUNDER_PERKS = {
+    pilot: ['f.perk.badge', 'f.perk.trail'],
+    gold: ['f.perk.prev', 'f.perk.skinGold'],
+    legend: ['f.perk.prev', 'f.perk.skinPrisma', 'f.perk.leviathan']
+  };
+
   const VIEWS = {
+    founder: {
+      kicker: 'f.kicker',
+      title: 'f.title',
+      async render() {
+        const rec = loadFounder();
+        const rank = founderRank();
+        let price = null;
+        try {
+          price = await bnbPrice();
+        } catch {
+          price = null;
+        }
+        const out = [el('p', {}, t('f.intro'))];
+
+        if (rec) {
+          const skins = Object.keys(SKIN_TIER).filter((k) => rank >= SKIN_TIER[k]);
+          const pick = currentSkin();
+          out.push(
+            el('div', { class: 'founder-status' }, [
+              el('b', {}, `★ ${t('f.youAre', { tier: t(`f.tier.${rec.tier}`) })}`),
+              el('a', { href: `${FOUNDER.explorer}/tx/${rec.tx}`, target: '_blank', rel: 'noopener' }, t('f.viewTx')),
+              skins.length > 1
+                ? el('div', { class: 'skin-row' }, [
+                    el('small', {}, t('f.skin')),
+                    ...skins.map((k) => {
+                      const b = el('button', { class: `chip-btn${k === pick ? ' on' : ''}` }, t(`f.skin.${k}`));
+                      b.addEventListener('click', () => {
+                        setSkin(k);
+                        app.applyCosmetics();
+                        open('founder');
+                      });
+                      return b;
+                    })
+                  ])
+                : null
+            ])
+          );
+        }
+
+        out.push(
+          el(
+            'div',
+            { class: 'tier-grid' },
+            FOUNDER.tiers.map((tier) => {
+              const owned = rank >= tierRank(tier.id);
+              const card = el('div', { class: `tier-card tier-${tier.id}${owned ? ' owned' : ''}` }, [
+                el('span', { class: 'tier-name' }, t(`f.tier.${tier.id}`)),
+                el('b', { class: 'tier-price' }, `US$ ${tier.usd}`),
+                el('ul', {}, FOUNDER_PERKS[tier.id].map((k) => el('li', {}, t(k))))
+              ]);
+              if (owned) {
+                card.append(el('span', { class: 'tier-owned' }, t('f.owned')));
+                return card;
+              }
+              const usdt = el('button', { class: 'btn gold small' }, t('f.payUsdt', { n: tier.usd }));
+              const bnbAmt = price ? Number(bnbWeiForUsd(tier.usd, price) / 10n ** 12n) / 1e6 : null;
+              const bnb = el('button', { class: 'btn ghost small', disabled: !bnbAmt }, bnbAmt ? t('f.payBnb', { n: bnbAmt }) : t('f.priceErr'));
+              const buy = (btn, method) => async () => {
+                if (!window.ethereum) {
+                  toast(t('toast.openMetaMask'));
+                  setTimeout(() => (location.href = `https://metamask.app.link/dapp/${location.host}${location.pathname}`), 600);
+                  return;
+                }
+                const prev = btn.textContent;
+                usdt.disabled = bnb.disabled = true;
+                try {
+                  const res = await buyFounder(tier.id, method, (stage) => (btn.textContent = t(`f.stage.${stage}`)));
+                  app.applyCosmetics();
+                  app.audio?.play?.('levelup');
+                  toast(t('f.verified', { tier: t(`f.tier.${res.tier}`) }), 'ok');
+                  open('founder');
+                } catch (err) {
+                  toast(explainError(err), 'err');
+                  btn.textContent = prev;
+                  usdt.disabled = false;
+                  bnb.disabled = !bnbAmt;
+                }
+              };
+              usdt.addEventListener('click', buy(usdt, 'usdt'));
+              bnb.addEventListener('click', buy(bnb, 'bnb'));
+              card.append(el('div', { class: 'row' }, [usdt, bnb]));
+              return card;
+            })
+          )
+        );
+
+        // Restaurar en otro dispositivo con el hash del pago.
+        const input = el('input', { class: 'hash-input', placeholder: '0x…', spellcheck: 'false', autocomplete: 'off' });
+        const check = el('button', { class: 'btn ghost small' }, t('f.verify'));
+        check.addEventListener('click', async () => {
+          check.disabled = true;
+          try {
+            const res = await verifyPayment(input.value);
+            app.applyCosmetics();
+            toast(t('f.verified', { tier: t(`f.tier.${res.tier}`) }), 'ok');
+            open('founder');
+          } catch (err) {
+            toast(explainError(err), 'err');
+            check.disabled = false;
+          }
+        });
+        out.push(el('h3', {}, t('f.restoreTitle')));
+        out.push(el('div', { class: 'restore-row' }, [input, check]));
+        out.push(el('p', { class: 'hint' }, t('f.restoreHint')));
+        out.push(
+          el('div', { class: 'notice info' }, [
+            el('p', {}, t('f.howTo', { addr: shortAddr(FOUNDER.treasury) })),
+            el('a', { href: `${FOUNDER.explorer}/address/${FOUNDER.treasury}`, target: '_blank', rel: 'noopener' }, t('f.viewWallet'))
+          ])
+        );
+        out.push(el('p', { class: 'hint' }, t('f.legal')));
+        return out;
+      }
+    },
     hangar: {
       kicker: 'h.kicker',
       title: 'h.title',

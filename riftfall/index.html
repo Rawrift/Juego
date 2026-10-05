@@ -44,6 +44,7 @@
     <header class="topbar">
       <div class="brand-mini"><span class="logo-glyph"></span>RIFTFALL</div>
       <div class="chips">
+        <div class="chip founder-chip hidden" id="founderChip" data-open="founder">★ <b data-i18n="f.badge">FUNDADOR</b></div>
         <div class="chip core-chip" id="coreChip" data-open="profile" title="Núcleos" data-i18n-title="menu.coresTitle"><i class="core-ico">✦</i><b id="menuCores">0</b></div>
         <div class="chip shard-chip hidden" id="shardChip" title="Shards" data-i18n-title="menu.shardsTitle"><i class="gem gold"></i><b id="menuShards">0</b></div>
         <div class="chip rift-chip hidden" id="riftChip" title="Saldo de $RIFT" data-i18n-title="menu.riftTitle"><i class="gem cyan"></i><b id="menuRift">0</b></div>
@@ -89,6 +90,10 @@
           <header><h3 data-i18n="menu.daily">Misiones diarias</h3><span class="streak" id="streakTag"></span></header>
           <ul id="missionList" class="missions"></ul>
         </section>
+        <button class="founder-banner" data-open="founder" id="founderBanner">
+          <b data-i18n="f.banner">★ PASE FUNDADOR</b>
+          <span data-i18n="f.bannerSub">Apoya RIFTFALL antes del lanzamiento · desde US$3</span>
+        </button>
         <nav class="nav-grid">
           <button data-open="hangar"><i>⬢</i><span data-i18n="nav.hangar">Hangar</span></button>
           <button data-open="market"><i>⇄</i><span data-i18n="nav.market">Mercado</span></button>

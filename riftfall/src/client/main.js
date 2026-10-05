@@ -30,6 +30,7 @@ import { createApi } from './api.js';
 import { createWallet, explainError } from './wallet.js';
 import { iconCopy, drawShipPreview } from './sprites.js';
 import { createPanels } from './panels.js';
+import { founderRank, currentSkin, founderBusy } from './founder.js';
 import { chainConfigFromDeployment } from '../shared/networks.js';
 import { $, el, toast, fmtTime, fmtNum, shortAddr, fmtRift, brandText } from './dom.js';
 import { t, tx, lang, LANGS, setLang, applyStatic } from './i18n.js';
@@ -60,7 +61,8 @@ const app = {
   selectShip,
   updateMenu,
   pilot,
-  upgradeTalent
+  upgradeTalent,
+  applyCosmetics
 };
 const panels = createPanels(app);
 
@@ -110,6 +112,17 @@ function pilot() {
   }
   const p = app.progress;
   return { online: false, cores: p.cores, talents: p.talents, missions: localMissions(p), streak: p.streak, riftMax: p.riftMax ?? 0, stats: p };
+}
+
+// --------------------------------------------------------------------- Pase Fundador
+
+/** Aplica los cosméticos del Pase Fundador (pintura, estela e insignia). */
+function applyCosmetics() {
+  const rank = founderRank();
+  renderer.R.skin = currentSkin();
+  renderer.R.trailColor = rank >= 1 ? '#ffd23d' : null;
+  $('#founderChip').classList.toggle('hidden', rank === 0);
+  $('#founderBanner').classList.toggle('owned', rank >= 3);
 }
 
 // --------------------------------------------------------------------- Nivel del Rift
@@ -787,7 +800,7 @@ function frame(now) {
   if (game.mode !== 'play') {
     previewT += dt;
     if (!$('#menu').classList.contains('hidden')) {
-      drawShipPreview($('#shipPreview'), app.ship.key, SHIPS[app.ship.key].color, previewT);
+      drawShipPreview($('#shipPreview'), app.ship.key, SHIPS[app.ship.key].color, previewT, renderer.R.skin);
     }
   }
   requestAnimationFrame(frame);
@@ -863,6 +876,7 @@ langSel.addEventListener('change', () => setLang(langSel.value));
 async function boot() {
   newDemo();
   requestAnimationFrame(frame);
+  applyCosmetics();
   updateMenu();
   try {
     app.config = await api.config();
@@ -871,7 +885,8 @@ async function boot() {
     if (app.config.chain) {
       brandText($('#menu'), app.config.chain.tokenSymbol);
       app.wallet = createWallet(app.config.chain);
-      app.wallet.onChange(() => location.reload());
+      // Al pagar el Pase Fundador la wallet cambia a la red principal: eso no debe recargar la página.
+      app.wallet.onChange(() => founderBusy() || location.reload());
       setNet(t('net.online', { net: app.config.chain.network, id: app.config.chain.chainId }), 'ok');
     } else {
       setNet(t('net.onlineNoChain'), 'warn');
@@ -888,7 +903,8 @@ async function boot() {
       app.config = { chain: chainConfigFromDeployment(dep), staticMode: true, riftPerShard: 1, minClaimShards: 100, demoShips: false, missions: [] };
       brandText($('#menu'), app.config.chain.tokenSymbol);
       app.wallet = createWallet(app.config.chain);
-      app.wallet.onChange(() => location.reload());
+      // Al pagar el Pase Fundador la wallet cambia a la red principal: eso no debe recargar la página.
+      app.wallet.onChange(() => founderBusy() || location.reload());
       setNet(TESTNETS.includes(app.config.chain.chainId) ? t('net.shopTest') : t('net.shop'), 'warn');
     } else {
       setNet(t('net.practice'), 'warn');

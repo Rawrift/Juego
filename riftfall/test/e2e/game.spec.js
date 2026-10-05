@@ -290,3 +290,113 @@ test('celular en horizontal: menú, mejoras y fin de partida entran en pantalla'
   }
   expect(errors).toEqual([]);
 });
+
+test('Pase Fundador: pago en USDT verificado en la cadena, pintura dorada y restauración por hash', async ({ page }) => {
+  const PAYER = '0x1111111111111111111111111111111111111111';
+  const TREASURY = '0x09aF2acF700d6Be84009655fB814a5311DAEc7Dd';
+  const USDT = '0x55d398326f99059fF775485246999027B3197955';
+  const HASH = `0x${'ab'.repeat(32)}`;
+  const pad = (a) => `0x${a.toLowerCase().replace(/^0x/, '').padStart(64, '0')}`;
+  const word = (n) => BigInt(n).toString(16).padStart(64, '0');
+  const tenUsdt = 10n * 10n ** 18n;
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+
+  // Wallet simulada (EIP-1193): arranca en la red de pruebas y anota lo que se le pide firmar.
+  await page.addInitScript((payer) => {
+    let chain = '0x61';
+    window.__sent = [];
+    window.ethereum = {
+      isMetaMask: true,
+      on() {},
+      removeListener() {},
+      async request({ method, params }) {
+        if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [payer];
+        if (method === 'eth_chainId') return chain;
+        if (method === 'net_version') return String(parseInt(chain, 16));
+        if (method === 'wallet_switchEthereumChain') {
+          chain = params[0].chainId;
+          return null;
+        }
+        if (method === 'eth_sendTransaction') {
+          window.__sent.push({ ...params[0], chain });
+          return `0x${'ab'.repeat(32)}`;
+        }
+        throw Object.assign(new Error(`no soportado: ${method}`), { code: 4200 });
+      }
+    };
+  }, PAYER);
+
+  // Red principal simulada: precio del BNB = 800 USD y el pago de 10 USDT ya minado.
+  const tx = {
+    hash: HASH, blockHash: `0x${'cd'.repeat(32)}`, blockNumber: '0x10', transactionIndex: '0x0', type: '0x0',
+    from: PAYER, to: USDT, value: '0x0', nonce: '0x1', gas: '0x15f90', gasPrice: '0x2faf080', chainId: '0x38',
+    input: `0xa9059cbb${pad(TREASURY).slice(2)}${word(tenUsdt)}`,
+    v: '0x93', r: `0x${'11'.repeat(32)}`, s: `0x${'22'.repeat(32)}`
+  };
+  const receipt = {
+    transactionHash: HASH, blockHash: tx.blockHash, blockNumber: '0x10', transactionIndex: '0x0', type: '0x0',
+    from: PAYER, to: USDT, status: '0x1', gasUsed: '0xcb20', cumulativeGasUsed: '0xcb20', effectiveGasPrice: '0x2faf080',
+    contractAddress: null, logsBloom: `0x${'0'.repeat(512)}`,
+    logs: [{
+      address: USDT, blockHash: tx.blockHash, blockNumber: '0x10', transactionHash: HASH, transactionIndex: '0x0', logIndex: '0x0', removed: false,
+      topics: ['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef', pad(PAYER), pad(TREASURY)],
+      data: `0x${word(tenUsdt)}`
+    }]
+  };
+  const answer = (req) => {
+    switch (req.method) {
+      case 'eth_chainId': return '0x38';
+      case 'eth_blockNumber': return '0x11';
+      case 'eth_call': return `0x${word(800_000n * 10n ** 18n)}${word(1000n * 10n ** 18n)}${word(1)}`;
+      case 'eth_getTransactionByHash': return tx;
+      case 'eth_getTransactionReceipt': return receipt;
+      default: return null;
+    }
+  };
+  await page.context().route((u) => u.hostname === 'bsc-rpc.publicnode.com', async (route) => {
+    const body = JSON.parse(route.request().postData() || '{}');
+    const out = Array.isArray(body) ? body.map((r) => ({ jsonrpc: '2.0', id: r.id, result: answer(r) })) : { jsonrpc: '2.0', id: body.id, result: answer(body) };
+    await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(out) });
+  });
+
+  await page.goto('/');
+  await expect(page.locator('#founderChip')).toBeHidden();
+  await page.click('#founderBanner');
+  await expect(page.locator('#sheetTitle')).toHaveText('Pase Fundador');
+  await expect(page.locator('.tier-card')).toHaveCount(3);
+  await expect(page.locator('.tier-gold')).toContainText('Pagar ≈0.0125 BNB');
+  await page.click('.tier-gold >> text=Pagar 10 USDT');
+  await expect(page.locator('.toast').last()).toContainText('Ya eres Fundador Oro', { timeout: 20_000 });
+
+  // Se pidió exactamente una transferencia de 10 USDT a la wallet del creador, en la red principal.
+  const sent = await page.evaluate(() => window.__sent);
+  expect(sent).toHaveLength(1);
+  expect(sent[0].chain).toBe('0x38');
+  expect(sent[0].to.toLowerCase()).toBe(USDT.toLowerCase());
+  expect(sent[0].data).toBe(tx.input);
+
+  await expect(page.locator('#founderChip')).toBeVisible();
+  await expect(page.locator('.founder-status')).toContainText('Eres Fundador Oro');
+  await expect(page.locator('.tier-pilot .tier-owned')).toBeVisible();
+  await page.click('.skin-row >> text=Dorada');
+  expect(await page.evaluate(() => window.__RIFTFALL__.renderer.R.skin)).toBe('founder');
+  expect(await page.evaluate(() => window.__RIFTFALL__.renderer.R.trailColor)).toBe('#ffd23d');
+
+  // Otro dispositivo: sin datos locales, se recupera con el hash del pago.
+  await page.evaluate(() => {
+    localStorage.removeItem('riftfall.founder');
+    localStorage.removeItem('riftfall.skin');
+  });
+  await page.reload();
+  await expect(page.locator('#founderChip')).toBeHidden();
+  await page.click('#founderBanner');
+  await page.fill('.hash-input', 'basura');
+  await page.click('text=Verificar pago');
+  await expect(page.locator('.toast').last()).toContainText('no es un hash de transacción válido');
+  await page.fill('.hash-input', HASH);
+  await page.click('text=Verificar pago');
+  await expect(page.locator('.founder-status')).toContainText('Eres Fundador Oro');
+  await expect(page.locator('#founderChip')).toBeVisible();
+  expect(errors).toEqual([]);
+});
