@@ -391,8 +391,9 @@ export function createRenderer(canvas) {
       if (!visible(x, y)) continue;
       const def = e.def;
       let ang;
-      if (def.shape === 'boss' || def.shape === 'hex' || def.shape === 'circle') ang = R.time * (def.shape === 'boss' ? 0.6 : 1.4) + e.id;
-      else ang = Math.atan2(p.y - e.y, p.x - e.x);
+      // Todos miran al jugador (tienen ojos); los redondos se bambolean un poco.
+      ang = Math.atan2(p.y - e.y, p.x - e.x);
+      if (def.shape === 'boss' || def.shape === 'hex' || def.shape === 'circle') ang += Math.sin(R.time * 2.2 + e.id) * 0.18;
       if (def.ai === 'dash' && e.mode === 1) {
         ctx.strokeStyle = 'rgba(255, 61, 61, 0.55)';
         ctx.lineWidth = 3;
@@ -462,7 +463,7 @@ export function createRenderer(canvas) {
         ctx.save();
         ctx.translate(px, py);
         ctx.rotate(Math.atan2(p.fy, p.fx));
-        ctx.scale(0.95, 0.95);
+        ctx.scale(1.15, 1.15);
         drawShipShape(ctx, sim.shipKey, shipColor, R.time, p.moving ? 1 : 0.35);
         ctx.restore();
       }

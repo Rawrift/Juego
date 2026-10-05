@@ -135,58 +135,111 @@ function enemyPath(g, shape, r) {
   }
 }
 
-/** Sprite de enemigo: silueta oscura con borde de neón, núcleo brillante y halo. */
+/** Mezcla un color hex con otro (t = 0 → a, t = 1 → b). */
+function mix(a, b, t) {
+  const [r1, g1, b1] = hexToRgb(a);
+  const [r2, g2, b2] = hexToRgb(b);
+  const h = (v) => Math.round(v).toString(16).padStart(2, '0');
+  return `#${h(r1 + (r2 - r1) * t)}${h(g1 + (g2 - g1) * t)}${h(b1 + (b2 - b1) * t)}`;
+}
+
+/** Ojo de dibujo animado mirando hacia adelante (+X). */
+function drawEye(g, x, y, s, color) {
+  g.fillStyle = '#ffffff';
+  g.beginPath();
+  g.ellipse(x, y, s, s * 0.9, 0, 0, Math.PI * 2);
+  g.fill();
+  g.lineWidth = Math.max(1, s * 0.22);
+  g.strokeStyle = '#130a2b';
+  g.stroke();
+  g.fillStyle = mix(color, '#000000', 0.55);
+  g.beginPath();
+  g.arc(x + s * 0.32, y, s * 0.52, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = '#ffffff';
+  g.beginPath();
+  g.arc(x + s * 0.48, y - s * 0.25, s * 0.18, 0, Math.PI * 2);
+  g.fill();
+}
+
+/**
+ * Sprite de enemigo con el mismo estilo "cartoon" de las naves: cuerpo con volumen,
+ * contorno oscuro, brillo superior, ojo expresivo y halo de neón para leerse sobre el fondo.
+ */
 export function enemySprite(shape, color, r, flash = false, elite = false) {
-  return cached(`en|${shape}|${color}|${r}|${flash}|${elite}`, () => {
+  return cached(`en2|${shape}|${color}|${r}|${flash}|${elite}`, () => {
     const pad = r * 0.9 + 10;
     const half = r * 1.35 + pad;
     const c = makeCanvas(half * 2 * RES, half * 2 * RES);
     const g = c.getContext('2d');
     g.scale(RES, RES);
     g.translate(half, half);
-    const fill = flash ? '#ffffff' : '#0b0716';
-    g.shadowColor = color;
-    g.shadowBlur = elite ? 26 : 16;
+    g.lineJoin = 'round';
+
+    // halo + silueta
+    g.shadowColor = elite ? '#ffd23d' : color;
+    g.shadowBlur = elite ? 24 : 14;
     enemyPath(g, shape, r);
-    g.fillStyle = fill;
+    if (flash) {
+      g.fillStyle = '#ffffff';
+      g.fill();
+      g.shadowBlur = 0;
+      return { img: c, size: half * 2 };
+    }
+    const body = g.createLinearGradient(-r * 0.6, -r, r * 0.4, r);
+    body.addColorStop(0, mix(color, '#ffffff', 0.45));
+    body.addColorStop(0.45, color);
+    body.addColorStop(1, mix(color, '#000000', 0.55));
+    g.fillStyle = body;
     g.fill();
     g.shadowBlur = 0;
-    g.lineWidth = Math.max(2, r * 0.16);
-    g.strokeStyle = flash ? '#ffffff' : color;
-    g.lineJoin = 'round';
+
+    // brillo superior recortado a la silueta
+    g.save();
+    enemyPath(g, shape, r);
+    g.clip();
+    g.fillStyle = 'rgba(255,255,255,0.28)';
+    g.beginPath();
+    g.ellipse(-r * 0.15, -r * 0.55, r * 0.75, r * 0.32, -0.25, 0, Math.PI * 2);
+    g.fill();
+    g.restore();
+
+    // contorno de dibujo animado
+    enemyPath(g, shape, r);
+    g.lineWidth = Math.max(2, r * 0.14);
+    g.strokeStyle = '#130a2b';
     g.stroke();
-    if (!flash) {
-      // núcleo
-      const core = g.createRadialGradient(r * 0.1, 0, 0, r * 0.1, 0, r * 0.55);
-      core.addColorStop(0, '#ffffff');
-      core.addColorStop(0.3, color);
-      core.addColorStop(1, rgba(color, 0));
-      g.fillStyle = core;
-      g.globalCompositeOperation = 'lighter';
+
+    if (shape === 'boss') {
+      // anillos de energía y tres ojos
+      g.strokeStyle = rgba(mix(color, '#ffffff', 0.5), 0.85);
+      g.lineWidth = 3;
+      polygon(g, 6, r * 0.66, 0);
+      g.stroke();
+      drawEye(g, r * 0.1, 0, r * 0.3, color);
+      drawEye(g, -r * 0.32, -r * 0.4, r * 0.16, color);
+      drawEye(g, -r * 0.32, r * 0.4, r * 0.16, color);
+    } else if (shape === 'square') {
+      // bruto acorazado: placa central y ojo
+      g.fillStyle = mix(color, '#000000', 0.35);
+      g.strokeStyle = '#130a2b';
+      g.lineWidth = Math.max(1.5, r * 0.08);
       g.beginPath();
-      g.arc(r * 0.1, 0, r * 0.55, 0, Math.PI * 2);
+      g.rect(-r * 0.62, -r * 0.62, r * 0.7, r * 1.24);
       g.fill();
-      g.globalCompositeOperation = 'source-over';
-      if (shape === 'boss') {
-        g.strokeStyle = rgba(color, 0.8);
-        g.lineWidth = 3;
-        polygon(g, 6, r * 0.62, 0);
-        g.stroke();
-        polygon(g, 3, r * 0.42, Math.PI / 2);
-        g.stroke();
-      }
-      if (shape === 'square') {
-        g.strokeStyle = rgba(color, 0.55);
-        g.lineWidth = 2;
-        g.strokeRect(-r * 0.5, -r * 0.5, r, r);
-      }
-      if (elite) {
-        g.strokeStyle = '#fff3c4';
-        g.lineWidth = 1.5;
-        enemyPath(g, shape, r * 1.18);
-        g.setLineDash([4, 5]);
-        g.stroke();
-      }
+      g.stroke();
+      drawEye(g, r * 0.28, 0, r * 0.3, color);
+    } else {
+      drawEye(g, shape === 'tri' || shape === 'arrow' ? r * 0.15 : r * 0.12, 0, Math.max(2.4, r * 0.32), color);
+    }
+
+    if (elite) {
+      g.strokeStyle = '#fff3c4';
+      g.lineWidth = 1.6;
+      enemyPath(g, shape, r * 1.2);
+      g.setLineDash([4, 5]);
+      g.stroke();
+      g.setLineDash([]);
     }
     return { img: c, size: half * 2 };
   });
@@ -342,56 +395,338 @@ export function missileSprite() {
 }
 
 // ------------------------------------------------------------------ naves del jugador
+// Estilo "cartoon" vectorial: cuerpo con degradado, contorno oscuro, alas y aletas de colores,
+// cabina de cristal con brillo y varios motores con fuego animado. Todo se dibuja con trazos
+// (sin imágenes), simétrico respecto del eje X: la nariz apunta hacia +X.
 
-const SHIP_PATHS = {
-  spark: [[24, 0], [-14, 15], [-6, 5], [-12, 0], [-6, -5], [-14, -15]],
-  vanguard: [[22, 0], [6, 9], [-4, 18], [-16, 14], [-10, 5], [-14, 0], [-10, -5], [-16, -14], [-4, -18], [6, -9]],
-  phantom: [[28, 0], [-4, 6], [-18, 20], [-10, 4], [-16, 0], [-10, -4], [-18, -20], [-4, -6]],
-  tempest: [[24, 0], [10, 5], [16, 14], [-2, 10], [-14, 16], [-8, 0], [-14, -16], [-2, -10], [16, -14], [10, -5]],
-  leviathan: [[26, 0], [14, 8], [10, 18], [-14, 20], [-10, 8], [-18, 0], [-10, -8], [-14, -20], [10, -18], [14, -8]]
+const OUTLINE = '#130a2b';
+
+/**
+ * Diseño de cada nave. Las figuras se definen solo con su mitad superior (y <= 0): se dibujan
+ * reflejadas. `r` = radio de redondeo de las esquinas.
+ */
+const SHIP_ART = {
+  spark: {
+    pal: { main: '#47d6ff', dark: '#1866b4', light: '#c9f6ff', accent: '#ffd23d', glass: '#a5f7ff' },
+    wings: [{ pts: [[6, -6], [-5, -21], [-13, -21], [-11, -7]], r: 3 }],
+    fins: [{ pts: [[-8, -6], [-17, -12], [-19, -9], [-14, -4]], r: 2, accent: true }],
+    hull: { pts: [[28, 0], [15, -5], [2, -8], [-10, -7], [-16, -4], [-16, 0]], r: 4 },
+    stripe: [[18, -2], [-8, -4]],
+    panel: -4,
+    engines: [[-16, 0, 5]],
+    cockpit: { x: 9, rx: 7, ry: 3.6 },
+    lights: [[-9, -20]]
+  },
+  vanguard: {
+    pal: { main: '#62e48c', dark: '#1f7a50', light: '#d6ffe4', accent: '#ffcf4d', glass: '#9ff6ff' },
+    wings: [
+      { pts: [[6, -9], [0, -23], [-12, -25], [-15, -10]], r: 4 },
+      { pts: [[1, -21], [-13, -22], [-14, -28], [-1, -26]], r: 2, accent: true }
+    ],
+    fins: [{ pts: [[-12, -9], [-20, -14], [-21, -10], [-16, -6]], r: 2, accent: true }],
+    cannons: [[12, -17, 12, 2.4]],
+    hull: { pts: [[26, 0], [18, -7], [6, -11], [-8, -12], [-17, -8], [-19, 0]], r: 5 },
+    nose: 19,
+    stripe: [[16, -3], [-10, -6]],
+    panel: -6,
+    engines: [[-19, -5, 4.5], [-19, 5, 4.5]],
+    cockpit: { x: 9, rx: 6.5, ry: 4.4 },
+    lights: [[-7, -27]]
+  },
+  phantom: {
+    pal: { main: '#b977ff', dark: '#4f22a0', light: '#efdcff', accent: '#ff4dd2', glass: '#86f0ff' },
+    wings: [
+      { pts: [[6, -5], [-14, -25], [-21, -25], [-14, -6]], r: 2.5 },
+      { pts: [[16, -4], [10, -12], [6, -11], [8, -5]], r: 1.5, accent: true }
+    ],
+    fins: [{ pts: [[-14, -5], [-21, -9], [-22, -6], [-18, -3]], r: 1.5, accent: true }],
+    hull: { pts: [[31, 0], [17, -4], [1, -6], [-12, -5], [-19, -2], [-19, 0]], r: 3 },
+    nose: 24,
+    stripe: [[22, -1.5], [-12, -3]],
+    panel: -6,
+    engines: [[-19, 0, 4.5], [-15, -15, 3], [-15, 15, 3]],
+    cockpit: { x: 12, rx: 9, ry: 3 },
+    lights: [[-19, -24], [9, -11]]
+  },
+  tempest: {
+    pal: { main: '#4fb0ff', dark: '#1a45a6', light: '#d9f1ff', accent: '#9cf6ff', glass: '#ecfdff' },
+    wings: [
+      { pts: [[8, -8], [20, -17], [14, -20], [-2, -13]], r: 2.5 },
+      { pts: [[-3, -9], [-15, -23], [-21, -19], [-14, -7]], r: 3 }
+    ],
+    fins: [{ pts: [[-11, -6], [-19, -10], [-20, -7], [-15, -3]], r: 1.5, accent: true }],
+    hull: { pts: [[27, 0], [15, -6], [1, -9], [-11, -7], [-17, -3], [-17, 0]], r: 4 },
+    stripe: [[18, -2.5], [-9, -5]],
+    panel: -5,
+    engines: [[-17, -4, 4], [-17, 4, 4]],
+    cockpit: { x: 9, rx: 7, ry: 4.2 },
+    coils: [[19, -18], [-20, -21]],
+    lights: []
+  },
+  leviathan: {
+    pal: { main: '#ffb43a', dark: '#a24c0c', light: '#fff0c9', accent: '#ff4d5e', glass: '#8ff3ff' },
+    wings: [
+      { pts: [[7, -10], [-3, -25], [-18, -27], [-21, -12]], r: 4 },
+      { pts: [[-4, -23], [-16, -24], [-17, -30], [-6, -29]], r: 2, accent: true },
+      { pts: [[15, -8], [9, -15], [3, -15], [4, -10]], r: 2, accent: true }
+    ],
+    fins: [{ pts: [[-15, -10], [-24, -15], [-25, -11], [-20, -7]], r: 2, accent: true }],
+    hull: { pts: [[29, 0], [20, -7], [8, -11], [-10, -13], [-21, -9], [-23, 0]], r: 5 },
+    nose: 22,
+    stripe: [[19, -3.5], [-14, -7]],
+    panel: -12,
+    plates: [[[2, -10], [-8, -11.5], [-8, -7], [2, -6]]],
+    engines: [[-23, 0, 5], [-21, -8, 4], [-21, 8, 4]],
+    cockpit: { x: 11, rx: 7.5, ry: 4.6, diamond: true },
+    lights: [[-11, -29], [-11, 29]]
+  }
 };
+
+/** Polígono de esquinas redondeadas (para el look "dibujo animado"). */
+function roundPoly(g, pts, r) {
+  const n = pts.length;
+  const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  const start = mid(pts[n - 1], pts[0]);
+  g.beginPath();
+  g.moveTo(start[0], start[1]);
+  for (let i = 0; i < n; i++) {
+    const p = pts[i];
+    const q = pts[(i + 1) % n];
+    g.arcTo(p[0], p[1], ...mid(p, q), r);
+  }
+  g.closePath();
+}
+
+/** Contorno completo a partir de la mitad superior de una figura que toca el eje (hull). */
+function mirrored(pts) {
+  const top = pts.map(([x, y]) => [x, y]);
+  const bottom = pts
+    .slice(1, -1)
+    .reverse()
+    .map(([x, y]) => [x, -y]);
+  return [...top, ...bottom];
+}
+
+const flip = (pts) => pts.map(([x, y]) => [x, -y]);
+
+function fillPart(g, pts, r, fill, line = 1.6) {
+  roundPoly(g, pts, r);
+  g.fillStyle = fill;
+  g.fill();
+  g.lineWidth = line;
+  g.strokeStyle = OUTLINE;
+  g.stroke();
+}
+
+function shipFlames(g, art, color, t, thrust) {
+  g.globalCompositeOperation = 'lighter';
+  for (const [i, [x, y, s]] of art.engines.entries()) {
+    const flick = 0.72 + 0.28 * Math.sin(t * 38 + i * 1.7) * thrust;
+    const len = s * (2.6 + 3.2 * thrust) * flick;
+    const outer = g.createLinearGradient(x, 0, x - len, 0);
+    outer.addColorStop(0, rgba(color, 0.95));
+    outer.addColorStop(1, rgba(color, 0));
+    g.fillStyle = outer;
+    g.beginPath();
+    g.moveTo(x + 1, y - s * 0.9);
+    g.quadraticCurveTo(x - len * 0.5, y - s * 0.8, x - len, y);
+    g.quadraticCurveTo(x - len * 0.5, y + s * 0.8, x + 1, y + s * 0.9);
+    g.closePath();
+    g.fill();
+    const core = g.createLinearGradient(x, 0, x - len * 0.55, 0);
+    core.addColorStop(0, 'rgba(255,255,255,0.95)');
+    core.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = core;
+    g.beginPath();
+    g.ellipse(x - len * 0.2, y, len * 0.3, s * 0.42, 0, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.globalCompositeOperation = 'source-over';
+}
 
 /** Dibuja la nave en el contexto ya trasladado y rotado. */
 export function drawShipShape(g, key, color, t = 0, thrust = 1) {
-  const pts = SHIP_PATHS[key] ?? SHIP_PATHS.spark;
-  // llama del motor
-  const flick = 0.75 + 0.25 * Math.sin(t * 40) * thrust;
-  const flame = g.createLinearGradient(-12, 0, -12 - 26 * flick, 0);
-  flame.addColorStop(0, rgba(color, 0.95));
-  flame.addColorStop(1, rgba(color, 0));
-  g.globalCompositeOperation = 'lighter';
-  g.fillStyle = flame;
-  g.beginPath();
-  g.moveTo(-10, -5);
-  g.lineTo(-12 - 26 * flick * (0.6 + thrust * 0.4), 0);
-  g.lineTo(-10, 5);
-  g.closePath();
-  g.fill();
-  g.globalCompositeOperation = 'source-over';
-
-  g.shadowColor = color;
-  g.shadowBlur = 18;
-  g.beginPath();
-  pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
-  g.closePath();
-  const body = g.createLinearGradient(-16, -16, 20, 16);
-  body.addColorStop(0, '#0d1428');
-  body.addColorStop(1, '#1d2950');
-  g.fillStyle = body;
-  g.fill();
-  g.shadowBlur = 0;
-  g.lineWidth = 2.6;
+  const art = SHIP_ART[key] ?? SHIP_ART.spark;
+  const { pal } = art;
+  g.save();
   g.lineJoin = 'round';
-  g.strokeStyle = color;
-  g.stroke();
-  // cabina
-  g.fillStyle = '#ffffff';
+  g.lineCap = 'round';
+
+  // fuego de los motores (detrás de todo)
+  shipFlames(g, art, color, t, thrust);
+
+  // halo de neón para que la nave se lea sobre cualquier fondo
   g.shadowColor = color;
-  g.shadowBlur = 12;
-  g.beginPath();
-  g.ellipse(6, 0, 5, 2.6, 0, 0, Math.PI * 2);
+  g.shadowBlur = 16;
+  roundPoly(g, mirrored(art.hull.pts), art.hull.r);
+  g.fillStyle = pal.dark;
   g.fill();
   g.shadowBlur = 0;
+
+  // alas y aletas (arriba y reflejadas abajo)
+  for (const part of [...art.wings, ...art.fins]) {
+    for (const pts of [part.pts, flip(part.pts)]) {
+      const ys = pts.map((p) => p[1]);
+      const grad = g.createLinearGradient(0, Math.min(...ys), 0, Math.max(...ys));
+      const base = part.accent ? pal.accent : pal.main;
+      grad.addColorStop(0, part.accent ? base : pal.dark);
+      grad.addColorStop(1, base);
+      fillPart(g, pts, part.r, grad);
+      if (!part.accent) {
+        // borde de ataque con brillo
+        g.strokeStyle = rgba(pal.light, 0.8);
+        g.lineWidth = 1.4;
+        g.beginPath();
+        g.moveTo(pts[0][0] - 1, pts[0][1]);
+        g.lineTo(pts[1][0] + 0.5, pts[1][1] + Math.sign(pts[1][1]) * -1);
+        g.stroke();
+      }
+    }
+  }
+
+  // cañones en las alas
+  for (const [x, y, len, w] of art.cannons ?? []) {
+    for (const yy of [y, -y]) {
+      roundPoly(g, [[x, yy - w], [x - len, yy - w], [x - len, yy + w], [x, yy + w]], 1.2);
+      g.fillStyle = '#3a4060';
+      g.fill();
+      g.lineWidth = 1.3;
+      g.strokeStyle = OUTLINE;
+      g.stroke();
+      g.fillStyle = pal.accent;
+      g.fillRect(x - 2.5, yy - w + 0.6, 2, w * 2 - 1.2);
+    }
+  }
+
+  // motores (toberas)
+  for (const [x, y, s] of art.engines) {
+    roundPoly(g, [[x + 6, y - s], [x - 1, y - s * 0.85], [x - 1, y + s * 0.85], [x + 6, y + s]], 1.5);
+    g.fillStyle = '#2a2f45';
+    g.fill();
+    g.lineWidth = 1.4;
+    g.strokeStyle = OUTLINE;
+    g.stroke();
+  }
+
+  // casco principal con volumen: luz arriba, sombra abajo
+  const hull = mirrored(art.hull.pts);
+  const ys = hull.map((p) => p[1]);
+  const hg = g.createLinearGradient(0, Math.min(...ys), 0, Math.max(...ys));
+  hg.addColorStop(0, pal.light);
+  hg.addColorStop(0.35, pal.main);
+  hg.addColorStop(1, pal.dark);
+  fillPart(g, hull, art.hull.r, hg, 1.8);
+
+  // punta de color y línea de paneles (recortadas al casco)
+  g.save();
+  roundPoly(g, hull, art.hull.r);
+  g.clip();
+  if (art.nose) {
+    const ng = g.createLinearGradient(art.nose, -8, art.nose + 10, 8);
+    ng.addColorStop(0, pal.accent);
+    ng.addColorStop(1, rgba(pal.accent, 0.75));
+    g.fillStyle = ng;
+    g.fillRect(art.nose, -20, 20, 40);
+    g.strokeStyle = OUTLINE;
+    g.lineWidth = 1.3;
+    g.beginPath();
+    g.moveTo(art.nose, -20);
+    g.lineTo(art.nose, 20);
+    g.stroke();
+  }
+  if (art.panel !== undefined) {
+    g.strokeStyle = rgba(OUTLINE, 0.55);
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(art.panel, -20);
+    g.lineTo(art.panel, 20);
+    g.stroke();
+  }
+  g.restore();
+
+  // placas de blindaje
+  for (const plate of art.plates ?? []) {
+    for (const pts of [plate, flip(plate)]) fillPart(g, pts, 1.5, pal.accent, 1.2);
+  }
+
+  // franja central de brillo
+  if (art.stripe) {
+    const [[x1, y1], [x2, y2]] = art.stripe;
+    g.strokeStyle = rgba(pal.light, 0.75);
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(x1, y1);
+    g.lineTo(x2, y2);
+    g.stroke();
+  }
+
+  // bobinas eléctricas (Tempest)
+  for (const [x, y] of art.coils ?? []) {
+    for (const yy of [y, -y]) {
+      const pulse = 0.6 + 0.4 * Math.sin(t * 9 + yy);
+      g.fillStyle = rgba(pal.accent, 0.35 * pulse);
+      g.beginPath();
+      g.arc(x, yy, 5.5, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = '#ffffff';
+      g.beginPath();
+      g.arc(x, yy, 2.2, 0, Math.PI * 2);
+      g.fill();
+      g.lineWidth = 1.2;
+      g.strokeStyle = OUTLINE;
+      g.stroke();
+    }
+  }
+
+  // luces de posición que titilan
+  for (const [i, [x, y]] of (art.lights ?? []).entries()) {
+    const on = 0.55 + 0.45 * Math.sin(t * 5 + i * 2);
+    for (const yy of y === 0 ? [0] : [y, -y]) {
+      g.fillStyle = rgba(pal.accent, 0.3 * on);
+      g.beginPath();
+      g.arc(x, yy, 3.6, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = pal.accent;
+      g.beginPath();
+      g.arc(x, yy, 1.5, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
+
+  // cabina de cristal con reflejo
+  const c = art.cockpit;
+  g.beginPath();
+  if (c.diamond) {
+    g.moveTo(c.x + c.rx, 0);
+    g.quadraticCurveTo(c.x, -c.ry * 1.1, c.x - c.rx, 0);
+    g.quadraticCurveTo(c.x, c.ry * 1.1, c.x + c.rx, 0);
+  } else {
+    // gota: punta hacia la nariz, cola redondeada
+    g.moveTo(c.x + c.rx, 0);
+    g.bezierCurveTo(c.x + c.rx * 0.35, -c.ry * 1.05, c.x - c.rx, -c.ry * 1.1, c.x - c.rx, 0);
+    g.bezierCurveTo(c.x - c.rx, c.ry * 1.1, c.x + c.rx * 0.35, c.ry * 1.05, c.x + c.rx, 0);
+  }
+  const glass = g.createLinearGradient(c.x - c.rx, -c.ry, c.x + c.rx, c.ry);
+  glass.addColorStop(0, '#0b2a5c');
+  glass.addColorStop(0.55, pal.glass);
+  glass.addColorStop(1, '#ffffff');
+  g.fillStyle = glass;
+  g.fill();
+  g.lineWidth = 1.6;
+  g.strokeStyle = OUTLINE;
+  g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,0.35)';
+  g.lineWidth = 0.9;
+  g.beginPath();
+  g.moveTo(c.x + c.rx * 0.9, 0);
+  g.lineTo(c.x - c.rx * 0.7, 0);
+  g.stroke();
+  g.fillStyle = 'rgba(255,255,255,0.9)';
+  g.beginPath();
+  g.ellipse(c.x + c.rx * 0.1, -c.ry * 0.42, c.rx * 0.4, c.ry * 0.2, -0.1, 0, Math.PI * 2);
+  g.fill();
+
+  g.restore();
 }
 
 export function drawShipPreview(canvas, key, color, t = 0) {
