@@ -4,7 +4,7 @@ import { formatEther, parseEther } from 'ethers';
 import { SHIPS, SHIP_BY_CLASS, shipYield } from '../sim/index.js';
 import { drawShipPreview } from './sprites.js';
 import { explainError } from './wallet.js';
-import { $, el, toast, fmtTime, fmtNum, shortAddr, fmtRift } from './dom.js';
+import { $, el, toast, fmtTime, fmtNum, shortAddr, fmtRift, brandText } from './dom.js';
 
 export function createPanels(app) {
   const sheet = $('#sheet');
@@ -23,9 +23,13 @@ export function createPanels(app) {
     cancelAnimationFrame(anim);
   }
 
+  const tokenSymbol = () => app.config?.chain?.tokenSymbol ?? 'RIFT';
+  const nativeSymbol = () => app.config?.chain?.nativeSymbol ?? 'ETH';
+
   function frame(kicker, title) {
     $('#sheetKicker').textContent = kicker;
     $('#sheetTitle').textContent = title;
+    brandText($('#sheet header'), tokenSymbol());
     body.replaceChildren(el('p', { class: 'hint' }, 'Cargando…'));
     sheet.classList.remove('hidden');
   }
@@ -38,7 +42,10 @@ export function createPanels(app) {
     frame(view.kicker, view.title);
     try {
       const nodes = await view.render();
-      if (current === name) body.replaceChildren(...nodes.filter(Boolean));
+      if (current === name) {
+        body.replaceChildren(...nodes.filter(Boolean));
+        brandText(body, tokenSymbol());
+      }
       animatePreviews();
     } catch (err) {
       body.replaceChildren(el('div', { class: 'notice' }, explainError(err)));
@@ -163,7 +170,7 @@ export function createPanels(app) {
             }
             const sell = el('button', { class: 'btn ghost small' }, 'Vender');
             sell.addEventListener('click', () => {
-              const v = prompt('Precio de venta en RIFT:', '1000');
+              const v = prompt(`Precio de venta en ${tokenSymbol()}:`, '1000');
               if (!v || !(Number(v) > 0)) return;
               act(sell, 'Publicando…', () => app.wallet.list(s.tokenId, parseEther(String(v))), 'Nave publicada en el Mercado');
             });
@@ -189,7 +196,7 @@ export function createPanels(app) {
               const left = Number(k.maxSupply) - Number(k.minted);
               const actions = [];
               if (k.priceWei > 0n) {
-                const b = el('button', { class: 'btn primary small', disabled: !k.active || left <= 0 }, `${formatEther(k.priceWei)} ETH`);
+                const b = el('button', { class: 'btn primary small', disabled: !k.active || left <= 0 }, `${formatEther(k.priceWei)} ${nativeSymbol()}`);
                 b.addEventListener('click', async () => {
                   if (!app.wallet.connected && !(await app.connectWallet())) return;
                   act(b, 'Comprando…', () => app.wallet.mint(k.classId, 'eth', k.priceWei), `¡${k.name} es tuya!`);

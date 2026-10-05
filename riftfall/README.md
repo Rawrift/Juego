@@ -27,7 +27,7 @@ npm run local          # nodo Hardhat + despliegue de contratos + servidor en ht
 ```
 
 Para usar una wallet en local, importa en MetaMask la clave **de prueba** de la cuenta #3 de Hardhat, que ya tiene 250.000 RIFT
-y 10.000 ETH de prueba: `0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6`.
+y 10.000 ETH de prueba (moneda de la red local): `0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6`.
 El juego te propone añadir la red "RIFTFALL Local" (chainId 31337). Esa clave es pública: no la uses nunca fuera de local.
 
 **Solo el juego, sin blockchain** (modo invitado, sin canjes): `npm run build && npm run server`.
@@ -38,7 +38,7 @@ Para desarrollo con recarga en caliente usa `npm run server` en una terminal y `
 ```
 riftfall/
 ├── contracts/            Solidity (OpenZeppelin 5)
-│   ├── RiftToken.sol       $RIFT: ERC-20 de suministro fijo, sin mint, sin impuestos, sin listas negras
+│   ├── RiftToken.sol       $RIFT: ERC-20 de suministro fijo (nombre/símbolo a elección), sin mint ni impuestos
 │   ├── RewardVault.sol     pool de recompensas: vales EIP-712, halving cada 180 días, topes diarios, timelock
 │   ├── RiftShips.sol       naves ERC-721 con clase y nivel, Forja, SVG on-chain, regalías ERC-2981
 │   ├── RiftMarket.sol      mercado P2P sin custodia pagado en RIFT (comisión ≤ 10%)
@@ -46,7 +46,9 @@ riftfall/
 │   └── TeamVesting.sol     vesting del equipo (cliff + lineal)
 ├── src/sim/              simulación DETERMINISTA compartida por navegador y servidor
 ├── src/client/           render Canvas2D con brillos y partículas, audio sintetizado, UI, wallet (ethers v6)
+├── src/launcher/        Lanzador móvil: crea token y contratos desde la wallet del creador
 ├── src/shared/abis.js    ABIs usados por cliente y servidor
+├── src/generated/       bytecode de los contratos para el Lanzador (npm run export:contracts)
 ├── server/               API Node (sin frameworks): sesiones, replay en workers, vales, misiones, ranking, Arena
 ├── scripts/              despliegue, stack local, equilibrado con bot y simulador económico
 ├── test/                 contratos, simulación, servidor, integración on-chain y E2E en navegador
@@ -70,23 +72,34 @@ riftfall/
 | `npm run dev` | Cliente con recarga en caliente (proxy `/api` → 8787) |
 | `npm run build` | Compila el cliente en `dist/` |
 | `npm test` | Tests de simulación y servidor |
-| `npm run test:contracts` | Tests de los contratos (22) |
+| `npm run test:contracts` | Tests de los contratos (26) |
 | `npm run test:integration` | Flujo on-chain completo contra un nodo Hardhat |
 | `npm run test:e2e` | Partida real en Chromium verificada por el servidor + móvil |
-| `npm run test:e2e:chain` | E2E con wallet: comprar, forjar, jugar, canjear, vender e inscribirse en la Arena |
+| `npm run test:e2e:chain` | E2E con wallet: Lanzador completo + comprar, forjar, jugar, canjear, vender y Arena |
 | `npm run balance -- 8 spark 1` | Juega 8 partidas con el bot para medir dificultad y recompensas |
 | `npm run economy -- --md` | Proyección económica a 24 meses (regenera `docs/PROYECCION.md`) |
 
-## Lanzar en Base (testnet y luego mainnet)
+## Lanzar en BNB Chain desde el celular (Lanzador)
 
-1. Copia `.env.example` a `.env` y completa `DEPLOYER_PRIVATE_KEY`, y `RIFT_OWNER` y `RIFT_TREASURY` (idealmente una Safe multisig).
+La forma más simple, sin computadora y sin compartir claves:
+
+1. Publica el cliente (`npm run build` → carpeta `dist/`) en un hosting estático gratuito.
+2. Abre `https://TU-SITIO/lanzar.html` desde el navegador de tu wallet (MetaMask, Trust Wallet o Binance Web3 Wallet).
+3. Elige **BNB Chain Testnet** para probar o **BNB Chain** para la red real, pon nombre y símbolo a tu token y toca **Crear**.
+   Son 8 confirmaciones. En la red real cuestan en total **≈ 0,0005 BNB (menos de $1)**. Si la app se cierra, continúa donde quedó.
+4. Al terminar: eres dueño de todos los contratos, la tesorería es tu wallet y tienes el 45% del suministro + 15% en vesting.
+   Copia la configuración: es el `DEPLOYMENT_FILE` del servidor.
+5. Desde la sección **Administración** del Lanzador cobras las ventas de naves y registras la dirección del servidor como firmante.
+
+## Lanzar desde la terminal (alternativa)
+
+1. Copia `.env.example` a `.env` y completa `DEPLOYER_PRIVATE_KEY`, y `RIFT_OWNER` y `RIFT_TREASURY` (tu wallet o una Safe).
    Completa también `RIFT_SIGNER`: la dirección de una clave nueva, solo para el servidor.
-2. `npm run deploy:testnet` → genera `deployments/84532.json`.
-3. Configura el servidor en `.env`: `DEPLOYMENT_FILE=deployments/84532.json`, `RPC_URL`, `PUBLIC_RPC_URL`, `EXPLORER_URL`,
-   `SIGNER_PRIVATE_KEY` (la clave de `RIFT_SIGNER`), `ADMIN_TOKEN` y `ARENA_AUTO=1`.
-4. `npm run build && npm start` y prueba con jugadores reales.
-5. Cuando todo esté probado y auditado: `npm run deploy:mainnet`. Después crea el pool RIFT/ETH con la asignación
-   de liquidez y sigue el checklist de [`docs/ECONOMIA.md`](docs/ECONOMIA.md#12-checklist-de-lanzamiento).
+2. `npm run deploy:testnet` (BNB Chain Testnet) → genera `deployments/97.json`. Para la red real: `npm run deploy:mainnet` (BSC, 56).
+   Otras redes: `npm run deploy:base-testnet` / `npm run deploy:base`.
+3. Configura el servidor en `.env`: `DEPLOYMENT_FILE=deployments/97.json`, `RPC_URL`, `SIGNER_PRIVATE_KEY`, `ADMIN_TOKEN` y `ARENA_AUTO=1`.
+4. `npm run build && npm start`.
+5. Antes de ir a la red real, sigue el checklist de [`docs/ECONOMIA.md`](docs/ECONOMIA.md#12-checklist-de-lanzamiento).
 
 **Hosting:** cualquier servicio que ejecute Node de forma continua (Railway, Render, Fly.io o un VPS) sirve.
 Un solo proceso entrega el juego y la API. Haz copias de seguridad de `server/data/`.

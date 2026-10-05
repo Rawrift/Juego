@@ -26,6 +26,14 @@ contract RiftShips is ERC721Enumerable, ERC2981, Ownable2Step, ReentrancyGuard {
     using SafeERC20 for IERC20;
     using Strings for uint256;
 
+    struct ShipClassInit {
+        string name;
+        string color;
+        uint256 priceWei;
+        uint256 priceRift;
+        uint32 maxSupply;
+    }
+
     struct ShipClass {
         string name;
         string color;
@@ -60,16 +68,25 @@ contract RiftShips is ERC721Enumerable, ERC2981, Ownable2Step, ReentrancyGuard {
     event RiftSplit(uint256 burned, uint256 toVault, uint256 toTreasury);
     event TreasuryUpdated(address treasury);
 
-    constructor(IERC20 rift_, address vault_, address treasury_, address owner_, uint256 forgeBaseCost_)
-        ERC721("Riftfall Ships", "RSHIP")
-        Ownable(owner_)
-    {
+    /// @param initialClasses catálogo inicial (así el despliegue completo necesita menos transacciones).
+    constructor(
+        IERC20 rift_,
+        address vault_,
+        address treasury_,
+        address owner_,
+        uint256 forgeBaseCost_,
+        ShipClassInit[] memory initialClasses
+    ) ERC721("Riftfall Ships", "RSHIP") Ownable(owner_) {
         require(address(rift_) != address(0) && vault_ != address(0) && treasury_ != address(0), "Ships: zero");
         rift = rift_;
         vault = vault_;
         treasury = treasury_;
         forgeBaseCost = forgeBaseCost_;
         _setDefaultRoyalty(treasury_, 500);
+        for (uint256 i = 0; i < initialClasses.length; i++) {
+            ShipClassInit memory c = initialClasses[i];
+            _addClass(c.name, c.color, c.priceWei, c.priceRift, c.maxSupply);
+        }
     }
 
     // ----------------------------------------------------------------- catálogo
@@ -81,6 +98,16 @@ contract RiftShips is ERC721Enumerable, ERC2981, Ownable2Step, ReentrancyGuard {
         uint256 priceRift,
         uint32 maxSupply
     ) external onlyOwner returns (uint256 classId) {
+        return _addClass(name, color, priceWei, priceRift, maxSupply);
+    }
+
+    function _addClass(
+        string memory name,
+        string memory color,
+        uint256 priceWei,
+        uint256 priceRift,
+        uint32 maxSupply
+    ) internal returns (uint256 classId) {
         classId = _classes.length;
         _classes.push(ShipClass(name, color, priceWei, priceRift, maxSupply, 0, true));
         emit ClassAdded(classId, name, priceWei, priceRift, maxSupply);

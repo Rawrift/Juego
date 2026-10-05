@@ -27,7 +27,7 @@ import { createApi } from './api.js';
 import { createWallet, explainError } from './wallet.js';
 import { iconCanvas, drawShipPreview } from './sprites.js';
 import { createPanels } from './panels.js';
-import { $, el, toast, fmtTime, fmtNum, shortAddr, fmtRift } from './dom.js';
+import { $, el, toast, fmtTime, fmtNum, shortAddr, fmtRift, brandText } from './dom.js';
 
 const canvas = $('#game');
 const renderer = createRenderer(canvas);
@@ -577,6 +577,7 @@ async function boot() {
     app.profile = await api.session();
     app.online = true;
     if (app.config.chain) {
+      brandText($('#menu'), app.config.chain.tokenSymbol);
       app.wallet = createWallet(app.config.chain);
       app.wallet.onChange(() => location.reload());
       setNet(`● En línea · red ${app.config.chain.network} (${app.config.chain.chainId})`, 'ok');

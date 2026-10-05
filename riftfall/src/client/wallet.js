@@ -7,6 +7,20 @@ import { TOKEN_ABI, VAULT_ABI, SHIPS_ABI, MARKET_ABI, ARENA_ABI } from '../share
 const ETH = { name: 'Ether', symbol: 'ETH', decimals: 18 };
 const CHAINS = {
   31337: { chainId: '0x7a69', chainName: 'RIFTFALL Local (Hardhat)', rpcUrls: ['http://127.0.0.1:8545'], nativeCurrency: ETH },
+  56: {
+    chainId: '0x38',
+    chainName: 'BNB Smart Chain',
+    rpcUrls: ['https://bsc-dataseed.bnbchain.org'],
+    blockExplorerUrls: ['https://bscscan.com'],
+    nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 }
+  },
+  97: {
+    chainId: '0x61',
+    chainName: 'BNB Smart Chain Testnet',
+    rpcUrls: ['https://bsc-testnet-rpc.publicnode.com'],
+    blockExplorerUrls: ['https://testnet.bscscan.com'],
+    nativeCurrency: { name: 'tBNB', symbol: 'tBNB', decimals: 18 }
+  },
   84532: {
     chainId: '0x14a34',
     chainName: 'Base Sepolia',
@@ -63,7 +77,7 @@ export function createWallet(chainCfg) {
       await browser.send('wallet_switchEthereumChain', [{ chainId: params.chainId }]);
     } catch (err) {
       const code = err?.error?.code ?? err?.code ?? err?.info?.error?.code;
-      if (code === 4902 && CHAINS[chainCfg.chainId]) await browser.send('wallet_addEthereumChain', [params]);
+      if ((code === 4902 || code === -32603) && CHAINS[chainCfg.chainId]) await browser.send('wallet_addEthereumChain', [params]);
       else throw err;
     }
     browser = new BrowserProvider(window.ethereum, 'any');

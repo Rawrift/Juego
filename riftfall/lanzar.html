@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#05060f" />
+  <title>Lanzador RIFTFALL</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M32 4 50 52 40 47 32 60 24 47 14 52Z' fill='%2305060f' stroke='%23ffc94d' stroke-width='4' stroke-linejoin='round'/%3E%3C/svg%3E" />
+</head>
+<body class="launcher">
+  <main class="lx">
+    <header class="lx-head">
+      <div class="eyebrow">RIFTFALL · LANZADOR</div>
+      <h1>Crea tu token y tu juego</h1>
+      <p>Desde tu wallet, con un botón. Todo queda a tu nombre: el token, las naves, el mercado, la arena y las ganancias.
+        Ninguna clave sale de tu teléfono.</p>
+    </header>
+
+    <section class="lx-card" id="stepWallet">
+      <h2><span>1</span> Tu wallet</h2>
+      <div id="walletBody"></div>
+    </section>
+
+    <section class="lx-card" id="stepNetwork">
+      <h2><span>2</span> Red</h2>
+      <div id="networkList" class="lx-options"></div>
+      <p class="lx-note" id="networkNote"></p>
+    </section>
+
+    <section class="lx-card" id="stepToken">
+      <h2><span>3</span> Tu token</h2>
+      <label class="lx-field">Nombre<input id="tokenName" value="Riftfall" maxlength="32" autocomplete="off" /></label>
+      <label class="lx-field">Símbolo<input id="tokenSymbol" value="RIFT" maxlength="8" autocomplete="off" /></label>
+      <p class="lx-note">Suministro fijo de 1.000.000.000. Reparto: 40% recompensas de jugadores (bloqueado en el vault),
+        15% tuyo con vesting de 6 + 24 meses y 45% a tu wallet (tesorería, liquidez y comunidad).</p>
+    </section>
+
+    <section class="lx-card" id="stepLaunch">
+      <h2><span>4</span> Lanzar</h2>
+      <div id="costBox" class="lx-cost"></div>
+      <button id="launchBtn" class="btn primary big" disabled>Crear mi token y el juego</button>
+      <p class="lx-note">Tu wallet te pedirá confirmar 8 transacciones, una por paso. Si la app se cierra, vuelve a abrir esta página y continúa donde quedó.</p>
+      <ol id="progress" class="lx-progress"></ol>
+    </section>
+
+    <section class="lx-card hidden" id="stepDone">
+      <h2><span>✓</span> ¡Listo!</h2>
+      <div id="doneBody"></div>
+    </section>
+
+    <section class="lx-card hidden" id="stepAdmin">
+      <h2><span>⚙</span> Administración</h2>
+      <div id="adminBody"></div>
+    </section>
+  </main>
+  <div id="toasts"></div>
+  <script type="module" src="/src/launcher/launcher.js"></script>
+</body>
+</html>

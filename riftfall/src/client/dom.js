@@ -41,3 +41,14 @@ export function fmtRift(wei, digits = 2) {
   const v = Number(formatEther(wei));
   return v.toLocaleString('es', { maximumFractionDigits: v < 10 ? 4 : digits });
 }
+
+/** Reemplaza la marca del token ("RIFT") por el símbolo elegido por el creador en los textos de un nodo. */
+export function brandText(root, symbol) {
+  if (!root || !symbol || symbol === 'RIFT') return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const re = /\bRIFT\b/g;
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (re.test(n.nodeValue)) n.nodeValue = n.nodeValue.replace(re, symbol);
+    re.lastIndex = 0;
+  }
+}

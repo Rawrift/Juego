@@ -7,6 +7,9 @@ export default defineConfig({
   },
   build: {
     target: 'es2022',
+    rollupOptions: {
+      input: { main: 'index.html', lanzar: 'lanzar.html' }
+    },
     sourcemap: true,
     chunkSizeWarningLimit: 900
   }

@@ -21,7 +21,7 @@ const COMMON = {
   halvingMonths: 6, // 180 días
   maxClaimPerPlayerDay: 3000,
   vaultInitial: 400_000_000,
-  avgShipEth: 0.0103, // mezcla de catálogo: 60% Vanguard, 25% Phantom, 12% Tempest, 3% Leviathan
+  avgShipBnb: 0.0388, // mezcla de catálogo en BNB: 60% Vanguard, 25% Phantom, 12% Tempest, 3% Leviathan
   repeatBuyRate: 0.004, // % de MAU existente que compra otra nave al mes (temporadas nuevas)
   forgePerHolderMonth: 1200, // RIFT gastados en Forja por poseedor de nave al mes
   forgeSplit: { burn: 0.4, vault: 0.3, treasury: 0.3 },
@@ -40,9 +40,9 @@ const COMMON = {
 };
 
 const SCENARIOS = {
-  conservador: { startMAU: 1_000, growth: 0.12, maxMAU: 20_000, payRate: 0.02, walletShare: 0.25, arenaShare: 0.04, riftUsd: 0.001, ethUsd: 2_500 },
-  base: { startMAU: 4_000, growth: 0.22, maxMAU: 100_000, payRate: 0.03, walletShare: 0.35, arenaShare: 0.06, riftUsd: 0.004, ethUsd: 3_000 },
-  optimista: { startMAU: 10_000, growth: 0.3, maxMAU: 300_000, payRate: 0.045, walletShare: 0.45, arenaShare: 0.09, riftUsd: 0.008, ethUsd: 3_500 }
+  conservador: { startMAU: 1_000, growth: 0.12, maxMAU: 20_000, payRate: 0.02, walletShare: 0.25, arenaShare: 0.04, riftUsd: 0.001, bnbUsd: 650 },
+  base: { startMAU: 4_000, growth: 0.22, maxMAU: 100_000, payRate: 0.03, walletShare: 0.35, arenaShare: 0.06, riftUsd: 0.004, bnbUsd: 800 },
+  optimista: { startMAU: 10_000, growth: 0.3, maxMAU: 300_000, payRate: 0.045, walletShare: 0.45, arenaShare: 0.09, riftUsd: 0.008, bnbUsd: 950 }
 };
 
 function simulate(sc) {
@@ -61,7 +61,7 @@ function simulate(sc) {
     // NFTs
     const buyers = newPlayers * sc.payRate + mau * c.repeatBuyRate;
     holders = Math.min(mau, holders * 0.92 + buyers);
-    const nftEth = buyers * c.avgShipEth;
+    const nftBnb = buyers * c.avgShipBnb;
 
     // Emisión: demanda de canje vs. presupuesto del vault
     const halvings = Math.floor((m - 1) / c.halvingMonths);
@@ -81,7 +81,7 @@ function simulate(sc) {
 
     // Ingresos del creador (USD)
     const usd = {
-      nft: nftEth * sc.ethUsd,
+      nft: nftBnb * sc.bnbUsd,
       forge: forge * c.forgeSplit.treasury * sc.riftUsd,
       arena: arenaFees * c.arenaRake * sc.riftUsd,
       market: marketVol * c.marketFee * sc.riftUsd,
@@ -139,7 +139,7 @@ function summarize(name, sc, rows) {
 }
 
 const LABELS = {
-  nft: 'Venta de naves NFT (ETH)',
+  nft: 'Venta de naves NFT (BNB)',
   forge: 'Forja (30% a tesorería)',
   arena: 'Rake de Arena (10%)',
   market: 'Comisión del Mercado (5%)',
@@ -150,7 +150,7 @@ const LABELS = {
 const results = Object.entries(SCENARIOS).map(([name, sc]) => summarize(name, sc, simulate(sc)));
 
 for (const r of results) {
-  console.log(`\n=== Escenario ${r.name.toUpperCase()} (RIFT = $${r.sc.riftUsd}, ETH = $${r.sc.ethUsd}) ===`);
+  console.log(`\n=== Escenario ${r.name.toUpperCase()} (RIFT = $${r.sc.riftUsd}, BNB = $${r.sc.bnbUsd}) ===`);
   console.table(
     r.rows
       .filter((x) => [1, 3, 6, 9, 12, 18, 24].includes(x.m))
@@ -181,8 +181,8 @@ if (process.argv.includes('--md')) {
   md += row('Jugadores con wallet que canjean', (s) => `${Math.round(s.walletShare * 100)}%`);
   md += row('Jugadores diarios en la Arena', (s) => `${Math.round(s.arenaShare * 100)}%`);
   md += row('Precio supuesto de $RIFT', (s) => `$${s.riftUsd}`);
-  md += row('Precio supuesto de ETH', (s) => `$${fmt(s.ethUsd)}`);
-  md += '\nComunes: 20% de jugadores diarios sobre mensuales, 380 Shards/día por jugador activo, nave media 0,0103 ETH, ';
+  md += row('Precio supuesto de BNB', (s) => `$${fmt(s.bnbUsd)}`);
+  md += '\nComunes: 20% de jugadores diarios sobre mensuales, 380 Shards/día por jugador activo, nave media 0,0388 BNB, ';
   md += '1.200 RIFT/mes en Forja por poseedor, 6% de naves revendidas al mes a 4.000 RIFT, 60% de los RIFT canjeados se venden, ';
   md += 'el creador posee el 80% de la liquidez del pool. Infraestructura: $60/mes + $0,003 por jugador mensual.\n\n';
 

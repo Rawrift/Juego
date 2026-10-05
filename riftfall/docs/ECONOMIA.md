@@ -8,12 +8,12 @@
 
 **Cómo ganas dinero (de mayor a menor peso en el modelo):**
 
-1. **Venta de naves NFT en ETH.** Es el ingreso principal. El 100% del ETH de las ventas va a tu tesorería.
+1. **Venta de naves NFT en BNB.** Es el ingreso principal. El 100% del BNB de las ventas va a tu tesorería.
 2. **El 30% de cada RIFT gastado** en Forja y en compras de naves con RIFT.
 3. **El 10% (rake) de cada torneo de Arena.**
 4. **El 5% de cada venta en el Mercado** entre jugadores.
 5. **Regalías ERC-2981 del 5%** cuando las naves se revenden en OpenSea u otros marketplaces.
-6. **Comisiones de liquidez**: aportas el 15% del suministro al pool RIFT/ETH y cobras el 0,3% de cada intercambio.
+6. **Comisiones de liquidez** (cuando abras el pool): aportas el 15% del suministro al pool RIFT/BNB en PancakeSwap y cobras las comisiones de cada intercambio.
 7. **Reservas**: el 20% de tesorería y el 15% del equipo, este último bloqueado 6 meses y liberado en 24.
 
 **Por qué no es un esquema piramidal:** los jugadores no cobran del dinero que depositan otros
@@ -21,13 +21,26 @@ jugadores. Cobran de un **pool fijo** (40% del suministro) con emisión que se r
 cada 180 días. Tú cobras por **vender productos** (naves) y **servicios** (torneos, mercado), como
 cualquier juego free-to-play. Esto hace el proyecto más defendible legalmente y más sostenible.
 
+## 1b. Lanzar con presupuesto (casi) cero en BNB Chain
+
+| Concepto | Costo | Cómo |
+|---|---:|---|
+| Crear el token y los 6 contratos | **≈ 0,0005 BNB (≈ $0,45)** | Lanzador `/lanzar.html` desde la wallet del celular. Medido: ~10,5 M de gas a 0,05 gwei, BNB ≈ $800 (oct. 2026) |
+| Probar todo en la testnet | $0 | tBNB del faucet oficial (pide tener algo de BNB real en la wallet como anti-bots) |
+| Publicar el juego (cliente) | $0 | Hosting estático gratuito (Vercel, Netlify o GitHub Pages) |
+| Servidor de recompensas | $0 al inicio | Planes gratuitos (Render, Koyeb) o una VM "always free" (Oracle Cloud) |
+| Pool de liquidez | $0 al inicio | **No lo abras el día 1.** El token se usa dentro del juego (Forja, Arena, Mercado). Abre el pool RIFT/BNB con el BNB de las ventas de naves |
+
+Orden recomendado sin poner dinero: lanzar → vender naves (BNB directo a tu wallet) → con ese BNB abrir el pool
+de liquidez → recién entonces $RIFT tiene precio de mercado. Las proyecciones de la sección 7 suponen que el pool ya existe.
+
 ## 2. Las tres capas de valor
 
 | Capa | Dónde vive | Cómo se obtiene | Para qué sirve |
 |---|---|---|---|
 | **Shards ◆** | Servidor (off-chain) | Jugando: jefes, élites, tiempo sobrevivido, victoria, misiones diarias, racha | Se canjean por $RIFT (con límites) |
 | **$RIFT** | Blockchain (ERC-20) | Canjeando Shards o comprando en un DEX | Forja, naves, Arena, Mercado |
-| **Naves NFT** | Blockchain (ERC-721) | Comprándolas en ETH/RIFT o en el Mercado | Arma inicial, stats y multiplicador de Shards (x1,10 a x1,77) |
+| **Naves NFT** | Blockchain (ERC-721) | Comprándolas en BNB/RIFT o en el Mercado | Arma inicial, stats y multiplicador de Shards (x1,10 a x1,77) |
 
 Flujo completo:
 
@@ -46,13 +59,13 @@ Flujo completo:
 | Impuestos por transferencia | Ninguno (compatible con cualquier DEX y wallet) |
 | Listas negras / congelar fondos | No existen |
 | Estándares | ERC-20 + Permit (EIP-2612) + Burnable |
-| Red recomendada | **Base** (comisiones de céntimos y usuarios de Coinbase). Funciona en cualquier red EVM. |
+| Red recomendada | **BNB Chain (BSC)**: comisiones de céntimos y millones de usuarios de Binance. Funciona en cualquier red EVM (Base, Polygon, Arbitrum…). |
 
 | Asignación | % | Destino | Bloqueo |
 |---|---:|---|---|
 | Recompensas de jugadores | 40% | `RewardVault` | Emisión diaria con halving; el owner no puede retirarlo |
 | Tesorería | 20% | Tu multisig | — |
-| Liquidez | 15% | Pool RIFT/ETH en un DEX | Recomendado: bloquear el LP 12 meses |
+| Liquidez | 15% | Pool RIFT/BNB en PancakeSwap | Ábrelo cuando tengas BNB de las ventas; bloquea el LP 12 meses |
 | Equipo (tú) | 15% | `TeamVesting` | Cliff 6 meses + 24 meses lineal |
 | Comunidad | 10% | Tu multisig | Para airdrops, misiones de lanzamiento y creadores de contenido |
 
@@ -71,13 +84,13 @@ Flujo completo:
 
 ## 5. Naves NFT (RiftShips)
 
-| Clase | Precio ETH | Precio RIFT | Unidades | Arma inicial | Multiplicador base |
+| Clase | Precio BNB | Precio RIFT | Unidades | Arma inicial | Multiplicador base |
 |---|---:|---:|---:|---|---:|
 | SPARK | gratis (no es NFT) | — | ∞ | Pulse Blaster | x1,00 |
-| VANGUARD | 0,004 | 2.500 | 5.000 | Nova Pulse | x1,10 |
-| PHANTOM | 0,01 | 6.000 | 3.000 | Cuchillas Orbitales | x1,20 |
-| TEMPEST | 0,025 | 15.000 | 1.500 | Bobina de Arco | x1,30 |
-| LEVIATHAN | 0,08 | solo ETH | 300 | Misiles Buscadores | x1,50 |
+| VANGUARD | 0,015 (~$12) | 2.500 | 5.000 | Nova Pulse | x1,10 |
+| PHANTOM | 0,04 (~$32) | 6.000 | 3.000 | Cuchillas Orbitales | x1,20 |
+| TEMPEST | 0,09 (~$72) | 15.000 | 1.500 | Bobina de Arco | x1,30 |
+| LEVIATHAN | 0,3 (~$240) | solo BNB | 300 | Misiles Buscadores | x1,50 |
 
 - **Forja:** subir del nivel L al L+1 cuesta `200 × L²` RIFT (200, 800, 1.800 … 16.200).
   Llevar una nave a nivel 10 cuesta **57.000 RIFT**. Cada nivel suma +2% de daño y +3% de botín.
@@ -104,8 +117,8 @@ el rake de la Arena del **15%** y la quema de Arena del **10%**. Las regalías n
 | | Conservador | Base | Optimista |
 |---|---:|---:|---:|
 | Jugadores mensuales al mes 24 | ~8.600 | ~85.000 | ~300.000 |
-| Neto año 1 | ~$6.200 | ~$92.000 | ~$650.000 |
-| Neto año 2 | ~$19.000 | ~$390.000 | ~$2,9 M |
+| Neto año 1 | ~$6.100 | ~$92.000 | ~$660.000 |
+| Neto año 2 | ~$19.000 | ~$393.000 | ~$2,9 M |
 
 Detalle, supuestos y salud del token: [`PROYECCION.md`](PROYECCION.md). **Lectura honesta:** el ingreso depende casi
 por completo de **cuántos jugadores consigas**. Sin inversión en marketing, la mayoría de los juegos web3 se quedan
@@ -152,8 +165,8 @@ Si aparece a escala, añade captcha o verificación de humanidad (World ID, Gitc
 - **Usa una multisig Safe como owner y tesorería** (`RIFT_OWNER`, `RIFT_TREASURY` al desplegar).
 - La clave del servidor que firma vales (`SIGNER_PRIVATE_KEY`) es una clave "caliente" con poder limitado: en el peor
   caso alguien podría cobrar el presupuesto de un día. Si se filtra: `pause()`, luego `setSigner(nueva)` y `unpause()`.
-- 22 tests de contratos, 10 tests de simulación y servidor, 1 test de integración on-chain y 3 tests E2E en el navegador.
-- **Antes de mainnet:** auditoría externa o, como mínimo, Slither y una revisión independiente. Publica los contratos verificados en Basescan.
+- 26 tests de contratos, 10 tests de simulación y servidor, 1 test de integración on-chain y 4 tests E2E en el navegador (incluido el Lanzador).
+- **Antes de mainnet:** auditoría externa o, como mínimo, Slither y una revisión independiente. Publica los contratos verificados en BscScan.
 
 ## 11. Aspectos legales (léelo antes de lanzar)
 
@@ -170,12 +183,12 @@ Esto no es asesoramiento legal. Lo que sigue son los puntos que suelen importar:
 
 ## 12. Checklist de lanzamiento
 
-1. `npm run deploy:testnet` en Base Sepolia y prueba con 20–50 jugadores reales.
+1. Lanza en **BNB Chain Testnet** con el Lanzador (`/lanzar.html`) y prueba con 20–50 jugadores reales.
 2. Recalibra la dificultad (`npm run balance`) y la economía (`npm run economy`) con sus datos.
 3. Audita los contratos.
-4. Crea una Safe multisig y despliega en Base con `RIFT_OWNER` y `RIFT_TREASURY` apuntando a ella. Acepta la propiedad (`acceptOwnership`).
-5. Verifica los contratos en Basescan (`npx hardhat verify`).
-6. Crea el pool RIFT/ETH (Aerodrome o Uniswap) con la asignación de liquidez y **bloquea el LP**.
+4. Lanza en **BNB Chain** con el Lanzador desde tu wallet (quedas como dueño y tesorería). Cuando el proyecto crezca, pasa la propiedad a una Safe multisig.
+5. Verifica los contratos en BscScan (`npx hardhat verify --network bsc`).
+6. Con el BNB de las primeras ventas, crea el pool RIFT/BNB en PancakeSwap con la asignación de liquidez y **bloquea el LP**.
 7. Despliega el servidor (ver README) con copias de seguridad de `server/data/`.
 8. Lanzamiento: Arena con bote patrocinado, misiones de la comunidad (10%) y creadores de contenido.
 9. Cada semana: revisa `/api/economy`, el precio de RIFT y el ratio de compra/venta, y ajusta las palancas de la sección 8.

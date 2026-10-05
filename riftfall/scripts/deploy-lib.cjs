@@ -12,13 +12,30 @@ const ALLOCATION = {
   community: 10 // airdrops, misiones de lanzamiento, creadores de contenido
 };
 
-/** Catálogo inicial de naves NFT. classId on-chain = índice. Los stats viven en src/sim/content.js. */
+/**
+ * Catálogo inicial de naves NFT. classId on-chain = índice. Los stats viven en src/sim/content.js.
+ * Precios en la moneda nativa de la red: BNB en BNB Chain (56/97) y ETH en el resto.
+ * Referencia (oct. 2026, BNB ≈ $800): ~$12, ~$32, ~$72 y ~$240. Ajustables luego con setClass().
+ */
 const SHIP_CLASSES = [
-  { name: 'VANGUARD', color: '#4dff9a', priceEth: '0.004', priceRift: 2500n, maxSupply: 5000 },
-  { name: 'PHANTOM', color: '#b36bff', priceEth: '0.01', priceRift: 6000n, maxSupply: 3000 },
-  { name: 'TEMPEST', color: '#38c8ff', priceEth: '0.025', priceRift: 15000n, maxSupply: 1500 },
-  { name: 'LEVIATHAN', color: '#ffb02e', priceEth: '0.08', priceRift: 0n, maxSupply: 300 }
+  { name: 'VANGUARD', color: '#4dff9a', priceEth: '0.004', priceBnb: '0.015', priceRift: 2500n, maxSupply: 5000 },
+  { name: 'PHANTOM', color: '#b36bff', priceEth: '0.01', priceBnb: '0.04', priceRift: 6000n, maxSupply: 3000 },
+  { name: 'TEMPEST', color: '#38c8ff', priceEth: '0.025', priceBnb: '0.09', priceRift: 15000n, maxSupply: 1500 },
+  { name: 'LEVIATHAN', color: '#ffb02e', priceEth: '0.08', priceBnb: '0.3', priceRift: 0n, maxSupply: 300 }
 ];
+
+const BNB_CHAINS = [56, 97];
+
+function shipClassArgs(parseEther, chainId) {
+  const bnb = BNB_CHAINS.includes(Number(chainId));
+  return SHIP_CLASSES.map((c) => ({
+    name: c.name,
+    color: c.color,
+    priceWei: parseEther(bnb ? c.priceBnb : c.priceEth),
+    priceRift: parseEther(c.priceRift.toString()),
+    maxSupply: c.maxSupply
+  }));
+}
 
 const DEFAULTS = {
   dailyEmission: 1_000_000n, // RIFT/día en el primer periodo de 180 días
@@ -42,8 +59,9 @@ async function deployAll(ethers, opts) {
   const unit = (n) => ethers.parseEther(n.toString());
   const log = o.log ?? (() => {});
 
+  const { chainId } = await ethers.provider.getNetwork();
   const Token = await ethers.getContractFactory('RiftToken', deployer);
-  const token = await Token.deploy(deployer.address);
+  const token = await Token.deploy(o.tokenName ?? 'Riftfall', o.tokenSymbol ?? 'RIFT', deployer.address);
   await token.waitForDeployment();
   log('RiftToken', token.target);
 
@@ -59,12 +77,16 @@ async function deployAll(ethers, opts) {
   log('RewardVault', vault.target);
 
   const Ships = await ethers.getContractFactory('RiftShips', deployer);
-  const ships = await Ships.deploy(token.target, vault.target, treasury, deployer.address, unit(o.forgeBaseCost));
+  const ships = await Ships.deploy(
+    token.target,
+    vault.target,
+    treasury,
+    deployer.address,
+    unit(o.forgeBaseCost),
+    shipClassArgs(ethers.parseEther, chainId)
+  );
   await ships.waitForDeployment();
   log('RiftShips', ships.target);
-  for (const c of SHIP_CLASSES) {
-    await (await ships.addClass(c.name, c.color, ethers.parseEther(c.priceEth), unit(c.priceRift), c.maxSupply)).wait();
-  }
 
   const Market = await ethers.getContractFactory('RiftMarket', deployer);
   const market = await Market.deploy(ships.target, token.target, treasury, deployer.address, o.marketFeeBps);
@@ -104,4 +126,4 @@ async function deployAll(ethers, opts) {
   return { token, vault, ships, market, arena, vesting, config: { owner, treasury, signer, operator } };
 }
 
-module.exports = { deployAll, ALLOCATION, SHIP_CLASSES, DEFAULTS, SUPPLY };
+module.exports = { deployAll, shipClassArgs, ALLOCATION, SHIP_CLASSES, DEFAULTS, SUPPLY, BNB_CHAINS };

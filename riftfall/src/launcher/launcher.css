@@ -1,0 +1,73 @@
+html, body.launcher {
+  overflow: auto;
+  height: auto;
+  min-height: 100%;
+  touch-action: auto;
+  user-select: text;
+  -webkit-user-select: text;
+}
+body.launcher {
+  background:
+    radial-gradient(ellipse at 20% -10%, rgba(255, 201, 77, 0.16), transparent 50%),
+    radial-gradient(ellipse at 100% 20%, rgba(255, 77, 210, 0.14), transparent 45%),
+    radial-gradient(ellipse at 0% 100%, rgba(77, 232, 255, 0.12), transparent 50%),
+    var(--bg);
+}
+.lx {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: calc(22px + var(--safe-top)) 16px calc(40px + var(--safe-bottom));
+  display: grid;
+  gap: 14px;
+}
+.lx-head h1 { font-family: var(--display); font-size: clamp(26px, 7vw, 38px); margin: 6px 0 8px; line-height: 1.1; }
+.lx-head p { margin: 0; color: #c4cff0; font-size: 17px; line-height: 1.45; }
+.lx-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+  backdrop-filter: blur(10px);
+}
+.lx-card h2 { margin: 0; font-family: var(--display); font-size: 15px; letter-spacing: 0.12em; display: flex; align-items: center; gap: 10px; }
+.lx-card h2 span {
+  width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--gold), #ff8a1f); color: #1a0d00; font-size: 14px;
+}
+.lx-card p { margin: 0; }
+.lx-note { color: var(--muted); font-size: 15px; line-height: 1.4; }
+.lx-options { display: grid; gap: 8px; }
+.lx-option {
+  display: grid; grid-template-columns: 22px 1fr; gap: 4px 10px; align-items: center;
+  padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.02);
+  cursor: pointer; text-align: left;
+}
+.lx-option input { margin: 0; width: 18px; height: 18px; accent-color: var(--gold); }
+.lx-option b { font-family: var(--display); font-size: 14px; letter-spacing: 0.05em; }
+.lx-option small { grid-column: 2; color: var(--muted); font-size: 14px; }
+.lx-option.on { border-color: var(--gold); background: rgba(255, 201, 77, 0.07); }
+.lx-field { display: grid; gap: 6px; font-family: var(--display); font-size: 11px; letter-spacing: 0.18em; color: var(--muted); }
+.lx-field input {
+  padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line-strong);
+  background: rgba(4, 6, 16, 0.8); color: var(--text); font: 600 18px var(--ui); letter-spacing: 0.02em;
+}
+.lx-cost { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.lx-cost .stat b { font-size: 15px; overflow-wrap: anywhere; }
+.lx-progress { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.lx-progress li { display: flex; align-items: center; gap: 10px; font-size: 16px; color: var(--muted); }
+.lx-progress li::before { content: '○'; width: 18px; text-align: center; }
+.lx-progress li.run { color: var(--text); }
+.lx-progress li.run::before { content: '◌'; color: var(--cyan); animation: spin 1s linear infinite; display: inline-block; }
+.lx-progress li.ok { color: var(--green); }
+.lx-progress li.ok::before { content: '✔'; }
+.lx-progress li.err { color: var(--red); }
+.lx-progress li.err::before { content: '✖'; }
+.lx-addr { display: grid; gap: 6px; }
+.lx-addr div { display: flex; justify-content: space-between; gap: 10px; font-size: 15px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding: 6px 0; }
+.lx-addr a { color: var(--cyan); font-family: var(--display); font-size: 12px; text-decoration: none; }
+.lx-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.lx-actions .btn { flex: 1 1 180px; }
+.lx-steps { margin: 0; padding-left: 20px; display: grid; gap: 6px; color: #c4cff0; line-height: 1.4; }
+.lx-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; word-break: break-all; color: #bff6ff; }

@@ -12,8 +12,8 @@
     "chain": "hardhat node --hostname 127.0.0.1",
     "compile": "hardhat compile",
     "deploy:local": "hardhat run scripts/deploy.cjs --network localhost",
-    "deploy:testnet": "hardhat run scripts/deploy.cjs --network baseSepolia",
-    "deploy:mainnet": "hardhat run scripts/deploy.cjs --network base",
+    "deploy:testnet": "hardhat run scripts/deploy.cjs --network bscTestnet",
+    "deploy:mainnet": "hardhat run scripts/deploy.cjs --network bsc",
     "test": "node --test \"test/unit/*.test.mjs\"",
     "test:contracts": "hardhat test",
     "test:integration": "node --test \"test/integration/*.test.mjs\"",
@@ -23,7 +23,10 @@
     "test:e2e:chain": "playwright test -c playwright.chain.config.js",
     "balance": "node scripts/balance.mjs",
     "start": "node --env-file-if-exists=.env server/index.mjs",
-    "build:e2e": "vite build --mode e2e --outDir dist-e2e"
+    "build:e2e": "vite build --mode e2e --outDir dist-e2e",
+    "export:contracts": "hardhat compile && node scripts/export-contracts.cjs",
+    "deploy:base-testnet": "hardhat run scripts/deploy.cjs --network baseSepolia",
+    "deploy:base": "hardhat run scripts/deploy.cjs --network base"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^6.1.2",

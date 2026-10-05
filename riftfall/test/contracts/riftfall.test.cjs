@@ -1,7 +1,9 @@
 const { expect } = require('chai');
 const { ethers } = require('hardhat');
 const { loadFixture, time } = require('@nomicfoundation/hardhat-network-helpers');
-const { deployAll, ALLOCATION, SHIP_CLASSES } = require('../../scripts/deploy-lib.cjs');
+const { deployAll, shipClassArgs, ALLOCATION, SHIP_CLASSES } = require('../../scripts/deploy-lib.cjs');
+const { build: exportContracts } = require('../../scripts/export-contracts.cjs');
+const generated = require('../../src/generated/contracts.json');
 
 const E = (n) => ethers.parseEther(n.toString());
 const DAY = 86400;
@@ -46,6 +48,15 @@ describe('RiftToken', () => {
     );
   });
 
+  it('acepta nombre y símbolo propios (el creador elige la marca)', async () => {
+    const [deployer] = await ethers.getSigners();
+    const Token = await ethers.getContractFactory('RiftToken');
+    const t = await Token.deploy('Lamer Coin', 'LAMER', deployer.address);
+    expect(await t.name()).to.equal('Lamer Coin');
+    expect(await t.symbol()).to.equal('LAMER');
+    expect(await t.balanceOf(deployer.address)).to.equal(E(1_000_000_000));
+  });
+
   it('no expone ninguna función de minteo', async () => {
     const { token } = await loadFixture(fixture);
     expect(token.interface.getFunction('mint')).to.equal(null);
@@ -56,6 +67,28 @@ describe('RiftToken', () => {
     expect(await vesting['releasable(address)'](token.target)).to.equal(0n);
     await time.increase(181 * DAY);
     expect(await vesting['releasable(address)'](token.target)).to.be.greaterThan(0n);
+  });
+});
+
+describe('Despliegue', () => {
+  it('en BNB Chain las naves se cobran en BNB y en el resto en ETH', () => {
+    expect(shipClassArgs(ethers.parseEther, 97)[0].priceWei).to.equal(ethers.parseEther('0.015'));
+    expect(shipClassArgs(ethers.parseEther, 56)[3].priceWei).to.equal(ethers.parseEther('0.3'));
+    expect(shipClassArgs(ethers.parseEther, 8453)[0].priceWei).to.equal(ethers.parseEther('0.004'));
+  });
+
+  it('el bytecode exportado para el Lanzador coincide con los contratos compilados', () => {
+    const fresh = exportContracts();
+    for (const name of Object.keys(fresh.contracts)) {
+      expect(generated.contracts[name].bytecode, `${name}: ejecuta npm run export:contracts`).to.equal(fresh.contracts[name].bytecode);
+    }
+    expect(generated.deploy).to.deep.equal(JSON.parse(JSON.stringify(fresh.deploy)));
+  });
+
+  it('el catálogo inicial queda creado en el constructor', async () => {
+    const { ships } = await loadFixture(fixture);
+    expect(await ships.classCount()).to.equal(4n);
+    expect((await ships.getClass(3)).name).to.equal('LEVIATHAN');
   });
 });
 
