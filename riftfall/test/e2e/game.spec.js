@@ -49,6 +49,55 @@ test('partida completa en el navegador verificada por el servidor', async ({ pag
   expect(errors).toEqual([]);
 });
 
+test('PC: la nave sigue al mouse, se queda quieta sobre él y el teclado tiene prioridad', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/');
+  await page.click('#playBtn');
+  await expect(page.locator('#hud')).toBeVisible();
+  const state = () =>
+    page.evaluate(() => {
+      const { game, renderer } = window.__RIFTFALL__;
+      return { x: game.sim.player.x, y: game.sim.player.y, sx: renderer.R.shipSX, sy: renderer.R.shipSY, tick: game.sim.tick };
+    });
+  // Esperas medidas en ticks de la simulación (el navegador de pruebas dibuja lento).
+  const ticks = (n) =>
+    page.evaluate(async (n) => {
+      const sim = window.__RIFTFALL__.game.sim;
+      const end = sim.tick + n;
+      while (sim.tick < end) await new Promise((r) => requestAnimationFrame(r));
+    }, n);
+
+  // Puntero a la derecha de la nave: avanza hacia la derecha.
+  let s0 = await state();
+  await page.mouse.move(s0.sx + 300, s0.sy, { steps: 4 });
+  await expect(page.locator('#game')).toHaveClass(/steer/);
+  await ticks(40);
+  let s1 = await state();
+  expect(s1.x - s0.x).toBeGreaterThan(80);
+  expect(Math.abs(s1.y - s0.y)).toBeLessThan(40);
+
+  // Puntero encima de la nave: se detiene.
+  await page.mouse.move(s1.sx, s1.sy, { steps: 2 });
+  await ticks(10);
+  s0 = await state();
+  await ticks(30);
+  s1 = await state();
+  expect(Math.hypot(s1.x - s0.x, s1.y - s0.y)).toBeLessThan(25);
+
+  // El teclado manda: al usarlo, el mouse quieto deja de tirar de la nave.
+  await page.mouse.move(s1.sx, s1.sy + 250);
+  await page.keyboard.down('ArrowUp');
+  await ticks(30);
+  await page.keyboard.up('ArrowUp');
+  s0 = await state();
+  expect(s0.y).toBeLessThan(s1.y - 50);
+  await ticks(30);
+  s1 = await state();
+  expect(Math.hypot(s1.x - s0.x, s1.y - s0.y)).toBeLessThan(25);
+  expect(errors).toEqual([]);
+});
+
 test('móvil: joystick táctil y menú adaptado', async ({ browser }) => {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, locale: 'es-ES' });
   const page = await ctx.newPage();

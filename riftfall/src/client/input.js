@@ -1,11 +1,17 @@
-// Entrada: teclado, joystick táctil flotante y mando. Se cuantiza a 32 direcciones
+// Entrada: teclado, mouse, joystick táctil flotante y mando. Se cuantiza a 32 direcciones
 // (lo mismo que graba la partida y re-simula el servidor).
 
 import { DIR_COUNT } from '../sim/index.js';
 
-export function createInput({ surface, joystick }) {
+/** Con el mouse a menos de esta distancia (px) de la nave, la nave se queda quieta. */
+const MOUSE_DEADZONE = 26;
+
+export function createInput({ surface, joystick, shipScreen }) {
   const keys = new Set();
   const touch = { id: null, ox: 0, oy: 0, x: 0, y: 0 };
+  // Mouse: la nave va hacia el puntero. Se activa al mover el mouse durante la partida y se
+  // desactiva al usar el teclado (así no tira de la nave un mouse que quedó quieto en la mesa).
+  const mouse = { on: false, x: 0, y: 0 };
   let enabled = false;
   const knob = joystick.querySelector('i');
 
@@ -19,6 +25,7 @@ export function createInput({ surface, joystick }) {
     const k = KEYMAP[e.code];
     if (k) {
       keys.add(k);
+      mouse.on = false;
       if (enabled) e.preventDefault();
     }
   });
@@ -26,7 +33,24 @@ export function createInput({ surface, joystick }) {
     const k = KEYMAP[e.code];
     if (k) keys.delete(k);
   });
-  window.addEventListener('blur', () => keys.clear());
+  window.addEventListener('blur', () => {
+    keys.clear();
+    mouse.on = false;
+  });
+
+  window.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    mouse.x = e.clientX;
+    mouse.y = e.clientY;
+    if (enabled && !mouse.on && keys.size === 0) {
+      mouse.on = true;
+      surface.classList.add('steer');
+    }
+  });
+  // El puntero salió de la ventana: la nave se detiene.
+  document.addEventListener('mouseout', (e) => {
+    if (!e.relatedTarget) mouse.on = false;
+  });
 
   surface.addEventListener(
     'touchstart',
@@ -81,6 +105,15 @@ export function createInput({ surface, joystick }) {
     if (keys.has('down')) dy += 1;
     if (keys.has('left')) dx -= 1;
     if (keys.has('right')) dx += 1;
+    if (mouse.on && dx === 0 && dy === 0 && shipScreen) {
+      const [sx, sy] = shipScreen();
+      const mx = mouse.x - sx;
+      const my = mouse.y - sy;
+      if (Math.hypot(mx, my) > MOUSE_DEADZONE) {
+        dx = mx;
+        dy = my;
+      }
+    }
     if (touch.id !== null) {
       const tx = touch.x - touch.ox;
       const ty = touch.y - touch.oy;
@@ -116,7 +149,9 @@ export function createInput({ surface, joystick }) {
       enabled = v;
       if (!v) {
         touch.id = null;
+        mouse.on = false;
         joystick.classList.add('hidden');
+        surface.classList.remove('steer');
       }
     },
     clear() {

@@ -10,19 +10,36 @@ import {
   gemTier,
   bladeSprite,
   missileSprite,
-  drawShipShape
+  enemyBulletSprite,
+  textSprite,
+  drawShipFast
 } from './sprites.js';
 import { t } from './i18n.js';
 
-const MAX_PARTICLES = 1600;
-const MAX_TEXTS = 70;
+const MAX_PARTICLES = 1400;
+
+/**
+ * Niveles de calidad (0 = máxima). Bajar de nivel reduce la resolución interna del canvas (lo que
+ * más pesa en celulares: cada capa de fondo y cada brillo se pinta píxel por píxel) y la cantidad
+ * de partículas y textos. main.js elige el nivel solo según cómo rinde el equipo.
+ */
+export const QUALITY_LEVELS = [
+  { dpr: 2, parts: 1, texts: 48, stars: 2 },
+  { dpr: 1.6, parts: 0.7, texts: 36, stars: 2 },
+  { dpr: 1.3, parts: 0.45, texts: 26, stars: 1 },
+  { dpr: 1, parts: 0.3, texts: 18, stars: 1 }
+];
 
 export function createRenderer(canvas) {
   const ctx = canvas.getContext('2d', { alpha: false });
   const R = {
     w: 0, h: 0, dpr: 1, scale: 1,
     camX: 0, camY: 0, shake: 0, shakeX: 0, shakeY: 0, time: 0, flash: 0,
-    particles: [], texts: [], fx: [], quality: 1
+    particles: [], texts: [], fx: [], level: 0, Q: QUALITY_LEVELS[0],
+    // transformación del mundo (para dibujar sin save/restore) y nave en pantalla (para el mouse)
+    k: 1, ox: 0, oy: 0, shipSX: 0, shipSY: 0,
+    textsThisFrame: 0,
+    groups: new Map()
   };
   let bg = null;
   let nebula = null;
@@ -70,6 +87,8 @@ export function createRenderer(canvas) {
     }
   }
 
+  // Tres capas de estrellas; la más lejana se pinta dentro de la nebulosa (que se mueve casi
+  // igual), así el fondo cuesta una pasada de pantalla completa menos por cuadro.
   function buildStars() {
     stars = [0.04, 0.12, 0.28].map((par, layer) => {
       const size = 512;
@@ -95,6 +114,10 @@ export function createRenderer(canvas) {
       }
       return { img: c, par };
     });
+    const far = stars.shift();
+    const g = nebula.getContext('2d');
+    g.globalCompositeOperation = 'lighter';
+    for (let x = 0; x < nebula.width; x += far.img.width) for (let y = 0; y < nebula.height; y += far.img.height) g.drawImage(far.img, x, y);
   }
 
   function buildHex() {
@@ -127,7 +150,7 @@ export function createRenderer(canvas) {
   }
 
   function resize() {
-    R.dpr = Math.min(window.devicePixelRatio || 1, R.quality > 0.7 ? 2 : 1.25);
+    R.dpr = Math.min(window.devicePixelRatio || 1, R.Q.dpr);
     R.w = window.innerWidth;
     R.h = window.innerHeight;
     canvas.width = Math.floor(R.w * R.dpr);
@@ -142,11 +165,14 @@ export function createRenderer(canvas) {
   // ---------------------------------------------------------------- partículas y efectos
 
   function particle(x, y, vx, vy, life, size, color, drag = 0.9) {
-    if (R.particles.length >= MAX_PARTICLES * R.quality) return;
+    if (R.particles.length >= MAX_PARTICLES * R.Q.parts) return;
     R.particles.push({ x, y, vx, vy, life, max: life, size, color, drag });
   }
 
   function burst(x, y, color, n, speed, size = 3, life = 0.5) {
+    // Con la pantalla llena se emiten menos chispas por explosión (se nota poco y alivia mucho).
+    const load = R.particles.length / (MAX_PARTICLES * R.Q.parts);
+    n = Math.ceil(n * R.Q.parts * (load > 0.5 ? 1.5 - load : 1));
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
       const v = speed * (0.3 + Math.random() * 0.9);
@@ -154,12 +180,17 @@ export function createRenderer(canvas) {
     }
   }
 
-  function text(x, y, str, color, size, life = 0.8) {
-    if (R.texts.length >= MAX_TEXTS) R.texts.shift();
+  /** `minor` = número de daño común: se descarta si ya hay muchos en pantalla. */
+  function text(x, y, str, color, size, life = 0.8, minor = false) {
+    const cap = R.Q.texts;
+    if (minor && (R.texts.length >= cap * 0.6 || R.textsThisFrame >= 4)) return;
+    if (R.texts.length >= cap) R.texts.shift();
+    R.textsThisFrame++;
     R.texts.push({ x, y, str, color, size, life, max: life, vy: -60 });
   }
 
   function ring(x, y, r0, r1, color, life, width = 4) {
+    if (R.fx.length > 90) return;
     R.fx.push({ type: 'ring', x, y, r0, r1, color, life, max: life, width });
   }
 
@@ -174,7 +205,7 @@ export function createRenderer(canvas) {
       case 'hit':
         if (Math.random() < 0.6) burst(ev.x, ev.y, ev.c ? '#ffe66b' : '#bff6ff', 2, 220, 2.2, 0.25);
         if (ev.c || Math.random() < 0.45) {
-          text(ev.x + (Math.random() - 0.5) * 16, ev.y - 10, String(ev.v), ev.c ? '#ffe66b' : '#ffffff', ev.c ? 22 : 15, ev.c ? 0.9 : 0.6);
+          text(ev.x + (Math.random() - 0.5) * 16, ev.y - 10, String(ev.v), ev.c ? '#ffe66b' : '#ffffff', ev.c ? 22 : 15, ev.c ? 0.9 : 0.6, !ev.c);
         }
         break;
       case 'kill': {
@@ -291,15 +322,19 @@ export function createRenderer(canvas) {
 
   const lerp = (a, b, t) => a + (b - a) * t;
 
+  // Dibuja un sprite en coordenadas de mundo. Con ángulo arma la matriz directamente (sin
+  // save/translate/rotate/restore, que copian todo el estado del canvas: con cientos de
+  // enemigos por cuadro es una diferencia grande).
   function drawSprite(spr, x, y, angle, alpha = 1, scale = 1) {
     const s = spr.size * scale;
     if (alpha !== 1) ctx.globalAlpha = alpha;
     if (angle) {
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(angle);
+      const k = R.k;
+      const c = Math.cos(angle) * k;
+      const sn = Math.sin(angle) * k;
+      ctx.setTransform(c, sn, -sn, c, k * x + R.ox, k * y + R.oy);
       ctx.drawImage(spr.img, -s / 2, -s / 2, s, s);
-      ctx.restore();
+      ctx.setTransform(k, 0, 0, k, R.ox, R.oy);
     } else {
       ctx.drawImage(spr.img, x - s / 2, y - s / 2, s, s);
     }
@@ -308,6 +343,7 @@ export function createRenderer(canvas) {
 
   function render(sim, alpha, dt, opts = {}) {
     R.time += dt;
+    R.textsThisFrame = 0;
     const p = sim.player;
     const px = lerp(p.px, p.x, alpha);
     const py = lerp(p.py, p.y, alpha);
@@ -338,7 +374,8 @@ export function createRenderer(canvas) {
       const oy = -((camY * 0.08 * scale) % size) - size;
       for (let x = ox; x < w; x += size) for (let y = oy; y < h; y += size) ctx.drawImage(nebula, x, y);
     }
-    for (const layer of stars) {
+    for (let li = stars.length - R.Q.stars; li < stars.length; li++) {
+      const layer = stars[li];
       const size = 512;
       const ox = -((camX * layer.par * scale) % size) - size;
       const oy = -((camY * layer.par * scale) % size) - size;
@@ -349,7 +386,12 @@ export function createRenderer(canvas) {
     // mundo
     const tx = w / 2 - camX * scale + R.shakeX;
     const ty = h / 2 - camY * scale + R.shakeY;
-    ctx.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * tx, dpr * ty);
+    R.k = dpr * scale;
+    R.ox = dpr * tx;
+    R.oy = dpr * ty;
+    R.shipSX = px * scale + tx;
+    R.shipSY = py * scale + ty;
+    ctx.setTransform(R.k, 0, 0, R.k, R.ox, R.oy);
     const viewL = camX - w / 2 / scale - 80;
     const viewR = camX + w / 2 / scale + 80;
     const viewT = camY - h / 2 / scale - 80;
@@ -367,33 +409,55 @@ export function createRenderer(canvas) {
     drawSprite(glow(shipColor, 260, 0.22), px, py);
     ctx.globalCompositeOperation = 'source-over';
 
-    // pickups
-    for (const o of sim.pickups) {
+    // Los dibujos se agrupan en pasadas por modo de mezcla: cambiar entre 'lighter' y
+    // 'source-over' por cada objeto corta las tandas de la placa de video y, con la pantalla
+    // llena, eso es lo que más cuesta. La mezcla aditiva no depende del orden, así que los
+    // brillos se pueden dibujar todos juntos antes de los cuerpos.
+
+    // pickups: primero los halos, después los objetos
+    const pk = sim.pickups;
+    ctx.globalCompositeOperation = 'lighter';
+    const glowPulse = 0.71 + 0.29 * Math.sin(R.time * 6);
+    for (const o of pk) {
+      if (o.kind === 'gem') continue;
       const x = lerp(o.px, o.x, alpha);
-      const y = lerp(o.py, o.y, alpha);
+      const y = lerp(o.py, o.y, alpha) + Math.sin(R.time * 4 + o.id) * 2.5;
       if (!visible(x, y)) continue;
-      const bob = Math.sin(R.time * 4 + o.id) * 2.5;
-      if (o.kind === 'gem') {
-        drawSprite(pickupSprite('gem', gemTier(o.value)), x, y + bob, 0);
-      } else {
-        ctx.globalCompositeOperation = 'lighter';
-        const gc = o.kind === 'shard' || o.kind === 'chest' ? '#ffc94d' : o.kind === 'heal' ? '#4dff9a' : o.kind === 'bomb' ? '#ff4d6a' : '#6c8cff';
-        drawSprite(glow(gc, o.kind === 'chest' ? 48 : 26, 0.5 + 0.2 * Math.sin(R.time * 6)), x, y + bob);
-        ctx.globalCompositeOperation = 'source-over';
-        drawSprite(pickupSprite(o.kind), x, y + bob, o.kind === 'shard' ? Math.sin(R.time * 3 + o.id) * 0.4 : 0);
-      }
+      const gc = o.kind === 'shard' || o.kind === 'chest' ? '#ffc94d' : o.kind === 'heal' ? '#4dff9a' : o.kind === 'bomb' ? '#ff4d6a' : '#6c8cff';
+      drawSprite(glow(gc, o.kind === 'chest' ? 48 : 26, 0.7), x, y, 0, glowPulse);
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    for (const o of pk) {
+      const x = lerp(o.px, o.x, alpha);
+      const y = lerp(o.py, o.y, alpha) + Math.sin(R.time * 4 + o.id) * 2.5;
+      if (!visible(x, y)) continue;
+      if (o.kind === 'gem') drawSprite(pickupSprite('gem', gemTier(o.value)), x, y, 0);
+      else drawSprite(pickupSprite(o.kind), x, y, o.kind === 'shard' ? Math.sin(R.time * 3 + o.id) * 0.4 : 0);
     }
 
-    // enemigos
-    for (const e of sim.enemies) {
+    // enemigos: halos de élites y jefes, avisos, cuerpos y barras de vida
+    const en = sim.enemies;
+    let special = 0;
+    ctx.globalCompositeOperation = 'lighter';
+    for (const e of en) {
+      if (!e.boss && !e.elite) continue;
+      special++;
+      const x = lerp(e.px, e.x, alpha);
+      const y = lerp(e.py, e.y, alpha);
+      if (!visible(x, y)) continue;
+      if (e.boss) {
+        const pulse = e.mode === 1 ? 1 + Math.sin(R.time * 30) * 0.3 : 0.7;
+        drawSprite(glow(e.def.color, e.r * 2.6, 1.3), x, y, 0, pulse / 1.3);
+      } else {
+        drawSprite(glow('#ffe7a3', e.r * 2.2, 0.6), x, y, 0, 0.75 + 0.25 * Math.sin(R.time * 5 + e.id));
+      }
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    for (const e of en) {
       const x = lerp(e.px, e.x, alpha);
       const y = lerp(e.py, e.y, alpha);
       if (!visible(x, y)) continue;
       const def = e.def;
-      let ang;
-      // Todos miran al jugador (tienen ojos); los redondos se bambolean un poco.
-      ang = Math.atan2(p.y - e.y, p.x - e.x);
-      if (def.shape === 'boss' || def.shape === 'hex' || def.shape === 'circle') ang += Math.sin(R.time * 2.2 + e.id) * 0.18;
       if (def.ai === 'dash' && e.mode === 1) {
         ctx.strokeStyle = 'rgba(255, 61, 61, 0.55)';
         ctx.lineWidth = 3;
@@ -403,34 +467,38 @@ export function createRenderer(canvas) {
         ctx.lineTo(x + e.ax * 300, y + e.ay * 300);
         ctx.stroke();
         ctx.setLineDash([]);
-        ang = Math.atan2(e.ay, e.ax);
+      } else if (e.boss && e.mode === 1 && e.pattern === 3) {
+        ctx.strokeStyle = 'rgba(255, 42, 109, 0.6)';
+        ctx.lineWidth = e.r * 0.8;
+        ctx.globalAlpha = 0.25;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        const dx = p.x - e.x;
+        const dy = p.y - e.y;
+        const d = Math.hypot(dx, dy) || 1;
+        ctx.lineTo(x + (dx / d) * 600, y + (dy / d) * 600);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
       }
-      if (e.boss) {
-        ctx.globalCompositeOperation = 'lighter';
-        const pulse = e.mode === 1 ? 1 + Math.sin(R.time * 30) * 0.3 : 0.7;
-        drawSprite(glow(def.color, e.r * 2.6, pulse), x, y);
-        ctx.globalCompositeOperation = 'source-over';
-        if (e.mode === 1 && e.pattern === 3) {
-          ctx.strokeStyle = 'rgba(255, 42, 109, 0.6)';
-          ctx.lineWidth = e.r * 0.8;
-          ctx.globalAlpha = 0.25;
-          ctx.beginPath();
-          ctx.moveTo(x, y);
-          const dx = p.x - e.x;
-          const dy = p.y - e.y;
-          const d = Math.hypot(dx, dy) || 1;
-          ctx.lineTo(x + (dx / d) * 600, y + (dy / d) * 600);
-          ctx.stroke();
-          ctx.globalAlpha = 1;
-        }
-      } else if (e.elite) {
-        ctx.globalCompositeOperation = 'lighter';
-        drawSprite(glow('#ffe7a3', e.r * 2.2, 0.45 + 0.15 * Math.sin(R.time * 5 + e.id)), x, y);
-        ctx.globalCompositeOperation = 'source-over';
-      }
+    }
+    for (const e of en) {
+      const x = lerp(e.px, e.x, alpha);
+      const y = lerp(e.py, e.y, alpha);
+      if (!visible(x, y)) continue;
+      const def = e.def;
+      // Todos miran al jugador (tienen ojos); los redondos se bambolean un poco.
+      let ang = Math.atan2(p.y - e.y, p.x - e.x);
+      if (def.ai === 'dash' && e.mode === 1) ang = Math.atan2(e.ay, e.ax);
+      else if (def.shape === 'boss' || def.shape === 'hex' || def.shape === 'circle') ang += Math.sin(R.time * 2.2 + e.id) * 0.18;
       const spr = enemySprite(def.shape, def.color, Math.round(def.r * (e.elite ? 1.6 : 1)), e.flash > 0, e.elite);
       drawSprite(spr, x, y, ang);
-      if ((e.elite || e.boss) && e.hp < e.maxHp) {
+    }
+    if (special) {
+      for (const e of en) {
+        if ((!e.elite && !e.boss) || e.hp >= e.maxHp) continue;
+        const x = lerp(e.px, e.x, alpha);
+        const y = lerp(e.py, e.y, alpha);
+        if (!visible(x, y)) continue;
         const bw = e.r * 2;
         ctx.fillStyle = 'rgba(0,0,0,0.6)';
         ctx.fillRect(x - bw / 2, y - e.r - 14, bw, 4);
@@ -439,20 +507,21 @@ export function createRenderer(canvas) {
       }
     }
 
-    // armas del jugador: cuchillas orbitales
-    for (const wpn of p.weapons) {
-      if (wpn.id !== 'orbit' || !wpn.count) continue;
-      const L = weaponStats(wpn);
-      const angle = wpn.angle + (L.speed / 60) * alpha;
-      for (let b = 0; b < wpn.count; b++) {
-        const a = angle + (b * Math.PI * 2) / wpn.count;
-        const bx = px + Math.cos(a) * wpn.radius;
-        const by = py + Math.sin(a) * wpn.radius;
-        ctx.globalCompositeOperation = 'lighter';
+    // armas del jugador: cuchillas orbitales (halos y después las cuchillas)
+    for (const pass of [0, 1]) {
+      ctx.globalCompositeOperation = pass === 0 ? 'lighter' : 'source-over';
+      for (const wpn of p.weapons) {
+        if (wpn.id !== 'orbit' || !wpn.count) continue;
+        const L = weaponStats(wpn);
+        const angle = wpn.angle + (L.speed / 60) * alpha;
         const bladeColor = wpn.evolved ? '#ffd23d' : '#b36bff';
-        drawSprite(glow(bladeColor, wpn.evolved ? 34 : 26, 0.6), bx, by);
-        ctx.globalCompositeOperation = 'source-over';
-        drawSprite(bladeSprite(bladeColor), bx, by, a + R.time * 14, 1, wpn.evolved ? 1.35 : 1);
+        for (let b = 0; b < wpn.count; b++) {
+          const a = angle + (b * Math.PI * 2) / wpn.count;
+          const bx = px + Math.cos(a) * wpn.radius;
+          const by = py + Math.sin(a) * wpn.radius;
+          if (pass === 0) drawSprite(glow(bladeColor, wpn.evolved ? 34 : 26, 0.6), bx, by);
+          else drawSprite(bladeSprite(bladeColor), bx, by, a + R.time * 14, 1, wpn.evolved ? 1.35 : 1);
+        }
       }
     }
 
@@ -460,58 +529,69 @@ export function createRenderer(canvas) {
     if (sim.phase !== 'dead') {
       const blink = p.invuln > 0 && Math.floor(R.time * 20) % 2 === 0;
       if (!blink) {
-        ctx.save();
-        ctx.translate(px, py);
-        ctx.rotate(Math.atan2(p.fy, p.fx));
-        ctx.scale(1.15, 1.15);
-        drawShipShape(ctx, sim.shipKey, shipColor, R.time, p.moving ? 1 : 0.35);
-        ctx.restore();
+        const k = R.k * 1.15;
+        const c = p.fx * k;
+        const sn = p.fy * k;
+        ctx.setTransform(c, sn, -sn, c, R.k * px + R.ox, R.k * py + R.oy);
+        drawShipFast(ctx, sim.shipKey, shipColor, R.time, p.moving ? 1 : 0.35);
+        ctx.setTransform(R.k, 0, 0, R.k, R.ox, R.oy);
       }
       if (p.moving && Math.random() < 0.7) {
         particle(px - p.fx * 14, py - p.fy * 14, -p.fx * 90 + (Math.random() - 0.5) * 40, -p.fy * 90 + (Math.random() - 0.5) * 40, 0.35, 3, shipColor, 0.92);
       }
     }
 
-    // proyectiles
+    // proyectiles: todos los rayos en un solo trazo (borde y centro), misiles en dos pasadas
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
     const goldBolts = p.weapons.some((w) => w.id === 'blaster' && w.evolved);
-    const boltOuter = goldBolts ? 'rgba(255, 210, 61, 0.4)' : 'rgba(77, 232, 255, 0.35)';
-    const boltInner = goldBolts ? '#fff6cf' : '#e6fdff';
+    let bolts = 0;
+    let missiles = 0;
+    ctx.beginPath();
     for (const b of sim.projectiles) {
+      if (b.kind !== 'bolt') {
+        missiles++;
+        continue;
+      }
       const x = lerp(b.px, b.x, alpha);
       const y = lerp(b.py, b.y, alpha);
       if (!visible(x, y)) continue;
-      if (b.kind === 'bolt') {
-        const sp = Math.hypot(b.vx, b.vy) || 1;
-        const tx2 = x - (b.vx / sp) * 26;
-        const ty2 = y - (b.vy / sp) * 26;
-        ctx.strokeStyle = boltOuter;
-        ctx.lineWidth = 9;
-        ctx.beginPath();
-        ctx.moveTo(tx2, ty2);
-        ctx.lineTo(x, y);
-        ctx.stroke();
-        ctx.strokeStyle = boltInner;
-        ctx.lineWidth = 3;
-        ctx.stroke();
-      } else {
-        drawSprite(glow('#ffb02e', 22, 0.7), x, y);
-        ctx.globalCompositeOperation = 'source-over';
-        drawSprite(missileSprite(), x, y, Math.atan2(b.vy, b.vx));
-        ctx.globalCompositeOperation = 'lighter';
-        if (Math.random() < 0.8) particle(x, y, (Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30, 0.4, 3.5, '#ff8a3d', 0.9);
+      const sp = Math.hypot(b.vx, b.vy) || 1;
+      ctx.moveTo(x - (b.vx / sp) * 26, y - (b.vy / sp) * 26);
+      ctx.lineTo(x, y);
+      bolts++;
+    }
+    if (bolts) {
+      ctx.strokeStyle = goldBolts ? 'rgba(255, 210, 61, 0.4)' : 'rgba(77, 232, 255, 0.35)';
+      ctx.lineWidth = 9;
+      ctx.stroke();
+      ctx.strokeStyle = goldBolts ? '#fff6cf' : '#e6fdff';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+    if (missiles) {
+      for (const pass of [0, 1]) {
+        ctx.globalCompositeOperation = pass === 0 ? 'lighter' : 'source-over';
+        for (const b of sim.projectiles) {
+          if (b.kind === 'bolt') continue;
+          const x = lerp(b.px, b.x, alpha);
+          const y = lerp(b.py, b.y, alpha);
+          if (!visible(x, y)) continue;
+          if (pass === 1) {
+            drawSprite(missileSprite(), x, y, Math.atan2(b.vy, b.vx));
+            continue;
+          }
+          drawSprite(glow('#ffb02e', 22, 0.7), x, y);
+          if (Math.random() < 0.8) particle(x, y, (Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30, 0.4, 3.5, '#ff8a3d', 0.9);
+        }
       }
+      ctx.globalCompositeOperation = 'lighter';
     }
     for (const b of sim.ebullets) {
       const x = lerp(b.px, b.x, alpha);
       const y = lerp(b.py, b.y, alpha);
       if (!visible(x, y)) continue;
-      drawSprite(glow('#ff3da8', b.r * 2.6, 0.9), x, y);
-      ctx.fillStyle = '#ffe1f3';
-      ctx.beginPath();
-      ctx.arc(x, y, b.r * 0.55, 0, Math.PI * 2);
-      ctx.fill();
+      drawSprite(enemyBulletSprite(b.r), x, y);
     }
 
     // efectos
@@ -525,11 +605,13 @@ export function createRenderer(canvas) {
       const t = 1 - f.life / f.max;
       if (f.type === 'ring') {
         const r = f.r0 + (f.r1 - f.r0) * (1 - (1 - t) * (1 - t));
-        ctx.strokeStyle = rgba(f.color, (1 - t) * 0.9);
+        ctx.strokeStyle = f.color;
+        ctx.globalAlpha = (1 - t) * 0.9;
         ctx.lineWidth = f.width * (1 - t * 0.6);
         ctx.beginPath();
         ctx.arc(f.x, f.y, Math.max(1, r), 0, Math.PI * 2);
         ctx.stroke();
+        ctx.globalAlpha = 1;
       } else if (f.type === 'arc') {
         ctx.lineJoin = 'round';
         for (const [col, wdt] of [['rgba(77,232,255,0.35)', 10], ['#e9fdff', 2.5]]) {
@@ -562,28 +644,44 @@ export function createRenderer(canvas) {
       }
     }
 
-    // partículas
+    // partículas: se mueven y después se dibujan agrupadas por color (misma imagen seguida =
+    // una sola tanda en la placa de video; con mezcla aditiva el orden no cambia el resultado)
     const parts = R.particles;
+    const damp90 = Math.pow(0.9, dt * 60);
     let wIdx = 0;
     for (let i = 0; i < parts.length; i++) {
       const q = parts[i];
       q.life -= dt;
       if (q.life <= 0) continue;
-      q.vx *= Math.pow(q.drag, dt * 60);
-      q.vy *= Math.pow(q.drag, dt * 60);
+      const damp = q.drag === 0.9 ? damp90 : Math.pow(q.drag, dt * 60);
+      q.vx *= damp;
+      q.vy *= damp;
       q.x += q.vx * dt;
       q.y += q.vy * dt;
       parts[wIdx++] = q;
-      if (!visible(q.x, q.y)) continue;
-      const k = q.life / q.max;
-      drawSprite(glow(q.color, 12, 1), q.x, q.y, 0, k, (q.size / 6) * (0.4 + k * 0.8));
     }
     parts.length = wIdx;
+    const groups = R.groups;
+    for (const list of groups.values()) list.length = 0;
+    for (const q of parts) {
+      if (!visible(q.x, q.y)) continue;
+      let list = groups.get(q.color);
+      if (!list) groups.set(q.color, (list = []));
+      list.push(q);
+    }
+    for (const [color, list] of groups) {
+      if (!list.length) continue;
+      const spr = glow(color, 12, 1);
+      for (const q of list) {
+        const k = q.life / q.max;
+        drawSprite(spr, q.x, q.y, 0, k, (q.size / 6) * (0.4 + k * 0.8));
+      }
+    }
     ctx.globalCompositeOperation = 'source-over';
 
-    // textos flotantes (pantalla)
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.textAlign = 'center';
+    // textos flotantes (pantalla), pre-dibujados como imágenes
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const fontK = Math.max(0.8, scale * 0.8) * dpr;
     for (let i = R.texts.length - 1; i >= 0; i--) {
       const t = R.texts[i];
       t.life -= dt;
@@ -597,15 +695,15 @@ export function createRenderer(canvas) {
       const sy = (t.y - camY) * scale + h / 2 + R.shakeY;
       const k = t.life / t.max;
       const pop = k > 0.85 ? 1 + (k - 0.85) * 3 : 1;
+      const spr = textSprite(t.str, t.color, Math.round(t.size * fontK));
+      const tw = spr.w * pop;
+      const th = spr.h * pop;
       ctx.globalAlpha = Math.min(1, k * 2);
-      ctx.font = `800 ${Math.round(t.size * pop * Math.max(0.8, scale * 0.8))}px Orbitron, sans-serif`;
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = 'rgba(5, 6, 15, 0.85)';
-      ctx.strokeText(t.str, sx, sy);
-      ctx.fillStyle = t.color;
-      ctx.fillText(t.str, sx, sy);
+      // la imagen se centra un poco arriba del punto (como el texto con baseline alfabética)
+      ctx.drawImage(spr.img, sx * dpr - tw / 2, sy * dpr - th * 0.75, tw, th);
     }
     ctx.globalAlpha = 1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     if (R.flash > 0) {
       ctx.fillStyle = `rgba(255,255,255,${R.flash * 0.6})`;
@@ -629,8 +727,14 @@ export function createRenderer(canvas) {
       R.shake = 0;
       R.flash = 0;
     },
-    setQuality(q) {
-      R.quality = q;
+    /** Cambia el nivel de calidad (0 = máxima, ver QUALITY_LEVELS). */
+    setLevel(n) {
+      n = Math.max(0, Math.min(QUALITY_LEVELS.length - 1, n | 0));
+      if (n === R.level && R.Q === QUALITY_LEVELS[n]) return;
+      R.level = n;
+      R.Q = QUALITY_LEVELS[n];
+      const cap = MAX_PARTICLES * R.Q.parts;
+      if (R.particles.length > cap) R.particles.length = cap;
       resize();
     }
   };

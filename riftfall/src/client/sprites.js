@@ -30,8 +30,14 @@ export function rgba(hex, a) {
   return `rgba(${r},${g},${b},${a})`;
 }
 
-/** Halo radial suave, para dibujar con 'lighter'. Devuelve { img, size } (size en unidades de mundo). */
+/**
+ * Halo radial suave, para dibujar con 'lighter'. Devuelve { img, size } (size en unidades de mundo).
+ * Radio e intensidad se redondean: así la caché queda acotada aunque se pidan valores animados
+ * (un halo que late debe variar `globalAlpha`, no crear una imagen nueva por cuadro).
+ */
 export function glow(color, radius, strength = 1) {
+  radius = Math.max(2, Math.round(radius));
+  strength = Math.min(1.5, Math.max(0.1, Math.round(strength * 10) / 10));
   return cached(`glow|${color}|${radius}|${strength}`, () => {
     const px = radius * RES;
     const c = makeCanvas(px * 2, px * 2);
@@ -394,6 +400,67 @@ export function missileSprite() {
   });
 }
 
+/** Bala enemiga (halo + núcleo) en una sola imagen, para dibujar con 'lighter'. */
+export function enemyBulletSprite(r) {
+  r = Math.round(r);
+  return cached(`eb|${r}`, () => {
+    const half = r * 2.6;
+    const c = makeCanvas(half * 2 * RES, half * 2 * RES);
+    const g = c.getContext('2d');
+    g.scale(RES, RES);
+    g.translate(half, half);
+    const grad = g.createRadialGradient(0, 0, 0, 0, 0, half);
+    grad.addColorStop(0, rgba('#ff3da8', 0.81));
+    grad.addColorStop(0.25, rgba('#ff3da8', 0.4));
+    grad.addColorStop(1, rgba('#ff3da8', 0));
+    g.fillStyle = grad;
+    g.fillRect(-half, -half, half * 2, half * 2);
+    g.fillStyle = '#ffe1f3';
+    g.beginPath();
+    g.arc(0, 0, r * 0.55, 0, Math.PI * 2);
+    g.fill();
+    return { img: c, size: half * 2 };
+  });
+}
+
+// Textos flotantes (daño, combos) pre-dibujados: dibujar texto con contorno en cada cuadro es de
+// lo más caro del canvas. Caché chica que descarta los más viejos.
+const textCache = new Map();
+const TEXT_CACHE_MAX = 180;
+let probe = null;
+
+/** Texto con contorno oscuro. `px` = tamaño de letra en píxeles de pantalla (ya con dpr). */
+export function textSprite(str, color, px) {
+  const key = `${str}|${color}|${px}`;
+  let s = textCache.get(key);
+  if (s) {
+    textCache.delete(key);
+    textCache.set(key, s);
+    return s;
+  }
+  const font = `800 ${px}px Orbitron, sans-serif`;
+  probe ??= makeCanvas(1, 1).getContext('2d');
+  probe.font = font;
+  const pad = Math.ceil(px * 0.3);
+  const w = Math.ceil(probe.measureText(str).width) + pad * 2;
+  const h = Math.ceil(px * 1.35) + pad;
+  const c = makeCanvas(w, h);
+  const g = c.getContext('2d');
+  g.font = font;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.lineJoin = 'round';
+  g.lineWidth = Math.max(2, px * 0.24);
+  g.strokeStyle = 'rgba(5, 6, 15, 0.85)';
+  g.strokeText(str, w / 2, h / 2);
+  g.fillStyle = color;
+  g.fillText(str, w / 2, h / 2);
+  s = { img: c, w, h };
+  textCache.set(key, s);
+  if (textCache.size > TEXT_CACHE_MAX) textCache.delete(textCache.keys().next().value);
+  return s;
+}
+
 // ------------------------------------------------------------------ naves del jugador
 // Estilo "cartoon" vectorial: cuerpo con degradado, contorno oscuro, alas y aletas de colores,
 // cabina de cristal con brillo y varios motores con fuego animado. Todo se dibuja con trazos
@@ -544,16 +611,11 @@ function shipFlames(g, art, color, t, thrust) {
   g.globalCompositeOperation = 'source-over';
 }
 
-/** Dibuja la nave en el contexto ya trasladado y rotado. */
-export function drawShipShape(g, key, color, t = 0, thrust = 1) {
-  const art = SHIP_ART[key] ?? SHIP_ART.spark;
+/** Cuerpo fijo de la nave (todo menos el fuego y las luces que titilan). */
+function shipBody(g, art, color) {
   const { pal } = art;
-  g.save();
   g.lineJoin = 'round';
   g.lineCap = 'round';
-
-  // fuego de los motores (detrás de todo)
-  shipFlames(g, art, color, t, thrust);
 
   // halo de neón para que la nave se lea sobre cualquier fondo
   g.shadowColor = color;
@@ -660,6 +722,43 @@ export function drawShipShape(g, key, color, t = 0, thrust = 1) {
     g.stroke();
   }
 
+  // cabina de cristal con reflejo
+  const c = art.cockpit;
+  g.beginPath();
+  if (c.diamond) {
+    g.moveTo(c.x + c.rx, 0);
+    g.quadraticCurveTo(c.x, -c.ry * 1.1, c.x - c.rx, 0);
+    g.quadraticCurveTo(c.x, c.ry * 1.1, c.x + c.rx, 0);
+  } else {
+    // gota: punta hacia la nariz, cola redondeada
+    g.moveTo(c.x + c.rx, 0);
+    g.bezierCurveTo(c.x + c.rx * 0.35, -c.ry * 1.05, c.x - c.rx, -c.ry * 1.1, c.x - c.rx, 0);
+    g.bezierCurveTo(c.x - c.rx, c.ry * 1.1, c.x + c.rx * 0.35, c.ry * 1.05, c.x + c.rx, 0);
+  }
+  const glass = g.createLinearGradient(c.x - c.rx, -c.ry, c.x + c.rx, c.ry);
+  glass.addColorStop(0, '#0b2a5c');
+  glass.addColorStop(0.55, pal.glass);
+  glass.addColorStop(1, '#ffffff');
+  g.fillStyle = glass;
+  g.fill();
+  g.lineWidth = 1.6;
+  g.strokeStyle = OUTLINE;
+  g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,0.35)';
+  g.lineWidth = 0.9;
+  g.beginPath();
+  g.moveTo(c.x + c.rx * 0.9, 0);
+  g.lineTo(c.x - c.rx * 0.7, 0);
+  g.stroke();
+  g.fillStyle = 'rgba(255,255,255,0.9)';
+  g.beginPath();
+  g.ellipse(c.x + c.rx * 0.1, -c.ry * 0.42, c.rx * 0.4, c.ry * 0.2, -0.1, 0, Math.PI * 2);
+  g.fill();
+}
+
+/** Partes animadas encima del cuerpo: bobinas y luces de posición. */
+function shipLights(g, art, t) {
+  const { pal } = art;
   // bobinas eléctricas (Tempest)
   for (const [x, y] of art.coils ?? []) {
     for (const yy of [y, -y]) {
@@ -693,39 +792,40 @@ export function drawShipShape(g, key, color, t = 0, thrust = 1) {
     }
   }
 
-  // cabina de cristal con reflejo
-  const c = art.cockpit;
-  g.beginPath();
-  if (c.diamond) {
-    g.moveTo(c.x + c.rx, 0);
-    g.quadraticCurveTo(c.x, -c.ry * 1.1, c.x - c.rx, 0);
-    g.quadraticCurveTo(c.x, c.ry * 1.1, c.x + c.rx, 0);
-  } else {
-    // gota: punta hacia la nariz, cola redondeada
-    g.moveTo(c.x + c.rx, 0);
-    g.bezierCurveTo(c.x + c.rx * 0.35, -c.ry * 1.05, c.x - c.rx, -c.ry * 1.1, c.x - c.rx, 0);
-    g.bezierCurveTo(c.x - c.rx, c.ry * 1.1, c.x + c.rx * 0.35, c.ry * 1.05, c.x + c.rx, 0);
-  }
-  const glass = g.createLinearGradient(c.x - c.rx, -c.ry, c.x + c.rx, c.ry);
-  glass.addColorStop(0, '#0b2a5c');
-  glass.addColorStop(0.55, pal.glass);
-  glass.addColorStop(1, '#ffffff');
-  g.fillStyle = glass;
-  g.fill();
-  g.lineWidth = 1.6;
-  g.strokeStyle = OUTLINE;
-  g.stroke();
-  g.strokeStyle = 'rgba(255,255,255,0.35)';
-  g.lineWidth = 0.9;
-  g.beginPath();
-  g.moveTo(c.x + c.rx * 0.9, 0);
-  g.lineTo(c.x - c.rx * 0.7, 0);
-  g.stroke();
-  g.fillStyle = 'rgba(255,255,255,0.9)';
-  g.beginPath();
-  g.ellipse(c.x + c.rx * 0.1, -c.ry * 0.42, c.rx * 0.4, c.ry * 0.2, -0.1, 0, Math.PI * 2);
-  g.fill();
+}
 
+/** Dibuja la nave en el contexto ya trasladado y rotado (todo con trazos; para el menú). */
+export function drawShipShape(g, key, color, t = 0, thrust = 1) {
+  const art = SHIP_ART[key] ?? SHIP_ART.spark;
+  g.save();
+  shipFlames(g, art, color, t, thrust); // el fuego va detrás de todo
+  shipBody(g, art, color);
+  shipLights(g, art, t);
+  g.restore();
+}
+
+const SHIP_RES = 3; // la nave del jugador se ve más grande que el resto: más resolución
+const SHIP_HALF = 48;
+
+/**
+ * Igual que drawShipShape pero con el cuerpo pre-dibujado en una imagen (una sola llamada en vez
+ * de decenas de trazos, degradados y un desenfoque por cuadro). Es la que usa el juego.
+ */
+export function drawShipFast(g, key, color, t = 0, thrust = 1) {
+  const art = SHIP_ART[key] ?? SHIP_ART.spark;
+  const body = cached(`ship|${key}|${color}`, () => {
+    const c = makeCanvas(SHIP_HALF * 2 * SHIP_RES, SHIP_HALF * 2 * SHIP_RES);
+    const cg = c.getContext('2d');
+    cg.scale(SHIP_RES, SHIP_RES);
+    cg.translate(SHIP_HALF, SHIP_HALF);
+    shipBody(cg, art, color);
+    return c;
+  });
+  g.save();
+  shipFlames(g, art, color, t, thrust);
+  g.drawImage(body, -SHIP_HALF, -SHIP_HALF, SHIP_HALF * 2, SHIP_HALF * 2);
+  g.lineJoin = 'round';
+  shipLights(g, art, t);
   g.restore();
 }
 

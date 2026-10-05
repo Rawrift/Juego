@@ -39,6 +39,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .hidden { display: none !important; }
 
 #game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+#game.steer { cursor: crosshair; }
 #vignette {
   position: fixed; inset: 0; pointer-events: none;
   background: radial-gradient(ellipse at center, transparent 55%, rgba(2, 2, 10, 0.75) 100%);

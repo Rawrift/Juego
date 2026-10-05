@@ -20,7 +20,7 @@ import {
   PASSIVES,
   shipYield
 } from '../sim/index.js';
-import { createRenderer } from './renderer.js';
+import { createRenderer, QUALITY_LEVELS } from './renderer.js';
 import { createAudio } from './audio.js';
 import { createInput } from './input.js';
 import { createApi } from './api.js';
@@ -38,7 +38,7 @@ applyStatic();
 const canvas = $('#game');
 const renderer = createRenderer(canvas);
 const audio = createAudio();
-const input = createInput({ surface: canvas, joystick: $('#joystick') });
+const input = createInput({ surface: canvas, joystick: $('#joystick'), shipScreen: () => [renderer.R.shipSX, renderer.R.shipSY] });
 const api = createApi();
 
 const app = {
@@ -609,17 +609,56 @@ function onSimEvent(ev, s, live) {
 // --------------------------------------------------------------------- bucle principal
 
 let last = performance.now();
-let frameAvg = 16;
-let qualityLowered = false;
+
+// Calidad automática: si el equipo no llega a ~45 cuadros por segundo de forma sostenida, se baja
+// un nivel (menos resolución interna y menos efectos). Si bajar no mejoró nada (por ejemplo, un
+// celular en ahorro de energía que limita a 30 fps), se deja de ajustar en esta sesión.
+// El nivel queda guardado y la próxima vez se arranca uno más arriba, por si fue algo pasajero.
+const GFX_KEY = 'riftfall.gfx';
+const gov = { slow: 0, avg: 1 / 60, check: null, locked: false };
+{
+  const coarse = window.matchMedia?.('(pointer: coarse)').matches;
+  const base = coarse ? 1 : 0;
+  let saved = NaN;
+  try {
+    saved = Number(localStorage.getItem(GFX_KEY));
+  } catch {
+    /* sin almacenamiento */
+  }
+  renderer.setLevel(Number.isInteger(saved) && saved > base ? saved - 1 : base);
+}
+
+function governor(dt, now) {
+  if (gov.locked || document.hidden || dt >= 0.1) return;
+  gov.avg = gov.avg * 0.95 + dt * 0.05;
+  if (gov.check && now >= gov.check.at) {
+    if (gov.avg > gov.check.before * 0.9) gov.locked = true;
+    gov.check = null;
+    saveGfx();
+    return;
+  }
+  if (gov.check) return;
+  gov.slow = dt > 0.0225 ? gov.slow + dt : Math.max(0, gov.slow - dt * 0.5);
+  const level = renderer.R.level;
+  if (gov.slow > 1.2 && level < QUALITY_LEVELS.length - 1) {
+    gov.check = { at: now + 2500, before: gov.avg };
+    gov.slow = 0;
+    renderer.setLevel(level + 1);
+  }
+}
+
+function saveGfx() {
+  try {
+    localStorage.setItem(GFX_KEY, String(renderer.R.level));
+  } catch {
+    /* sin almacenamiento */
+  }
+}
 
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
-  frameAvg = frameAvg * 0.95 + dt * 1000 * 0.05;
-  if (!qualityLowered && frameAvg > 24 && now > 8000) {
-    qualityLowered = true;
-    renderer.setQuality(0.6);
-  }
+  governor(dt, now);
 
   const s = game.sim;
   if (game.mode === 'play' && !game.paused) {
@@ -784,6 +823,8 @@ boot();
 if (import.meta.env.DEV || import.meta.env.MODE === 'e2e') window.__RIFTFALL__ = {
   game,
   app,
+  renderer,
+  gov,
   startRun,
   pickChoice,
   setPaused,
