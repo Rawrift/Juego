@@ -116,6 +116,9 @@ La forma más simple, sin computadora y sin compartir claves:
 gratuito no verificado (`*.vercel.app`, `*.netlify.app`, `*.pages.dev`, `*.github.io`), aunque no exista. Los dominios
 propios (`.com`, `.app`, `.fun`…) no tienen ese bloqueo. Mientras el juego no use la wallet no afecta a nadie; antes de abrir
 la tienda conviene un dominio propio o pedir la verificación con "Informar sobre un problema de detección".
+Hoy el juego se publica en **https://riftfall.duckdns.org** (gratis, sin alerta): en duckdns.org el subdominio apunta a la
+IP de Vercel `76.76.21.21` y está agregado como dominio del proyecto en Vercel, que pone el HTTPS solo.
+Antes de cambiar de dominio, consulta el escáner: `https://dapp-scanning.api.cx.metamask.io/scan?url=DOMINIO` → `"NONE"` = sin alerta.
 
 **Sin servidor también vende:** si publicas el juego con el `deployment.json` que genera el Lanzador (en `public/`),
 la tienda de naves, la forja y el mercado funcionan directamente con la wallet, y las partidas corren en modo práctica.
