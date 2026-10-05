@@ -400,3 +400,65 @@ test('Pase Fundador: pago en USDT verificado en la cadena, pintura dorada y rest
   await expect(page.locator('#founderChip')).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test('Desafío del Día sin servidor: misma semilla, reglas fijas, mejor marca y texto para compartir', async ({ browser }) => {
+  const { dailyNumber, dailySeed } = await import('../../src/shared/daily.js');
+  const n = dailyNumber();
+  const site = await staticSite(4178);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: 'es-ES' });
+  try {
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.addInitScript(() => {
+      window.__shared = null;
+      navigator.canShare = () => false;
+      navigator.share = async (data) => {
+        window.__shared = data.text;
+      };
+      // Aunque tenga habilidades, el desafío se juega sin ellas.
+      localStorage.setItem('riftfall.progress', JSON.stringify({ cores: 0, talents: { hull: 5, power: 5 } }));
+    });
+    await page.goto('http://127.0.0.1:4178/');
+    await expect(page.locator('#dcNum')).toHaveText(`#${n}`);
+    await expect(page.locator('#dcInfo')).toContainText('misma partida');
+    await page.click('#dcPlay');
+    await expect(page.locator('#hud')).toBeVisible();
+    await expect(page.locator('#hudRift')).toHaveText(`DESAFÍO #${n}`);
+    const cfg = await page.evaluate(() => {
+      const s = window.__RIFTFALL__.game.sim;
+      return { seed: s.seed, ship: s.shipKey, rift: s.rift, talents: s.talents };
+    });
+    expect(cfg).toEqual({ seed: dailySeed(n), ship: 'spark', rift: 1, talents: {} });
+
+    await page.evaluate(() => window.__RIFTFALL__.fastForward(40));
+    await page.evaluate(() => {
+      window.__RIFTFALL__.setPaused(true);
+      document.getElementById('quitBtn').click();
+    });
+    await expect(page.locator('#gameover')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('#goRewardList')).toContainText(`Desafío #${n}`);
+    await page.click('#shareBtn');
+    await page.waitForFunction(() => window.__shared !== null);
+    expect(await page.evaluate(() => window.__shared)).toContain(`Desafío #${n}`);
+
+    // "Jugar otra vez" repite el desafío y el menú muestra la mejor marca.
+    await page.click('#againBtn');
+    await expect(page.locator('#hudRift')).toHaveText(`DESAFÍO #${n}`);
+    expect(await page.evaluate(() => window.__RIFTFALL__.game.sim.seed)).toBe(dailySeed(n));
+    await page.evaluate(() => {
+      window.__RIFTFALL__.setPaused(true);
+      document.getElementById('quitBtn').click();
+    });
+    await expect(page.locator('#gameover')).toBeVisible({ timeout: 10_000 });
+    await page.click('#menuBtn');
+    await expect(page.locator('#dcInfo')).toContainText('Tu mejor de hoy');
+    await expect(page.locator('#dcInfo')).toContainText('2 intentos');
+    // Ganar el desafío no desbloquea niveles del Rift.
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('riftfall.progress')).riftMax)).toBe(0);
+    expect(errors).toEqual([]);
+  } finally {
+    await ctx.close();
+    site.close();
+  }
+});

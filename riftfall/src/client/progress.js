@@ -59,11 +59,11 @@ function rollDay(p) {
 }
 
 /** Aplica una partida de práctica terminada. Devuelve el detalle de lo ganado. */
-export function recordLocalRun(p, sum) {
+export function recordLocalRun(p, sum, { daily = false } = {}) {
   rollDay(p);
   const out = { cores: coresFromSummary(sum), streak: 0, missions: [], newBest: sum.score > p.bestScore, riftUnlocked: null };
   // Ganar un nivel del Rift desbloquea el siguiente.
-  if (sum.victory && (sum.rift ?? 0) >= p.riftMax && p.riftMax < RIFT_MAX) {
+  if (!daily && sum.victory && (sum.rift ?? 0) >= p.riftMax && p.riftMax < RIFT_MAX) {
     p.riftMax = Math.min(RIFT_MAX, (sum.rift ?? 0) + 1);
     out.riftUnlocked = p.riftMax;
   }
@@ -113,3 +113,14 @@ export function canUpgradeAny(cores, talents) {
 }
 
 export { MISSIONS };
+
+/** Guarda el resultado de un Desafío del Día. Devuelve { best, newBest, tries }. */
+export function recordChallenge(p, n, sum) {
+  if (p.challenge?.n !== n) p.challenge = { n, best: null, tries: 0 };
+  const ch = p.challenge;
+  ch.tries++;
+  const newBest = !ch.best || sum.score > ch.best.score;
+  if (newBest) ch.best = { score: sum.score, timeSec: sum.timeSec, kills: sum.kills, victory: sum.victory };
+  saveProgress(p);
+  return { best: ch.best, newBest, tries: ch.tries };
+}

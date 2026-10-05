@@ -18,6 +18,7 @@ import { openDb } from './db.mjs';
 import { createReplayPool } from './replay-pool.mjs';
 import { initChain } from './chain.mjs';
 import { MISSIONS, dayKey, previousDayKey, streakBonus, freshDaily, applyRunToDaily, missionView } from './economy.mjs';
+import { dailyNumber, dailySeed, DAILY_RULES } from '../src/shared/daily.js';
 import { SHIPS, SHIP_BY_CLASS, TICK_RATE, MAX_INPUT_NUMBERS, TALENTS, TALENT_MAX, talentCost, sanitizeTalents, coresFromSummary, RIFT_MAX } from '../src/sim/index.js';
 import { chainConfigFromDeployment } from '../src/shared/networks.js';
 
@@ -147,6 +148,8 @@ export async function createApp(options = {}) {
       D.leaderboard.day = today;
       D.leaderboard.daily = {};
     }
+    const n = dailyNumber();
+    if (!D.leaderboard.challenge || D.leaderboard.challenge.n !== n) D.leaderboard.challenge = { n, entries: {} };
   }
 
   function pendingClaimsWei(filter) {
@@ -344,7 +347,7 @@ export async function createApp(options = {}) {
     'POST /api/run/start': async ({ ip, req, body }) => {
       rateLimit(ip, 'start', 30);
       const p = auth(req);
-      const mode = body.mode === 'arena' ? 'arena' : 'normal';
+      const mode = body.mode === 'arena' ? 'arena' : body.mode === 'daily' ? 'daily' : 'normal';
       let ship = { ship: 'spark', shipLevel: 1, tokenId: null };
       let tournamentId = null;
       if (mode === 'arena') {
@@ -360,16 +363,26 @@ export async function createApp(options = {}) {
         if (r.playerId === p.id && r.status === 'active') r.status = 'abandoned';
       }
       const id = `r_${crypto.randomBytes(10).toString('hex')}`;
-      const seed = crypto.randomBytes(4).readUInt32LE(0);
+      let seed = crypto.randomBytes(4).readUInt32LE(0);
       // En la Arena no hay talentos ni niveles del Rift: todos compiten en igualdad.
-      const talents = mode === 'arena' ? {} : sanitizeTalents(p.talents);
-      const rift = mode === 'arena' ? 0 : Number(body.rift ?? 0);
-      if (!Number.isInteger(rift) || rift < 0 || rift > RIFT_MAX) throw bad('Nivel del Rift inválido');
-      if (rift > (p.riftMax ?? 0)) throw bad('Ese nivel del Rift todavía está bloqueado');
-      D.runs[id] = { id, playerId: p.id, mode, seed, ...ship, talents, rift, tournamentId, startedAt: Date.now(), status: 'active' };
+      let talents = mode === 'arena' ? {} : sanitizeTalents(p.talents);
+      let rift = mode === 'arena' ? 0 : Number(body.rift ?? 0);
+      let daily = null;
+      if (mode === 'daily') {
+        // Desafío del Día: misma semilla, nave y reglas para todos.
+        daily = dailyNumber();
+        seed = dailySeed(daily);
+        ship = { ship: DAILY_RULES.ship, shipLevel: DAILY_RULES.shipLevel, tokenId: null };
+        talents = {};
+        rift = DAILY_RULES.rift;
+      } else {
+        if (!Number.isInteger(rift) || rift < 0 || rift > RIFT_MAX) throw bad('Nivel del Rift inválido');
+        if (rift > (p.riftMax ?? 0)) throw bad('Ese nivel del Rift todavía está bloqueado');
+      }
+      D.runs[id] = { id, playerId: p.id, mode, seed, ...ship, talents, rift, daily, tournamentId, startedAt: Date.now(), status: 'active' };
       D.stats.totalRuns++;
       db.save();
-      return { runId: id, seed, ship: ship.ship, shipLevel: ship.shipLevel, talents, rift, mode, tournamentId };
+      return { runId: id, seed, ship: ship.ship, shipLevel: ship.shipLevel, talents, rift, mode, daily, tournamentId };
     },
 
     'POST /api/run/finish': async ({ ip, req, body }) => {
@@ -410,8 +423,9 @@ export async function createApp(options = {}) {
       D.stats.verifiedRuns++;
 
       const rewards = { run: 0, streak: 0, missions: [] };
-      if (run.mode === 'normal') {
-        rewards.run = sum.shardsEarned;
+      if (run.mode === 'normal' || run.mode === 'daily') {
+        // El desafío se juega por el ranking: no paga Shards por partida (todos conocen la semilla).
+        rewards.run = run.mode === 'normal' ? sum.shardsEarned : 0;
         const today = dayKey();
         if (p.lastDay !== today) {
           p.streak = p.lastDay === previousDayKey() ? p.streak + 1 : 1;
@@ -444,6 +458,13 @@ export async function createApp(options = {}) {
         riftUnlocked = p.riftMax;
       }
 
+      if (run.mode === 'daily') {
+        rollLeaderboard();
+        const ch = D.leaderboard.challenge;
+        if (ch.n === run.daily && (!ch.entries[p.id] || ch.entries[p.id].score < sum.score)) {
+          ch.entries[p.id] = { score: sum.score, timeSec: sum.timeSec, kills: sum.kills, ship: run.ship, runId: run.id };
+        }
+      }
       if (run.mode === 'normal') {
         rollLeaderboard();
         const entry = { score: sum.score, timeSec: sum.timeSec, kills: sum.kills, ship: run.ship, runId: run.id };
@@ -458,13 +479,17 @@ export async function createApp(options = {}) {
 
     'GET /api/leaderboard': async ({ url }) => {
       rollLeaderboard();
-      const scope = url.searchParams.get('scope') === 'all' ? 'allTime' : 'daily';
+      const asked = url.searchParams.get('scope');
+      if (asked === 'challenge') return { scope: 'challenge', n: D.leaderboard.challenge.n, entries: leaderboardView(D.leaderboard.challenge.entries) };
+      const scope = asked === 'all' ? 'allTime' : 'daily';
       return { scope, entries: leaderboardView(D.leaderboard[scope]) };
     },
 
     'GET /api/replay': async ({ url }) => {
       const run = D.runs[url.searchParams.get('id') ?? ''];
       if (!run || run.status !== 'verified' || !run.inputs) throw new HttpError(404, 'Replay no disponible');
+      // Las partidas del desafío de hoy no se muestran hasta mañana (se podrían copiar).
+      if (run.mode === 'daily' && run.daily === dailyNumber()) throw new HttpError(404, 'Replay disponible cuando termine el desafío');
       return {
         id: run.id,
         seed: run.seed,

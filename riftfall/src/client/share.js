@@ -14,8 +14,9 @@ export function shareUrl() {
   return `${location.origin}/`;
 }
 
-export function shareText({ summary }) {
-  const vars = { time: fmtTime(summary.timeSec), kills: fmtNum(summary.kills), score: fmtNum(summary.score) };
+export function shareText({ summary, daily }) {
+  const vars = { time: fmtTime(summary.timeSec), kills: fmtNum(summary.kills), score: fmtNum(summary.score), n: daily };
+  if (daily) return t('sh.daily', vars);
   return t(summary.victory ? 'sh.textWin' : 'sh.text', vars);
 }
 

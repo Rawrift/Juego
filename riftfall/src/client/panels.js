@@ -472,7 +472,7 @@ export function createPanels(app) {
             entries.length ? rankingTable(entries, app.profile?.name, 'name') : el('div', { class: 'notice info' }, t('r.empty'))
           );
         };
-        for (const [scope, label] of [['daily', t('r.today')], ['all', t('r.all')]]) {
+        for (const [scope, label] of [['daily', t('r.today')], ['challenge', t('r.challenge')], ['all', t('r.all')]]) {
           tabs.append(el('button', { 'data-scope': scope, onclick: () => load(scope) }, label));
         }
         load('daily');

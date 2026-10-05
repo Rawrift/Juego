@@ -6,6 +6,7 @@ import path from 'node:path';
 import { createApp } from '../../server/app.mjs';
 import { playLocal } from '../helpers.mjs';
 import { coresFromSummary } from '../../src/sim/index.js';
+import { dailyNumber, dailySeed } from '../../src/shared/daily.js';
 
 async function boot(opts = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'riftfall-'));
@@ -176,6 +177,34 @@ test('niveles del Rift: bloqueados hasta ganar el anterior, se verifican en el r
     const easy = playLocal(s2.seed, 'spark', 1, 60 * 60, null, 0);
     const fin2 = await call('POST', '/api/run/finish', { runId: s2.runId, inputs: easy.inputs, choices: easy.choices }, token);
     if (fin2.status === 200) assert.notDeepEqual(fin2.json.summary, easy.summary);
+  } finally {
+    await app.close();
+  }
+});
+
+test('Desafío del Día: misma semilla y reglas para todos, ranking propio y replays ocultos hasta mañana', async () => {
+  const { app, call } = await boot({ minRealtimeRatio: 0 });
+  try {
+    const a = (await call('POST', '/api/auth/guest')).json;
+    const b = (await call('POST', '/api/auth/guest')).json;
+    // Aunque tenga habilidades y pida otra nave o nivel, el desafío usa las reglas fijas.
+    app.db.data.players[a.profile.id].talents = { hull: 5 };
+    const sa = (await call('POST', '/api/run/start', { mode: 'daily', rift: 7, demoShip: 'leviathan' }, a.token)).json;
+    const sb = (await call('POST', '/api/run/start', { mode: 'daily' }, b.token)).json;
+    assert.equal(sa.seed, sb.seed, 'misma semilla para todos');
+    assert.equal(sa.seed, dailySeed(dailyNumber()));
+    assert.deepEqual([sa.ship, sa.rift, sa.talents, sa.daily], ['spark', 1, {}, dailyNumber()]);
+
+    const run = playLocal(sa.seed, 'spark', 1, 60 * 45, null, 1);
+    const fin = await call('POST', '/api/run/finish', { runId: sa.runId, inputs: run.inputs, choices: run.choices }, a.token);
+    assert.equal(fin.status, 200, JSON.stringify(fin.json));
+    assert.equal(fin.json.rewards.run, 0, 'el desafío no paga Shards por partida');
+    const board = (await call('GET', '/api/leaderboard?scope=challenge')).json;
+    assert.equal(board.n, dailyNumber());
+    assert.equal(board.entries.length, 1);
+    assert.equal(board.entries[0].score, run.summary.score);
+    assert.equal((await call('GET', '/api/leaderboard?scope=daily')).json.entries.length, 0, 'no se mezcla con el ranking normal');
+    assert.equal((await call('GET', `/api/replay?id=${sa.runId}`)).status, 404, 'el replay de hoy no se publica');
   } finally {
     await app.close();
   }

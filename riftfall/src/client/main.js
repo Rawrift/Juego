@@ -31,10 +31,12 @@ import { createWallet, explainError } from './wallet.js';
 import { iconCopy, drawShipPreview } from './sprites.js';
 import { createPanels } from './panels.js';
 import { founderRank, currentSkin, founderBusy } from './founder.js';
+import { setupPwa } from './pwa.js';
 import { chainConfigFromDeployment } from '../shared/networks.js';
 import { $, el, toast, fmtTime, fmtNum, shortAddr, fmtRift, brandText } from './dom.js';
 import { t, tx, lang, LANGS, setLang, applyStatic } from './i18n.js';
-import { loadProgress, recordLocalRun, upgradeLocalTalent, localMissions, canUpgradeAny } from './progress.js';
+import { loadProgress, recordLocalRun, upgradeLocalTalent, localMissions, canUpgradeAny, recordChallenge } from './progress.js';
+import { dailyNumber, dailySeed, DAILY_RULES, msToNextDaily } from '../shared/daily.js';
 import { shareResult } from './share.js';
 
 applyStatic();
@@ -124,6 +126,29 @@ function applyCosmetics() {
   $('#founderChip').classList.toggle('hidden', rank === 0);
   $('#founderBanner').classList.toggle('owned', rank >= 3);
 }
+
+// --------------------------------------------------------------------- Desafío del Día
+
+function updateDailyCard() {
+  const n = dailyNumber();
+  $('#dcNum').textContent = `#${n}`;
+  const ms = msToNextDaily();
+  $('#dcNext').textContent = t('dc.next', { h: Math.floor(ms / 3_600_000), m: Math.floor(ms / 60_000) % 60 });
+  const ch = app.progress.challenge;
+  const info = $('#dcInfo');
+  if (ch?.n === n && ch.best) {
+    info.replaceChildren(
+      el('b', {}, t('dc.best', { score: fmtNum(ch.best.score), time: fmtTime(ch.best.timeSec) })),
+      ' · ',
+      t('dc.tries', { n: ch.tries })
+    );
+    $('#dcPlay').textContent = t('dc.again');
+  } else {
+    info.textContent = t('dc.rules');
+    $('#dcPlay').textContent = t('dc.play');
+  }
+}
+$('#dcPlay').addEventListener('click', () => startRun('daily'));
 
 // --------------------------------------------------------------------- Nivel del Rift
 
@@ -242,6 +267,7 @@ function updateMenu() {
   }
   $('#streakTag').textContent = t('menu.streak', { n: pl.streak });
   updateRiftPick();
+  updateDailyCard();
   const unit = pl.online ? '◆' : '✦';
   $('#missionList').replaceChildren(
     ...pl.missions.map((m) =>
@@ -336,7 +362,7 @@ async function startRun(mode = 'normal') {
   try {
     run = await api.startRun({
       mode,
-      rift: mode === 'arena' ? 0 : riftLevel(),
+      rift: mode === 'normal' ? riftLevel() : 0,
       shipTokenId: app.ship.tokenId ?? undefined,
       demoShip: app.config?.demoShips ? app.ship.key : undefined
     });
@@ -350,7 +376,12 @@ async function startRun(mode = 'normal') {
     game.offline = true;
     // En práctica puedes volar tu nave NFT (no hay recompensas que verificar).
     const own = app.config?.staticMode && app.wallet?.connected && app.ship.tokenId ? app.ship : { key: 'spark', level: 1 };
-    run = { runId: null, seed: (Math.random() * 2 ** 32) >>> 0, ship: own.key, shipLevel: own.level, talents: app.progress.talents, rift: riftLevel(), mode: 'normal' };
+    if (mode === 'daily') {
+      const n = dailyNumber();
+      run = { runId: null, seed: dailySeed(n), ship: DAILY_RULES.ship, shipLevel: DAILY_RULES.shipLevel, talents: {}, rift: DAILY_RULES.rift, mode: 'daily', daily: n };
+    } else {
+      run = { runId: null, seed: (Math.random() * 2 ** 32) >>> 0, ship: own.key, shipLevel: own.level, talents: app.progress.talents, rift: riftLevel(), mode: 'normal' };
+    }
     if (!practiceNoticeShown) {
       practiceNoticeShown = true;
       toast(t('toast.practice'));
@@ -371,10 +402,11 @@ async function startRun(mode = 'normal') {
   $('#hud').classList.remove('hidden');
   $('#bossBar').classList.add('hidden');
   const hudRift = $('#hudRift');
-  hudRift.textContent = t('hud.rift', { n: game.sim.rift });
-  hudRift.classList.toggle('hidden', game.sim.rift === 0);
+  hudRift.textContent = run.mode === 'daily' ? t('dc.hud', { n: run.daily }) : t('hud.rift', { n: game.sim.rift });
+  hudRift.classList.toggle('hidden', game.sim.rift === 0 && run.mode !== 'daily');
   input.setEnabled(true);
-  announce(run.mode === 'arena' ? t('ann.arena') : t('ann.survive'), run.mode === 'arena' ? t('ann.arenaSub') : t('ann.surviveSub'), 'good');
+  if (run.mode === 'daily') announce(t('ann.daily', { n: run.daily }), t('ann.dailySub'), 'good');
+  else announce(run.mode === 'arena' ? t('ann.arena') : t('ann.survive'), run.mode === 'arena' ? t('ann.arenaSub') : t('ann.surviveSub'), 'good');
   showTutorial();
 }
 
@@ -489,7 +521,15 @@ async function showGameOver(local, victory) {
   const title = victory ? t('go.titleVictory') : collapse ? t('go.titleCollapse') : retreat ? t('go.titleRetreat') : t('go.titleDead');
   $('#goKicker').textContent = victory ? t('go.victory') : t('go.kicker');
   $('#goTitle').textContent = title;
-  lastResult = { summary: local, shipKey: game.sim.shipKey, title };
+  const daily = game.run?.mode === 'daily' ? game.run.daily : null;
+  lastResult = { summary: local, shipKey: game.sim.shipKey, title: daily ? t('dc.hud', { n: daily }) : title, daily };
+  // Desafío del Día: se guarda la mejor marca de hoy en este dispositivo (también con servidor).
+  const challengeRow = () => {
+    if (!daily) return [];
+    const ch = recordChallenge(app.progress, daily, local);
+    if (ch.newBest && ch.tries > 1) setTimeout(() => toast(t('dc.newBest', { n: daily }), 'ok'), 900);
+    return [[t('dc.row', { n: daily }), fmtNum(ch.best.score), '']];
+  };
   $('#goStats').replaceChildren(
     ...[
       [t('go.time'), fmtTime(local.timeSec)],
@@ -522,8 +562,8 @@ async function showGameOver(local, victory) {
     verify.className = 'verify';
     verify.textContent = t('go.practice');
     $('#goTotalLabel').textContent = t('go.coresEarned');
-    const res = recordLocalRun(app.progress, local);
-    const rows = [[t('go.rowCores'), res.cores, '✦']];
+    const res = recordLocalRun(app.progress, local, { daily: !!daily });
+    const rows = [...challengeRow(), [t('go.rowCores'), res.cores, '✦']];
     if (res.streak) rows.push([t('go.rowStreak'), res.streak, '✦']);
     for (const m of res.missions) rows.push([t('go.rowMission', { name: tx.missionName(m.id, m.name) }), m.reward, '✦']);
     if (res.newBest && app.progress.runs > 1) rows.push([t('go.newBest'), fmtNum(local.score), '']);
@@ -541,10 +581,10 @@ async function showGameOver(local, victory) {
     const res = await api.finishRun({ runId: game.run.runId, ...game.rec.finish() });
     verify.className = 'verify ok';
     verify.textContent = t('go.verified');
-    const rows = [];
+    const rows = challengeRow();
     if (game.run.mode === 'arena') rows.push([t('go.rowArena'), fmtNum(res.summary.score), '']);
     else {
-      rows.push([t('go.rowRun', { m: res.summary.yieldMult.toFixed(2) }), res.rewards.run]);
+      if (!daily) rows.push([t('go.rowRun', { m: res.summary.yieldMult.toFixed(2) }), res.rewards.run]);
       if (res.rewards.streak) rows.push([t('go.rowStreak'), res.rewards.streak]);
       for (const m of res.rewards.missions) rows.push([t('go.rowMission', { name: tx.missionName(m.id, m.name) }), m.reward]);
     }
@@ -809,7 +849,7 @@ function frame(now) {
 // --------------------------------------------------------------------- eventos de UI
 
 $('#playBtn').addEventListener('click', () => startRun('normal'));
-$('#againBtn').addEventListener('click', () => startRun(game.run?.mode === 'arena' ? 'arena' : 'normal'));
+$('#againBtn').addEventListener('click', () => startRun(['arena', 'daily'].includes(game.run?.mode) ? game.run.mode : 'normal'));
 $('#menuBtn').addEventListener('click', backToMenu);
 $('#goTalentsBtn').addEventListener('click', () => {
   backToMenu();
@@ -874,6 +914,7 @@ langSel.addEventListener('change', () => setLang(langSel.value));
 // --------------------------------------------------------------------- arranque
 
 async function boot() {
+  setupPwa();
   newDemo();
   requestAnimationFrame(frame);
   applyCosmetics();

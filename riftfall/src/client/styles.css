@@ -766,3 +766,20 @@ button { font: inherit; color: inherit; cursor: pointer; }
   background: rgba(4, 8, 20, 0.8); color: var(--text); font-family: ui-monospace, monospace; font-size: 13px;
   user-select: text; -webkit-user-select: text;
 }
+
+/* ------------------------------------------------------------------ Desafío del Día */
+.daily-challenge {
+  display: grid; gap: 8px;
+  border-color: rgba(77, 232, 255, 0.45);
+  background: linear-gradient(120deg, rgba(77, 232, 255, 0.12), rgba(12, 15, 34, 0.82) 55%);
+}
+.daily-challenge header { margin-bottom: 0 !important; }
+.daily-challenge h3 b { color: var(--cyan); text-shadow: 0 0 10px rgba(77, 232, 255, 0.8); }
+.daily-challenge header > span { color: var(--muted); font-size: 13px; }
+.daily-challenge p { margin: 0; color: #c9d6f5; font-size: 15px; }
+.daily-challenge p b { color: var(--gold); }
+.daily-challenge .btn { justify-self: start; }
+@media (orientation: landscape) and (max-height: 520px) {
+  .daily-challenge { padding: 10px 12px; gap: 6px; }
+  .daily-challenge p { font-size: 13px; }
+}

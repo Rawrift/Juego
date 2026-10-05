@@ -6,6 +6,12 @@
   <meta name="theme-color" content="#05060f" />
   <meta name="description" content="RIFTFALL — arcade survival game in your browser. Survive the Rift, defeat the Guardians and upgrade your pilot." />
   <title>RIFTFALL</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="RIFTFALL" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M32 4 50 52 40 47 32 60 24 47 14 52Z' fill='%2305060f' stroke='%234de8ff' stroke-width='4' stroke-linejoin='round'/%3E%3C/svg%3E" />
 </head>
 <body>
@@ -49,6 +55,7 @@
         <div class="chip shard-chip hidden" id="shardChip" title="Shards" data-i18n-title="menu.shardsTitle"><i class="gem gold"></i><b id="menuShards">0</b></div>
         <div class="chip rift-chip hidden" id="riftChip" title="Saldo de $RIFT" data-i18n-title="menu.riftTitle"><i class="gem cyan"></i><b id="menuRift">0</b></div>
         <button id="walletBtn" class="btn ghost small" data-i18n="menu.connect">Conectar wallet</button>
+        <button id="installBtn" class="btn ghost small hidden" data-i18n="pwa.install">Instalar</button>
         <select id="langSel" class="lang-sel" aria-label="Idioma" data-i18n-aria="menu.lang"></select>
         <button id="muteBtn" class="icon-btn" aria-label="Sonido" data-i18n-aria="menu.sound">♪</button>
       </div>
@@ -86,6 +93,11 @@
       </div>
 
       <aside class="side-stack">
+        <section class="card daily-challenge" id="dailyCard">
+          <header><h3><span data-i18n="dc.title">DESAFÍO DEL DÍA</span> <b id="dcNum">#1</b></h3><span id="dcNext"></span></header>
+          <p id="dcInfo"></p>
+          <button class="btn gold small" id="dcPlay" data-i18n="dc.play">JUGAR DESAFÍO</button>
+        </section>
         <section class="card daily">
           <header><h3 data-i18n="menu.daily">Misiones diarias</h3><span class="streak" id="streakTag"></span></header>
           <ul id="missionList" class="missions"></ul>
