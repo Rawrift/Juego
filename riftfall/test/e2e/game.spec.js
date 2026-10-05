@@ -466,8 +466,10 @@ test('Desafío del Día sin servidor: misma semilla, reglas fijas, mejor marca y
 test('versión para portales (CrazyGames): sin cripto, revivir y x2 Núcleos con anuncios, anuncio entre partidas', async ({ browser }) => {
   const { execSync } = await import('node:child_process');
   // Copia de prueba del build del portal con el gancho de pruebas (el build real no lo tiene).
+  // Se sube como un único index.html (CrazyGames no acepta ZIP).
   execSync('npx vite build --mode portal --outDir dist-portal-e2e', { stdio: 'ignore', env: { ...process.env, VITE_E2E_HOOK: '1' } });
-  const DIST = path.resolve('dist-portal-e2e');
+  execSync('node scripts/inline-portal.mjs dist-portal-e2e dist-portal-e2e/single', { stdio: 'ignore' });
+  const DIST = path.resolve('dist-portal-e2e/single');
   const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.woff': 'font/woff', '.png': 'image/png' };
   // El portal publica el juego dentro de una subcarpeta.
   const site = http.createServer((req, res) => {
@@ -510,6 +512,8 @@ test('versión para portales (CrazyGames): sin cripto, revivir y x2 Núcleos con
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
+  // Todo va dentro del index.html: ningún pedido a otros archivos del juego.
+  page.on('response', (r) => r.url().includes('/juegos/riftfall/') && r.status() >= 400 && errors.push(`${r.status()} ${r.url()}`));
   const calls = () => page.evaluate(() => window.__cg);
   try {
     await page.goto('http://127.0.0.1:4179/juegos/riftfall/');

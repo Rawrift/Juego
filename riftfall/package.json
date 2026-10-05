@@ -29,7 +29,7 @@
     "deploy:base-testnet": "hardhat run scripts/deploy.cjs --network baseSepolia",
     "deploy:base": "hardhat run scripts/deploy.cjs --network base",
     "build:portal": "vite build --mode portal --outDir dist-portal",
-    "zip:portal": "npm run build:portal && rm -f riftfall-crazygames.zip && cd dist-portal && zip -qr ../riftfall-crazygames.zip ."
+    "build:crazygames": "npm run build:portal && node scripts/inline-portal.mjs"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^6.1.2",

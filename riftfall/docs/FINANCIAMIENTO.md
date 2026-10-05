@@ -69,7 +69,8 @@ cuando lancen los contratos reales. Ver sección 6.
 ### 3.2 CrazyGames: publicidad sin cripto
 
 CrazyGames es uno de los portales de juegos web más grandes. La versión para portales ya está hecha:
-- **Archivo:** `riftfall-crazygames.zip` (≈ 1,4 MB, 27 archivos), generado con `npm run zip:portal`.
+- **Archivo:** un solo `index.html` (≈ 0,55 MB) con todo el juego adentro, generado con `npm run build:crazygames`
+  en `dist-crazygames/`. CrazyGames no acepta archivos ZIP.
 - **Requisitos que cumple:** inglés (y español/portugués automáticos), celular y tablet, entra a jugar con 1 clic,
   sin enlaces externos, pesa muy por debajo del límite de 50 MB de descarga inicial (20 MB para aparecer en el inicio móvil).
 - **Qué cambia respecto de la web:** se ocultan la wallet, el token, la tienda y el Pase Fundador, para cumplir las
@@ -79,13 +80,17 @@ CrazyGames es uno de los portales de juegos web más grandes. La versión para p
 
 **Pasos (los haces tú, porque es tu cuenta):**
 1. Crea la cuenta de desarrollador en **https://developer.crazygames.com** y entra a *Submit a game*.
-2. Sube `riftfall-crazygames.zip`, carga capturas (hay en `docs/img/`), el título **RIFTFALL** y la descripción.
+2. Arrastra el `index.html` a la zona de subida. Después completa el título **RIFTFALL**, la descripción y las capturas
+   (hay en `docs/img/`).
+   - En *Game engine* elige **HTML5**.
+   - En *Does your game save progress?* elige **Yes, using the Data Module from the CrazyGames SDK**: el progreso
+     se guarda en la cuenta del jugador.
 3. **Basic Launch:** el juego sale para una audiencia limitada entre 7 y 21 días, **sin ingresos**, para medir
    si la gente juega y vuelve.
 4. **Full Launch:** si los números dan, te invitan al lanzamiento global y se activan los anuncios. CrazyGames paga una
    parte de lo que generan los anuncios, todos los meses, por Tipalti, a partir de €100 acumulados.
 
-Para regenerar el ZIP después de cambios: `npm run zip:portal`.
+Para regenerar el archivo después de cambios: `npm run build:crazygames`.
 
 ### 3.3 Otras vías (para más adelante)
 
@@ -168,7 +173,7 @@ They also feel like spreadsheets: players stay for the yield, not the game, and 
 
 1. **Esta semana:** comparte el juego y el Pase Fundador con amigos y grupos de cripto y de gamers. Con el primer pago en BNB
    ya tienes el gas del lanzamiento.
-2. **En paralelo:** crea la cuenta de CrazyGames y sube el ZIP. El Basic Launch dura 7–21 días y te da números reales.
+2. **En paralelo:** crea la cuenta de CrazyGames y sube el `index.html`. El Basic Launch dura 7–21 días y te da números reales.
 3. **Con el primer BNB:** lanza el token y los contratos en la red principal con el Lanzador (ver README).
 4. **Con 2–4 semanas de números:** postula a BNB Chain Grants con el borrador de arriba. Después, a MVB.
 

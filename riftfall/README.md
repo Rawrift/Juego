@@ -29,7 +29,8 @@ Las naves son **NFT** que se compran, se forjan y se revenden. En la **Arena** s
 - **Cobra antes del token:**
   - **Pase Fundador:** se paga en USDT o BNB en la red principal, directo a la wallet del creador, y el juego verifica
     el pago en la cadena. Da beneficios cosméticos.
-  - **Versión para portales** (CrazyGames) con anuncios opcionales, sin cripto: `npm run zip:portal`.
+  - **Versión para portales** (CrazyGames) con anuncios opcionales, sin cripto y con el progreso guardado en la cuenta
+    del jugador: `npm run build:crazygames` genera un único `dist-crazygames/index.html`.
   - Guía completa, grants de BNB Chain y borrador de postulación: [`docs/FINANCIAMIENTO.md`](docs/FINANCIAMIENTO.md).
 
 ## Inicio rápido (todo en local, con blockchain)
@@ -88,7 +89,7 @@ riftfall/
 | `npm run server` / `npm start` | Solo el servidor (lee `.env`) |
 | `npm run dev` | Cliente con recarga en caliente (proxy `/api` → 8787) |
 | `npm run build` | Compila el cliente en `dist/` |
-| `npm run zip:portal` | Versión para CrazyGames sin cripto, empaquetada en `riftfall-crazygames.zip` |
+| `npm run build:crazygames` | Versión para CrazyGames sin cripto, en un único `dist-crazygames/index.html` |
 | `npm test` | Tests de simulación y servidor |
 | `npm run test:contracts` | Tests de los contratos (26) |
 | `npm run test:integration` | Flujo on-chain completo contra un nodo Hardhat |
