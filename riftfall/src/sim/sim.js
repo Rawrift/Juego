@@ -15,6 +15,9 @@ import {
   ENEMIES,
   ENEMY_ORDER,
   BASE_STATS,
+  TALENTS,
+  TALENT_ORDER,
+  sanitizeTalents,
   xpToNext,
   shipYield,
   weaponStats
@@ -40,7 +43,7 @@ const MAX_GEMS = 300;
 
 // ------------------------------------------------------------------- creación
 
-export function createSim({ seed, ship = 'spark', shipLevel = 1 } = {}) {
+export function createSim({ seed, ship = 'spark', shipLevel = 1, talents = null } = {}) {
   const shipKey = SHIPS[ship] ? ship : 'spark';
   const s = {
     seed: seed >>> 0,
@@ -49,6 +52,7 @@ export function createSim({ seed, ship = 'spark', shipLevel = 1 } = {}) {
     phase: 'running',
     shipKey,
     shipLevel: shipKey === 'spark' ? 1 : clamp(shipLevel | 0, 1, 10),
+    talents: sanitizeTalents(talents),
     player: {
       x: 0, y: 0, px: 0, py: 0, fx: 1, fy: 0, r: 15,
       hp: 0, invuln: 0, level: 1, xp: 0, xpNext: xpToNext(1),
@@ -100,6 +104,7 @@ function recomputeStats(s) {
   st.might = st.might * ship.might + 0.02 * (s.shipLevel - 1);
   st.crit += ship.crit;
   st.cooldown *= ship.cooldown;
+  for (const id of TALENT_ORDER) if (s.talents[id]) TALENTS[id].apply(st, s.talents[id]);
   for (const p of s.player.passives) PASSIVES[p.id].apply(st, p.level);
   const old = s.player.stats;
   if (old && st.maxHp > old.maxHp) s.player.hp += st.maxHp - old.maxHp;

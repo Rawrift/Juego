@@ -472,7 +472,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .status.paid { background: rgba(77, 255, 154, 0.15); color: var(--green); }
 .status.expired { background: rgba(255, 77, 106, 0.15); color: var(--red); }
 
-#toasts { position: fixed; right: 16px; bottom: calc(16px + var(--safe-bottom)); display: grid; gap: 8px; z-index: 50; max-width: min(380px, calc(100vw - 32px)); }
+#toasts { position: fixed; right: 16px; bottom: calc(16px + var(--safe-bottom)); display: grid; gap: 8px; z-index: 50; max-width: min(380px, calc(100vw - 32px)); pointer-events: none; }
 .toast {
   padding: 12px 16px; border-radius: 12px;
   background: rgba(12, 15, 34, 0.95); border: 1px solid var(--line-strong);
@@ -540,3 +540,46 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 #tutorial b { color: var(--cyan); }
 @media (max-width: 520px) { #combo { top: calc(70px + var(--safe-top)); } #combo b { font-size: 26px; } }
+
+/* ------------------------------------------------------------------ talentos, idioma y compartir */
+.core-chip { cursor: pointer; }
+.core-ico { font-style: normal; color: var(--gold); text-shadow: 0 0 10px var(--gold); font-size: 14px; }
+.core-chip b { color: #ffe9a3; }
+.lang-sel {
+  appearance: none; -webkit-appearance: none;
+  padding: 6px 10px; border-radius: 999px;
+  background: rgba(10, 14, 32, 0.7); color: var(--cyan);
+  border: 1px solid var(--line); font-family: var(--display); font-size: 12px; letter-spacing: 0.08em;
+  max-width: 120px; cursor: pointer;
+}
+.lang-sel:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.nav-grid button { position: relative; }
+.talents-nav i { color: var(--gold) !important; text-shadow: 0 0 12px var(--gold) !important; }
+.dot { position: absolute; top: 8px; right: 10px; width: 10px; height: 10px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 10px var(--gold); animation: dotPulse 1.4s ease-in-out infinite; }
+@keyframes dotPulse { 50% { transform: scale(1.35); opacity: 0.7; } }
+
+.talent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.talent {
+  border-radius: 16px; padding: 14px;
+  background: linear-gradient(180deg, rgba(25, 30, 66, 0.9), rgba(10, 12, 28, 0.9));
+  border: 1px solid var(--line);
+  display: grid; gap: 6px; align-content: start; justify-items: start;
+}
+.talent .ico { width: 44px; height: 44px; }
+.talent b { font-family: var(--display); font-size: 15px; letter-spacing: 0.06em; color: var(--accent); }
+.talent .meta { font-size: 14px; color: #c4cff0; }
+.talent .pips { display: flex; gap: 4px; margin: 2px 0 4px; }
+.talent .pips i { width: 18px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.1); }
+.talent .pips i.on { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+.talent.maxed { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 10px 40px -18px var(--accent); }
+.talent .btn { width: 100%; white-space: nowrap; padding: 9px 6px; letter-spacing: 0.04em; }
+
+.go-actions { flex-direction: column; align-items: stretch; }
+.go-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.go-row .btn { flex: 1; min-width: 120px; }
+#goUpgradeHint { margin: 2px 0 0; color: var(--gold); text-align: center; }
+@media (max-width: 520px) {
+  .lang-sel { max-width: 104px; padding: 6px 8px; }
+  .talent-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .talent { padding: 12px; }
+}

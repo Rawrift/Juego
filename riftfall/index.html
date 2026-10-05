@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
   <meta name="theme-color" content="#05060f" />
-  <meta name="description" content="RIFTFALL — sobrevive al Rift, gana Shards y canjéalos por $RIFT." />
+  <meta name="description" content="RIFTFALL — arcade survival game in your browser. Survive the Rift, defeat the Guardians and upgrade your pilot." />
   <title>RIFTFALL</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M32 4 50 52 40 47 32 60 24 47 14 52Z' fill='%2305060f' stroke='%234de8ff' stroke-width='4' stroke-linejoin='round'/%3E%3C/svg%3E" />
 </head>
@@ -18,22 +18,22 @@
     <div class="xpbar"><i id="xpFill"></i><span id="levelTag">NV 1</span></div>
     <div class="hud-top">
       <div class="hud-hp">
-        <div class="hp-label"><b>CASCO</b><span id="hpText">100</span></div>
+        <div class="hp-label"><b data-i18n="hud.hull">CASCO</b><span id="hpText">100</span></div>
         <div class="hpbar"><i id="hpFill"></i><em id="hpGhost"></em></div>
       </div>
       <div class="hud-time" id="timer">00:00</div>
       <div class="hud-stats">
-        <div><small>BAJAS</small><b id="killCount">0</b></div>
-        <div class="shard-stat"><small>SHARDS</small><b id="shardCount">0</b></div>
+        <div><small data-i18n="hud.kills">BAJAS</small><b id="killCount">0</b></div>
+        <div class="shard-stat"><small data-i18n="hud.shards">SHARDS</small><b id="shardCount">0</b></div>
       </div>
     </div>
     <div id="bossBar" class="hidden">
-      <span>GUARDIÁN DEL RIFT</span>
+      <span data-i18n="hud.boss">GUARDIÁN DEL RIFT</span>
       <div class="bossbar"><i id="bossFill"></i></div>
     </div>
     <div id="loadout"></div>
-    <button id="pauseBtn" class="icon-btn" aria-label="Pausa">❚❚</button>
-    <div id="combo" class="hidden"><b>x0</b><small>COMBO</small></div>
+    <button id="pauseBtn" class="icon-btn" aria-label="Pausa" data-i18n-aria="hud.pause">❚❚</button>
+    <div id="combo" class="hidden"><b>x0</b><small data-i18n="hud.combo">COMBO</small></div>
     <div id="announce"></div>
     <div id="tutorial" class="hidden"></div>
     <div id="joystick" class="hidden"><i></i></div>
@@ -44,53 +44,55 @@
     <header class="topbar">
       <div class="brand-mini"><span class="logo-glyph"></span>RIFTFALL</div>
       <div class="chips">
-        <div class="chip shard-chip" title="Shards (moneda del juego)"><i class="gem gold"></i><b id="menuShards">0</b></div>
-        <div class="chip rift-chip hidden" id="riftChip" title="Saldo de $RIFT"><i class="gem cyan"></i><b id="menuRift">0</b></div>
-        <button id="walletBtn" class="btn ghost small">Conectar wallet</button>
-        <button id="muteBtn" class="icon-btn" aria-label="Sonido">♪</button>
+        <div class="chip core-chip" id="coreChip" data-open="profile" title="Núcleos" data-i18n-title="menu.coresTitle"><i class="core-ico">✦</i><b id="menuCores">0</b></div>
+        <div class="chip shard-chip hidden" id="shardChip" title="Shards" data-i18n-title="menu.shardsTitle"><i class="gem gold"></i><b id="menuShards">0</b></div>
+        <div class="chip rift-chip hidden" id="riftChip" title="Saldo de $RIFT" data-i18n-title="menu.riftTitle"><i class="gem cyan"></i><b id="menuRift">0</b></div>
+        <button id="walletBtn" class="btn ghost small" data-i18n="menu.connect">Conectar wallet</button>
+        <select id="langSel" class="lang-sel" aria-label="Idioma" data-i18n-aria="menu.lang"></select>
+        <button id="muteBtn" class="icon-btn" aria-label="Sonido" data-i18n-aria="menu.sound">♪</button>
       </div>
     </header>
 
     <main class="menu-main">
       <div class="title-block">
-        <div class="eyebrow">TEMPORADA 1 · PROOF OF PLAY</div>
+        <div class="eyebrow" data-i18n="menu.season">TEMPORADA 1 · PROOF OF PLAY</div>
         <h1 class="logo">RIFT<span>FALL</span></h1>
-        <p class="tagline">Sobrevive a la grieta. Derrota a los Guardianes. Gana <b>Shards</b> y canjéalos por <b>$RIFT</b>.</p>
+        <p class="tagline" data-i18n-html="menu.tagline"></p>
         <div class="ship-pick" id="shipPick">
           <canvas id="shipPreview" width="160" height="160"></canvas>
           <div>
-            <small>NAVE SELECCIONADA</small>
+            <small data-i18n="menu.selectedShip">NAVE SELECCIONADA</small>
             <b id="shipName">SPARK</b>
-            <span id="shipDesc">Interceptor de serie.</span>
-            <em id="shipYield">Recompensa x1.00</em>
+            <span id="shipDesc"></span>
+            <em id="shipYield"></em>
           </div>
-          <button class="btn ghost small" data-open="hangar">Cambiar</button>
+          <button class="btn ghost small" data-open="hangar" data-i18n="menu.change">Cambiar</button>
         </div>
         <div class="cta-row">
-          <button id="playBtn" class="btn primary big">JUGAR</button>
-          <button class="btn secondary big" data-open="arena">ARENA</button>
+          <button id="playBtn" class="btn primary big" data-i18n="menu.play">JUGAR</button>
+          <button class="btn secondary big" data-open="arena" data-i18n="menu.arena">ARENA</button>
         </div>
-        <p class="hint" id="controlsHint">WASD / flechas para moverte · las armas disparan solas · 1-2-3 para elegir mejoras</p>
+        <p class="hint" id="controlsHint"></p>
       </div>
 
       <aside class="side-stack">
         <section class="card daily">
-          <header><h3>Misiones diarias</h3><span class="streak" id="streakTag">Racha 0🔥</span></header>
+          <header><h3 data-i18n="menu.daily">Misiones diarias</h3><span class="streak" id="streakTag"></span></header>
           <ul id="missionList" class="missions"></ul>
         </section>
         <nav class="nav-grid">
-          <button data-open="hangar"><i>⬢</i>Hangar</button>
-          <button data-open="market"><i>⇄</i>Mercado</button>
-          <button data-open="ranking"><i>♛</i>Ranking</button>
-          <button data-open="vault"><i>◈</i>Canjear</button>
-          <button data-open="economy"><i>∑</i>Economía</button>
-          <button data-open="profile"><i>☺</i>Piloto</button>
+          <button data-open="hangar"><i>⬢</i><span data-i18n="nav.hangar">Hangar</span></button>
+          <button data-open="market"><i>⇄</i><span data-i18n="nav.market">Mercado</span></button>
+          <button data-open="ranking"><i>♛</i><span data-i18n="nav.ranking">Ranking</span></button>
+          <button data-open="vault"><i>◈</i><span data-i18n="nav.vault">Canjear</span></button>
+          <button data-open="economy"><i>∑</i><span data-i18n="nav.economy">Economía</span></button>
+          <button data-open="profile" class="talents-nav"><i>✦</i><span data-i18n="nav.talents">Talentos</span><em id="talentDot" class="dot hidden"></em></button>
         </nav>
       </aside>
     </main>
     <footer class="menu-foot">
-      <span id="netStatus">Conectando…</span>
-      <span>Cada partida se re-simula en el servidor antes de pagar recompensas.</span>
+      <span id="netStatus" data-i18n="net.connecting">Conectando…</span>
+      <span data-i18n="menu.footer">Cada partida se re-simula antes de pagar recompensas.</span>
     </footer>
   </div>
 
@@ -99,7 +101,7 @@
     <div class="sheet-card">
       <header>
         <div><small id="sheetKicker"></small><h2 id="sheetTitle"></h2></div>
-        <button class="icon-btn" id="sheetClose" aria-label="Cerrar">✕</button>
+        <button class="icon-btn" id="sheetClose" aria-label="Cerrar" data-i18n-aria="sheet.close">✕</button>
       </header>
       <div id="sheetBody" class="sheet-body"></div>
     </div>
@@ -108,37 +110,42 @@
   <!-- ===================================================== SUBIDA DE NIVEL -->
   <div id="levelup" class="overlay hidden">
     <div class="levelup-inner">
-      <div class="eyebrow" id="levelupKicker">SUBISTE DE NIVEL</div>
-      <h2 id="levelupTitle">NIVEL 2</h2>
+      <div class="eyebrow" id="levelupKicker"></div>
+      <h2 id="levelupTitle"></h2>
       <div id="choices" class="choices"></div>
-      <p class="hint">Elige con clic, toque o las teclas 1 · 2 · 3</p>
+      <p class="hint" data-i18n="lvl.hint">Elige con clic, toque o las teclas 1 · 2 · 3</p>
     </div>
   </div>
 
   <!-- ===================================================== PAUSA -->
   <div id="pause" class="overlay hidden">
     <div class="panel-small">
-      <h2>PAUSA</h2>
+      <h2 data-i18n="pause.title">PAUSA</h2>
       <div id="pauseLoadout" class="pause-loadout"></div>
-      <button id="resumeBtn" class="btn primary">Continuar</button>
-      <button id="quitBtn" class="btn ghost">Terminar partida</button>
+      <button id="resumeBtn" class="btn primary" data-i18n="pause.resume">Continuar</button>
+      <button id="quitBtn" class="btn ghost" data-i18n="pause.quit">Terminar partida</button>
     </div>
   </div>
 
   <!-- ===================================================== FIN DE PARTIDA -->
   <div id="gameover" class="overlay hidden">
     <div class="gameover-card">
-      <div class="eyebrow" id="goKicker">FIN DE LA PARTIDA</div>
-      <h2 id="goTitle">RIFT COLAPSADO</h2>
+      <div class="eyebrow" id="goKicker"></div>
+      <h2 id="goTitle"></h2>
       <div class="go-stats" id="goStats"></div>
       <div class="go-rewards">
-        <div class="verify" id="goVerify"><span class="spinner"></span> Verificando partida en el servidor…</div>
+        <div class="verify" id="goVerify"></div>
         <ul id="goRewardList"></ul>
-        <div class="go-total"><small>SHARDS GANADOS</small><b id="goTotal">0</b></div>
+        <div class="go-total"><small id="goTotalLabel"></small><b id="goTotal">0</b></div>
       </div>
       <div class="go-actions">
-        <button id="againBtn" class="btn primary big">JUGAR OTRA VEZ</button>
-        <button id="menuBtn" class="btn ghost">Menú</button>
+        <button id="againBtn" class="btn primary big" data-i18n="go.again">JUGAR OTRA VEZ</button>
+        <div class="go-row">
+          <button id="shareBtn" class="btn secondary" data-i18n="go.share">Compartir</button>
+          <button id="goTalentsBtn" class="btn gold" data-open="profile"><span data-i18n="go.talents">Talentos</span> ✦</button>
+          <button id="menuBtn" class="btn ghost" data-i18n="go.menu">Menú</button>
+        </div>
+        <p class="hint hidden" id="goUpgradeHint" data-i18n="go.canUpgrade"></p>
       </div>
     </div>
   </div>

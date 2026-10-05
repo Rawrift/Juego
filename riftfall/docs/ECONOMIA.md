@@ -41,6 +41,13 @@ de liquidez → recién entonces $RIFT tiene precio de mercado. Las proyecciones
 | **Shards ◆** | Servidor (off-chain) | Jugando: jefes, élites, tiempo sobrevivido, victoria, misiones diarias, racha | Se canjean por $RIFT (con límites) |
 | **$RIFT** | Blockchain (ERC-20) | Canjeando Shards o comprando en un DEX | Forja, naves, Arena, Mercado |
 | **Naves NFT** | Blockchain (ERC-721) | Comprándolas en BNB/RIFT o en el Mercado | Arma inicial, stats y multiplicador de Shards (x1,10 a x1,77) |
+| **Núcleos ✦** | Servidor, o el dispositivo en modo práctica | Jugando: bajas, tiempo, jefes, victoria, Shards recogidos; misiones y racha en modo práctica | Talentos permanentes del piloto. **No se canjean por tokens** |
+
+Los **Núcleos** son la moneda de progreso, separada de la economía del token a propósito. Dan a todos los jugadores, incluso a
+los que nunca pagan, una razón para volver cada día, sin tocar la emisión de $RIFT. Los talentos suben hasta +30% de vida,
++20% de daño y otras mejoras, y **no se aplican en la Arena**. Sin servidor publicado, el juego funciona en modo práctica y
+guarda Núcleos, talentos, misiones y racha en el dispositivo; cuando el servidor esté en línea, el progreso verificado vive en
+el servidor y el replay aplica los talentos que el servidor tiene registrados.
 
 Flujo completo:
 

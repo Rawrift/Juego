@@ -645,3 +645,13 @@ export function iconCanvas(id, color, px = 64) {
     return c;
   });
 }
+
+/** Copia independiente de un ícono para insertarla en el DOM (el caché comparte un solo canvas por ícono). */
+export function iconCopy(id, color, px = 64) {
+  const src = iconCanvas(id, color, px);
+  const c = document.createElement('canvas');
+  c.width = src.width;
+  c.height = src.height;
+  c.getContext('2d').drawImage(src, 0, 0);
+  return c;
+}

@@ -11,7 +11,10 @@ Las naves son **NFT** que se compran, se forjan y se revenden. En la **Arena** s
 | ![Partida](docs/img/gameplay.jpg) | ![Jefe](docs/img/boss.jpg) | ![Móvil](docs/img/mobile.jpg) |
 
 - **Jugable en cualquier navegador** (escritorio y móvil con joystick táctil). No requiere instalar nada; la wallet solo se pide para cobrar.
+- **En español, inglés y portugués:** se elige solo según el idioma del celular (o con `?lang=es|en|pt`) y se puede cambiar desde el menú.
 - **Adictivo por diseño:** partidas de 3 a 10 minutos, 6 armas y 11 mejoras combinables, **6 evoluciones de armas**, 3 jefes que sueltan **cofres**, **combos**, tutorial, misiones diarias, racha de días, ranking y torneos.
+- **Progreso permanente:** **talentos del piloto** que se compran con **Núcleos ✦** (moneda de progreso que no se canjea por tokens). Sin servidor, el progreso, las misiones y la racha se guardan en el dispositivo.
+- **Viral:** al terminar, el botón **Compartir** genera una imagen con tu resultado y la manda por WhatsApp, Instagram o lo que tenga el celular.
 - **Economía con anti-trampas real ("Proof of Play"):** el servidor re-simula cada partida tick a tick antes de pagar.
 - **Ingresos para el creador:** venta de naves, comisiones de Forja, Mercado y Arena, regalías y liquidez. Detalle en [`docs/ECONOMIA.md`](docs/ECONOMIA.md).
 
@@ -83,8 +86,10 @@ riftfall/
 
 La forma más simple, sin computadora y sin compartir claves:
 
-1. Publica el cliente (`npm run build` → carpeta `dist/`) en un hosting estático gratuito.
-2. Abre `https://TU-SITIO/lanzar.html` desde el navegador de tu wallet (MetaMask, Trust Wallet o Binance Web3 Wallet).
+1. Compila el Lanzador con `npm run build:launcher` (carpeta `dist-launcher/`) y publícalo en un sitio **aparte del juego**.
+   No va en el build normal: una página que crea contratos y mueve tokens en el mismo dominio que el juego hace que
+   los escáneres de las wallets (MetaMask, Blockaid) marquen todo el sitio como sospechoso.
+2. Abre `https://SITIO-DEL-LANZADOR/lanzar.html` desde el navegador de tu wallet (MetaMask, Trust Wallet o Binance Web3 Wallet).
 3. Elige **BNB Chain Testnet** para probar o **BNB Chain** para la red real, pon nombre y símbolo a tu token y toca **Crear**.
    Son 8 confirmaciones. En la red real cuestan en total **≈ 0,0005 BNB (menos de $1)**. Si la app se cierra, continúa donde quedó.
 4. Al terminar: eres dueño de todos los contratos, la tesorería es tu wallet y tienes el 45% del suministro + 15% en vesting.

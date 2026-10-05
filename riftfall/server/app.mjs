@@ -18,7 +18,7 @@ import { openDb } from './db.mjs';
 import { createReplayPool } from './replay-pool.mjs';
 import { initChain } from './chain.mjs';
 import { MISSIONS, dayKey, previousDayKey, streakBonus, freshDaily, applyRunToDaily, missionView } from './economy.mjs';
-import { SHIPS, SHIP_BY_CLASS, TICK_RATE, MAX_INPUT_NUMBERS } from '../src/sim/index.js';
+import { SHIPS, SHIP_BY_CLASS, TICK_RATE, MAX_INPUT_NUMBERS, TALENTS, TALENT_MAX, talentCost, sanitizeTalents, coresFromSummary } from '../src/sim/index.js';
 import { chainConfigFromDeployment } from '../src/shared/networks.js';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -109,6 +109,8 @@ export async function createApp(options = {}) {
       createdAt: Date.now(),
       shards: 0,
       lifetimeShards: 0,
+      cores: 0,
+      talents: {},
       runs: 0,
       bestScore: 0,
       bestTime: 0,
@@ -182,6 +184,8 @@ export async function createApp(options = {}) {
       wallet: p.wallet,
       shards: p.shards,
       lifetimeShards: p.lifetimeShards,
+      cores: p.cores ?? 0,
+      talents: sanitizeTalents(p.talents),
       runs: p.runs,
       bestScore: p.bestScore,
       bestTime: p.bestTime,
@@ -355,10 +359,12 @@ export async function createApp(options = {}) {
       }
       const id = `r_${crypto.randomBytes(10).toString('hex')}`;
       const seed = crypto.randomBytes(4).readUInt32LE(0);
-      D.runs[id] = { id, playerId: p.id, mode, seed, ...ship, tournamentId, startedAt: Date.now(), status: 'active' };
+      // En la Arena no hay talentos: todos compiten en igualdad.
+      const talents = mode === 'arena' ? {} : sanitizeTalents(p.talents);
+      D.runs[id] = { id, playerId: p.id, mode, seed, ...ship, talents, tournamentId, startedAt: Date.now(), status: 'active' };
       D.stats.totalRuns++;
       db.save();
-      return { runId: id, seed, ship: ship.ship, shipLevel: ship.shipLevel, mode, tournamentId };
+      return { runId: id, seed, ship: ship.ship, shipLevel: ship.shipLevel, talents, mode, tournamentId };
     },
 
     'POST /api/run/finish': async ({ ip, req, body }) => {
@@ -371,7 +377,7 @@ export async function createApp(options = {}) {
       if (!Array.isArray(inputs) || inputs.length > MAX_INPUT_NUMBERS) throw bad('Entradas inválidas');
       run.status = 'verifying';
 
-      const result = await pool.run({ seed: run.seed, ship: run.ship, shipLevel: run.shipLevel, inputs, choices });
+      const result = await pool.run({ seed: run.seed, ship: run.ship, shipLevel: run.shipLevel, talents: run.talents, inputs, choices });
       if (!result.ok) {
         run.status = 'rejected';
         run.reason = result.error;
@@ -416,6 +422,8 @@ export async function createApp(options = {}) {
         }
       }
       const total = rewards.run + rewards.streak + rewards.missions.reduce((a, m) => a + m.reward, 0);
+      const cores = coresFromSummary(sum);
+      p.cores = (p.cores ?? 0) + cores;
       p.shards += total;
       p.lifetimeShards += total;
       D.stats.shardsIssued += total;
@@ -434,7 +442,7 @@ export async function createApp(options = {}) {
       }
       pruneReplays();
       db.save();
-      return { summary: sum, rewards, totalShards: total, profile: profileView(p) };
+      return { summary: sum, rewards, totalShards: total, cores, profile: profileView(p) };
     },
 
     'GET /api/leaderboard': async ({ url }) => {
@@ -451,11 +459,29 @@ export async function createApp(options = {}) {
         seed: run.seed,
         ship: run.ship,
         shipLevel: run.shipLevel,
+        talents: run.talents ?? {},
         inputs: run.inputs,
         choices: run.choices,
         summary: run.summary,
         hash: run.hash
       };
+    },
+
+    'POST /api/talents/upgrade': async ({ ip, req, body }) => {
+      rateLimit(ip, 'talent', 60);
+      const p = auth(req);
+      const id = String(body.id ?? '');
+      if (!TALENTS[id]) throw bad('Talento desconocido');
+      const talents = sanitizeTalents(p.talents);
+      const next = (talents[id] ?? 0) + 1;
+      if (next > TALENT_MAX) throw bad('Ese talento ya está al máximo');
+      const cost = talentCost(next);
+      if ((p.cores ?? 0) < cost) throw bad('No tienes Núcleos suficientes');
+      p.cores -= cost;
+      talents[id] = next;
+      p.talents = talents;
+      db.save();
+      return { profile: profileView(p) };
     },
 
     'POST /api/claim': async ({ ip, req, body }) => {

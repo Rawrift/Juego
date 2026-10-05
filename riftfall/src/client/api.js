@@ -82,6 +82,7 @@ export function createApi(base = '') {
     startRun: (body) => call('POST', '/api/run/start', body),
     finishRun: (body) => call('POST', '/api/run/finish', body),
     leaderboard: (scope) => call('GET', `/api/leaderboard?scope=${scope}`),
+    upgradeTalent: (id) => call('POST', '/api/talents/upgrade', { id }),
     claim: (shards) => call('POST', '/api/claim', { shards }),
     economy: () => call('GET', '/api/economy'),
     arena: () => call('GET', '/api/arena'),

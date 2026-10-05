@@ -52,7 +52,7 @@ async function injectWallet(page, rejectAt) {
 test('Lanzador: crea token y contratos desde la wallet, reanuda tras un rechazo y administra', async ({ browser }) => {
   const errors = [];
   // Primera sesión: la wallet rechaza la 4ª transacción (como si el usuario cerrara la app).
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'es-ES' });
   let page = await ctx.newPage();
   page.on('pageerror', (e) => errors.push(e.message));
   await injectWallet(page, 4);
@@ -101,6 +101,8 @@ test('Lanzador: crea token y contratos desde la wallet, reanuda tras un rechazo 
   await withdraw.click();
   await expect(page.locator('.toast.ok', { hasText: 'Ventas cobradas' })).toBeVisible({ timeout: 30_000 });
   expect(await provider.getBalance(dep.contracts.RiftShips)).toBe(0n);
+  // Esperar a que Administración se vuelva a dibujar con el saldo en cero antes de escribir.
+  await expect(page.locator('#adminBody button', { hasText: 'Cobrar 0' })).toBeDisabled({ timeout: 20_000 });
 
   // Registrar la dirección del servidor como firmante de recompensas y operador de Arena.
   await page.fill('#adminBody input', SERVER);

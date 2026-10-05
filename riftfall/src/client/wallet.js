@@ -3,6 +3,7 @@
 
 import { BrowserProvider, JsonRpcProvider, Contract, formatEther } from 'ethers';
 import { TOKEN_ABI, VAULT_ABI, SHIPS_ABI, MARKET_ABI, ARENA_ABI } from '../shared/abis.js';
+import { t } from './i18n.js';
 
 const ETH = { name: 'Ether', symbol: 'ETH', decimals: 18 };
 const CHAINS = {
@@ -38,9 +39,9 @@ const CHAINS = {
 };
 
 export function explainError(err) {
-  if (!err) return 'Error desconocido';
-  if (err.code === 'ACTION_REJECTED' || err.code === 4001 || err?.info?.error?.code === 4001) return 'Operación cancelada en la wallet';
-  if (err.code === 'INSUFFICIENT_FUNDS') return 'Fondos insuficientes para pagar la operación y el gas';
+  if (!err) return t('err.unknown');
+  if (err.code === 'ACTION_REJECTED' || err.code === 4001 || err?.info?.error?.code === 4001) return t('err.rejected');
+  if (err.code === 'INSUFFICIENT_FUNDS') return t('err.funds');
   const reason = err.reason || err.revert?.args?.[0] || err.shortMessage || err.message;
   return String(reason).replace(/^execution reverted:?\s*/i, '').slice(0, 180);
 }
@@ -65,7 +66,7 @@ export function createWallet(chainCfg) {
   });
   const R = () => contracts(reader());
   const W = () => {
-    if (!signer) throw new Error('Conecta tu wallet primero');
+    if (!signer) throw new Error(t('err.connectFirst'));
     return contracts(signer);
   };
 
@@ -103,7 +104,7 @@ export function createWallet(chainCfg) {
     },
 
     async connect() {
-      if (!window.ethereum) throw new Error('No se detectó ninguna wallet. Instala MetaMask, Rabby o Coinbase Wallet.');
+      if (!window.ethereum) throw new Error(t('err.noWallet'));
       browser = new BrowserProvider(window.ethereum, 'any');
       await browser.send('eth_requestAccounts', []);
       await ensureChain();

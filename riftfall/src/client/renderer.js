@@ -12,6 +12,7 @@ import {
   missileSprite,
   drawShipShape
 } from './sprites.js';
+import { t } from './i18n.js';
 
 const MAX_PARTICLES = 1600;
 const MAX_TEXTS = 70;
@@ -228,7 +229,7 @@ export function createRenderer(canvas) {
           text(p.x, p.y - 30, `+${ev.v} ◆`, '#ffc94d', 20, 1.1);
         } else if (ev.kind === 'heal') {
           ring(p.x, p.y, 10, 80, '#4dff9a', 0.5, 5);
-          text(p.x, p.y - 30, '+VIDA', '#4dff9a', 18, 1);
+          text(p.x, p.y - 30, t('fx.heal'), '#4dff9a', 18, 1);
         } else if (ev.kind === 'bomb') {
           ring(p.x, p.y, 20, 900, '#ffffff', 0.7, 16);
           R.flash = 1;
@@ -262,7 +263,7 @@ export function createRenderer(canvas) {
       }
       case 'combo': {
         const p = sim.player;
-        text(p.x, p.y - 60, `COMBO x${ev.n}!`, '#ffd23d', 26, 1.3);
+        text(p.x, p.y - 60, t('fx.combo', { n: ev.n }), '#ffd23d', 26, 1.3);
         ring(p.x, p.y, 20, 160, '#ff9d2e', 0.4, 5);
         break;
       }

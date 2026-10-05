@@ -208,6 +208,50 @@ export const PASSIVES = {
 export const PASSIVE_ORDER = ['might', 'haste', 'thrust', 'magnet', 'hull', 'repair', 'crit', 'area', 'multi', 'growth', 'fortune'];
 
 /**
+ * Talentos del piloto: progreso permanente entre partidas. Se compran con Núcleos (moneda de
+ * progreso que no se canjea por tokens) y en la Arena no se aplican, para que gane la habilidad.
+ */
+export const TALENTS = {
+  hull: { name: 'Casco Reforzado', desc: '+6% vida máxima', color: '#4dff9a', apply: (st, lv) => { st.maxHp *= 1 + 0.06 * lv; } },
+  power: { name: 'Calibración', desc: '+4% daño', color: '#ff4dd2', apply: (st, lv) => { st.might += 0.04 * lv; } },
+  reflex: { name: 'Reflejos', desc: '-3% recarga', color: '#4de8ff', apply: (st, lv) => { st.cooldown *= 1 - 0.03 * lv; } },
+  engines: { name: 'Motores Afinados', desc: '+3% velocidad', color: '#b36bff', apply: (st, lv) => { st.speed *= 1 + 0.03 * lv; } },
+  magnet: { name: 'Imán de Cristales', desc: '+12% radio de recolección', color: '#ffc94d', apply: (st, lv) => { st.magnet *= 1 + 0.12 * lv; } },
+  memory: { name: 'Memoria de Combate', desc: '+4% experiencia', color: '#7fe9ff', apply: (st, lv) => { st.xpGain *= 1 + 0.04 * lv; } }
+};
+
+export const TALENT_ORDER = ['hull', 'power', 'reflex', 'engines', 'magnet', 'memory'];
+export const TALENT_MAX = 5;
+/** Costo en Núcleos de subir un talento al nivel `level` (1..5). */
+export const TALENT_COST = [40, 90, 160, 250, 360];
+
+export function talentCost(level) {
+  return TALENT_COST[level - 1] ?? Infinity;
+}
+
+/** Normaliza talentos que vienen de afuera (cliente, base de datos): ids conocidos y niveles 0..5. */
+export function sanitizeTalents(t) {
+  const out = {};
+  if (!t || typeof t !== 'object') return out;
+  for (const id of TALENT_ORDER) {
+    const lv = Number(t[id]);
+    if (Number.isInteger(lv) && lv > 0) out[id] = Math.min(TALENT_MAX, lv);
+  }
+  return out;
+}
+
+/** Núcleos que da una partida (resumen de `summarize`): bajas, tiempo, jefes, victoria y Shards recogidos. */
+export function coresFromSummary(sum) {
+  return (
+    Math.floor(sum.kills / 20) +
+    Math.floor(sum.timeSec / 15) +
+    sum.bossesKilled * 20 +
+    (sum.victory ? 60 : 0) +
+    Math.floor((sum.shardsCollected ?? 0) / 4)
+  );
+}
+
+/**
  * Enemigos. `from` = segundo en que empiezan a aparecer; `weight` = frecuencia relativa.
  */
 export const ENEMIES = {

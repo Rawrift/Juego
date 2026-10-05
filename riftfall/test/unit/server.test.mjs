@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createApp } from '../../server/app.mjs';
 import { playLocal } from '../helpers.mjs';
+import { coresFromSummary } from '../../src/sim/index.js';
 
 async function boot(opts = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'riftfall-'));
@@ -94,6 +95,54 @@ test('valida nombre de piloto y sesiones', async () => {
     assert.equal((await call('POST', '/api/profile/name', { name: '<script>' }, token)).status, 400);
     const ok = await call('POST', '/api/profile/name', { name: 'Nova Ace' }, token);
     assert.equal(ok.json.profile.name, 'Nova Ace');
+  } finally {
+    await app.close();
+  }
+});
+
+test('talentos: se compran con Núcleos, se aplican en el replay y no en la Arena', async () => {
+  const { app, call } = await boot({ minRealtimeRatio: 0 });
+  try {
+    const g = (await call('POST', '/api/auth/guest')).json;
+    const token = g.token;
+    assert.equal(g.profile.cores, 0);
+    assert.deepEqual(g.profile.talents, {});
+
+    const s1 = (await call('POST', '/api/run/start', {}, token)).json;
+    assert.deepEqual(s1.talents, {});
+    const run1 = playLocal(s1.seed, 'spark', 1, 60 * 120);
+    const f1 = (await call('POST', '/api/run/finish', { runId: s1.runId, inputs: run1.inputs, choices: run1.choices }, token)).json;
+    assert.equal(f1.cores, coresFromSummary(run1.summary));
+    assert.equal(f1.profile.cores, f1.cores);
+
+    // Sin Núcleos suficientes no se puede comprar.
+    app.db.data.players[g.profile.id].cores = 39;
+    const poor = await call('POST', '/api/talents/upgrade', { id: 'hull' }, token);
+    assert.equal(poor.status, 400);
+    assert.match(poor.json.error, /Núcleos/);
+    assert.equal((await call('POST', '/api/talents/upgrade', { id: 'nope' }, token)).status, 400);
+
+    app.db.data.players[g.profile.id].cores = 1000;
+    const up1 = (await call('POST', '/api/talents/upgrade', { id: 'hull' }, token)).json;
+    const up2 = (await call('POST', '/api/talents/upgrade', { id: 'hull' }, token)).json;
+    assert.deepEqual(up2.profile.talents, { hull: 2 });
+    assert.equal(up1.profile.cores, 960);
+    assert.equal(up2.profile.cores, 870);
+
+    // La partida siguiente usa los talentos del servidor y el replay los respeta.
+    const s2 = (await call('POST', '/api/run/start', {}, token)).json;
+    assert.deepEqual(s2.talents, { hull: 2 });
+    const run2 = playLocal(s2.seed, 'spark', 1, 60 * 60, s2.talents);
+    const f2 = await call('POST', '/api/run/finish', { runId: s2.runId, inputs: run2.inputs, choices: run2.choices }, token);
+    assert.equal(f2.status, 200, JSON.stringify(f2.json));
+    assert.deepEqual(f2.json.summary, run2.summary);
+    const rep = (await call('GET', `/api/replay?id=${s2.runId}`)).json;
+    assert.deepEqual(rep.talents, { hull: 2 });
+
+    for (let i = 0; i < 3; i++) await call('POST', '/api/talents/upgrade', { id: 'hull' }, token);
+    const maxed = await call('POST', '/api/talents/upgrade', { id: 'hull' }, token);
+    assert.equal(maxed.status, 400, 'nivel máximo 5');
+    assert.equal((await call('GET', '/api/profile', null, token)).json.profile.talents.hull, 5);
   } finally {
     await app.close();
   }

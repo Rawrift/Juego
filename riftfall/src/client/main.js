@@ -18,18 +18,22 @@ import {
   SHIPS,
   WEAPONS,
   PASSIVES,
-  shipYield,
-  weaponStats
+  shipYield
 } from '../sim/index.js';
 import { createRenderer } from './renderer.js';
 import { createAudio } from './audio.js';
 import { createInput } from './input.js';
 import { createApi } from './api.js';
 import { createWallet, explainError } from './wallet.js';
-import { iconCanvas, drawShipPreview } from './sprites.js';
+import { iconCopy, drawShipPreview } from './sprites.js';
 import { createPanels } from './panels.js';
 import { chainConfigFromDeployment } from '../shared/networks.js';
 import { $, el, toast, fmtTime, fmtNum, shortAddr, fmtRift, brandText } from './dom.js';
+import { t, tx, lang, LANGS, setLang, applyStatic } from './i18n.js';
+import { loadProgress, recordLocalRun, upgradeLocalTalent, localMissions, canUpgradeAny } from './progress.js';
+import { shareResult } from './share.js';
+
+applyStatic();
 
 const canvas = $('#game');
 const renderer = createRenderer(canvas);
@@ -45,12 +49,15 @@ const app = {
   wallet: null,
   balances: null,
   online: false,
+  progress: loadProgress(),
   ship: loadShipChoice(),
   startRun,
   refreshProfile,
   connectWallet,
   selectShip,
-  updateMenu
+  updateMenu,
+  pilot,
+  upgradeTalent
 };
 const panels = createPanels(app);
 
@@ -92,6 +99,27 @@ function loadShipChoice() {
   return { key: 'spark', tokenId: null, level: 1 };
 }
 
+/** Progreso del piloto: el del servidor si está en línea, si no el guardado en este dispositivo. */
+function pilot() {
+  if (app.online && app.profile) {
+    const p = app.profile;
+    return { online: true, cores: p.cores ?? 0, talents: p.talents ?? {}, missions: p.missions ?? [], streak: p.streak ?? 0, stats: p };
+  }
+  const p = app.progress;
+  return { online: false, cores: p.cores, talents: p.talents, missions: localMissions(p), streak: p.streak, stats: p };
+}
+
+async function upgradeTalent(id) {
+  if (app.online && app.profile) {
+    app.profile = (await api.upgradeTalent(id)).profile;
+    updateMenu();
+    return app.profile.talents[id];
+  }
+  const lv = upgradeLocalTalent(app.progress, id);
+  updateMenu();
+  return lv;
+}
+
 function selectShip(choice) {
   app.ship = choice;
   try {
@@ -107,35 +135,40 @@ function selectShip(choice) {
 let previewT = 0;
 function updateMenu() {
   const s = SHIPS[app.ship.key];
-  $('#shipName').textContent = `${s.name}${app.ship.key !== 'spark' ? ` · NV ${app.ship.level}` : ''}`;
-  $('#shipDesc').textContent = s.desc;
-  $('#shipYield').textContent = `Recompensa x${shipYield(app.ship.key, app.ship.level).toFixed(2)}`;
+  $('#shipName').textContent = `${s.name}${app.ship.key !== 'spark' ? ` · ${t('hud.level', { n: app.ship.level })}` : ''}`;
+  $('#shipDesc').textContent = tx.shipDesc(app.ship.key);
+  $('#shipYield').textContent = t('ship.yield', { m: shipYield(app.ship.key, app.ship.level).toFixed(2) });
   const p = app.profile;
+  const pl = pilot();
+  $('#menuCores').textContent = fmtNum(pl.cores);
+  $('#shardChip').classList.toggle('hidden', !pl.online);
   $('#menuShards').textContent = fmtNum(p?.shards ?? 0);
+  $('#talentDot').classList.toggle('hidden', !canUpgradeAny(pl.cores, pl.talents));
   if (app.balances) {
     $('#riftChip').classList.remove('hidden');
     $('#menuRift').textContent = fmtRift(app.balances.rift);
   }
   const wb = $('#walletBtn');
   const walletAddr = p?.wallet ?? (app.wallet?.connected ? app.wallet.address : null);
+  // Sin token lanzado la wallet no sirve para nada: mejor no mostrar el botón.
+  wb.classList.toggle('hidden', !app.config?.chain && !walletAddr);
   if (walletAddr) {
     wb.textContent = shortAddr(walletAddr);
     wb.classList.add('connected');
   } else {
-    wb.textContent = app.config?.chain ? 'Conectar wallet' : 'Wallet (sin red)';
+    wb.textContent = app.config?.chain ? t('menu.connect') : t('menu.walletNoNet');
   }
-  $('#streakTag').textContent = `Racha ${p?.streak ?? 0}🔥`;
-  const list = $('#missionList');
-  list.replaceChildren(
-    ...(p?.missions ?? []).map((m) =>
+  $('#streakTag').textContent = t('menu.streak', { n: pl.streak });
+  const unit = pl.online ? '◆' : '✦';
+  $('#missionList').replaceChildren(
+    ...pl.missions.map((m) =>
       el('li', { class: m.done ? 'done' : '' }, [
-        el('span', {}, `${m.done ? '✔ ' : ''}${m.name}`),
-        el('b', {}, `+${m.reward} ◆`),
+        el('span', {}, `${m.done ? '✔ ' : ''}${tx.missionName(m.id, m.name)}`),
+        el('b', {}, `+${m.reward} ${unit}`),
         el('div', { class: 'bar' }, [el('i', { style: `width:${Math.round((m.progress / m.goal) * 100)}%` })])
       ])
     )
   );
-  if (!p) list.replaceChildren(el('li', {}, [el('span', {}, 'Las misiones diarias se activan cuando el servidor de recompensas esté en línea.')]));
 }
 
 function setNet(text, cls) {
@@ -162,14 +195,14 @@ async function refreshProfile() {
 
 async function connectWallet() {
   if (!app.config?.chain) {
-    toast('La blockchain no está configurada en este servidor. Puedes jugar como invitado.', 'err');
+    toast(t('toast.noChain'), 'err');
     return false;
   }
   try {
     const address = await app.wallet.connect();
     if (app.config.staticMode) {
       app.balances = await app.wallet.balances();
-      toast(`Wallet conectada: ${shortAddr(address)}`, 'ok');
+      toast(t('toast.walletConnected', { a: shortAddr(address) }), 'ok');
       updateMenu();
       return true;
     }
@@ -177,7 +210,7 @@ async function connectWallet() {
     const signature = await app.wallet.signMessage(message);
     app.profile = await api.loginWallet(address, signature);
     app.balances = await app.wallet.balances();
-    toast(`Wallet conectada: ${shortAddr(address)}`, 'ok');
+    toast(t('toast.walletConnected', { a: shortAddr(address) }), 'ok');
     updateMenu();
     return true;
   } catch (err) {
@@ -187,6 +220,8 @@ async function connectWallet() {
 }
 
 // --------------------------------------------------------------------- partida
+
+let practiceNoticeShown = false;
 
 async function startRun(mode = 'normal') {
   audio.unlock();
@@ -210,11 +245,14 @@ async function startRun(mode = 'normal') {
     game.offline = true;
     // En práctica puedes volar tu nave NFT (no hay recompensas que verificar).
     const own = app.config?.staticMode && app.wallet?.connected && app.ship.tokenId ? app.ship : { key: 'spark', level: 1 };
-    run = { runId: null, seed: (Math.random() * 2 ** 32) >>> 0, ship: own.key, shipLevel: own.level, mode: 'normal' };
-    toast('Modo práctica: el servidor de recompensas no está conectado, esta partida no da Shards.', 'err');
+    run = { runId: null, seed: (Math.random() * 2 ** 32) >>> 0, ship: own.key, shipLevel: own.level, talents: app.progress.talents, mode: 'normal' };
+    if (!practiceNoticeShown) {
+      practiceNoticeShown = true;
+      toast(t('toast.practice'));
+    }
   }
   game.run = run;
-  game.sim = createSim({ seed: run.seed, ship: run.ship, shipLevel: run.shipLevel });
+  game.sim = createSim({ seed: run.seed, ship: run.ship, shipLevel: run.shipLevel, talents: run.talents });
   game.rec = new InputRecorder();
   game.acc = 0;
   game.mode = 'play';
@@ -228,15 +266,15 @@ async function startRun(mode = 'normal') {
   $('#hud').classList.remove('hidden');
   $('#bossBar').classList.add('hidden');
   input.setEnabled(true);
-  announce(run.mode === 'arena' ? 'ARENA' : 'SOBREVIVE', run.mode === 'arena' ? 'el mejor puntaje se lleva el bote' : 'el Rift se está abriendo', 'good');
+  announce(run.mode === 'arena' ? t('ann.arena') : t('ann.survive'), run.mode === 'arena' ? t('ann.arenaSub') : t('ann.surviveSub'), 'good');
   showTutorial();
 }
 
 const TUTORIAL = [
-  () => (matchMedia('(pointer: coarse)').matches ? '<b>Arrastra el dedo</b> en cualquier parte para moverte.' : 'Muévete con <b>WASD</b> o las <b>flechas</b>.'),
-  () => 'Tus armas <b>disparan solas</b>. Tú solo esquiva y sobrevive.',
-  () => 'Recoge los <b>cristales</b> para subir de nivel y elegir mejoras.',
-  () => 'Arma al <b>nivel 5</b> + su mejora pareja = <b>EVOLUCIÓN</b>. Los jefes sueltan cofres.'
+  () => (matchMedia('(pointer: coarse)').matches ? t('tut.moveTouch') : t('tut.moveKeys')),
+  () => t('tut.auto'),
+  () => t('tut.gems'),
+  () => t('tut.evo')
 ];
 function showTutorial() {
   let seen = false;
@@ -275,19 +313,17 @@ function pickChoice(i) {
 
 function describeChoice(o) {
   if (o.kind === 'weapon') {
-    const w = WEAPONS[o.id];
-    return { title: w.name, text: w.desc[o.level - 1], color: w.color, icon: o.id, max: 5 };
+    return { title: tx.weaponName(o.id), text: tx.weaponDesc(o.id, o.level), color: WEAPONS[o.id].color, icon: o.id, max: 5 };
   }
   if (o.kind === 'passive') {
-    const p = PASSIVES[o.id];
-    return { title: p.name, text: p.desc, color: '#ffc94d', icon: o.id, max: p.max };
+    return { title: tx.passiveName(o.id), text: tx.passiveDesc(o.id), color: '#ffc94d', icon: o.id, max: PASSIVES[o.id].max };
   }
   if (o.kind === 'evolve') {
-    const w = WEAPONS[o.id];
-    return { title: w.evo.name, text: `${w.evo.desc}. Evoluciona tu ${w.name}.`, color: '#ffd23d', icon: o.id, max: 0, evo: true };
+    const text = t('choice.evoText', { desc: tx.evoDesc(o.id), weapon: tx.weaponName(o.id) });
+    return { title: tx.evoName(o.id), text, color: '#ffd23d', icon: o.id, max: 0, evo: true };
   }
-  if (o.kind === 'repair') return { title: 'Kit de reparación', text: 'Recupera 40% de la vida', color: '#4dff9a', icon: 'repair', max: 0 };
-  return { title: 'Alijo de Shards', text: '+2 Shards', color: '#ffc94d', icon: 'cache', max: 0 };
+  if (o.kind === 'repair') return { title: t('choice.repair'), text: t('choice.repairText'), color: '#4dff9a', icon: 'repair', max: 0 };
+  return { title: t('choice.cache'), text: t('choice.cacheText'), color: '#ffc94d', icon: 'cache', max: 0 };
 }
 
 function openChoice() {
@@ -295,21 +331,21 @@ function openChoice() {
   game.choiceOpen = true;
   const chest = s.choiceSource === 'chest';
   $('.levelup-inner').classList.toggle('chest', chest);
-  $('#levelupKicker').textContent = chest ? 'BOTÍN DE JEFE' : 'SUBISTE DE NIVEL';
-  $('#levelupTitle').textContent = chest ? 'COFRE DEL GUARDIÁN' : `NIVEL ${s.player.level - s.pendingLevels + 1}`;
+  $('#levelupKicker').textContent = chest ? t('lvl.chestKicker') : t('lvl.kicker');
+  $('#levelupTitle').textContent = chest ? t('lvl.chestTitle') : t('lvl.title', { n: s.player.level - s.pendingLevels + 1 });
   const box = $('#choices');
   box.replaceChildren(
     ...s.choice.map((o, i) => {
       const d = describeChoice(o);
       const card = el('button', { class: `choice${d.evo ? ' evo' : ''}`, style: `--accent:${d.color}` }, [
         d.evo
-          ? el('span', { class: 'tag evo' }, 'EVOLUCIÓN')
+          ? el('span', { class: 'tag evo' }, t('lvl.evo'))
           : o.level === 1 && o.kind !== 'repair' && o.kind !== 'cache'
-          ? el('span', { class: 'tag new' }, 'NUEVO')
+          ? el('span', { class: 'tag new' }, t('lvl.new'))
           : o.level
-            ? el('span', { class: 'tag' }, `NV ${o.level}`)
+            ? el('span', { class: 'tag' }, t('hud.level', { n: o.level }))
             : null,
-        iconCanvas(d.icon, d.color, 128),
+        iconCopy(d.icon, d.color, 128),
         el('h4', {}, d.title),
         el('p', {}, d.text),
         d.max ? el('div', { class: 'pips' }, Array.from({ length: d.max }, (_, k) => el('i', { class: k < o.level ? 'on' : '' }))) : null,
@@ -333,55 +369,80 @@ async function endRun() {
   setTimeout(() => showGameOver(local, victory), victory ? 600 : 1300);
 }
 
+let lastResult = null;
+
 async function showGameOver(local, victory) {
   const card = $('.gameover-card');
   card.classList.toggle('victory', victory);
   card.classList.toggle('defeat', !victory);
   const retreat = !victory && game.sim.phase !== 'dead';
-  $('#goKicker').textContent = victory ? 'VICTORIA' : 'FIN DE LA PARTIDA';
-  $('#goTitle').textContent = victory ? 'RIFT SELLADO' : retreat ? 'RETIRADA' : 'NAVE DESTRUIDA';
+  const title = victory ? t('go.titleVictory') : retreat ? t('go.titleRetreat') : t('go.titleDead');
+  $('#goKicker').textContent = victory ? t('go.victory') : t('go.kicker');
+  $('#goTitle').textContent = title;
+  lastResult = { summary: local, shipKey: game.sim.shipKey, title };
   $('#goStats').replaceChildren(
     ...[
-      ['TIEMPO', fmtTime(local.timeSec)],
-      ['BAJAS', fmtNum(local.kills)],
-      ['COMBO MÁX', `x${fmtNum(local.bestCombo ?? 0)}`],
-      ['PUNTAJE', fmtNum(local.score)]
+      [t('go.time'), fmtTime(local.timeSec)],
+      [t('go.kills'), fmtNum(local.kills)],
+      [t('go.combo'), `x${fmtNum(local.bestCombo ?? 0)}`],
+      [t('go.score'), fmtNum(local.score)]
     ].map(([k, v]) => el('div', {}, [el('small', {}, k), el('b', {}, String(v))]))
   );
   const verify = $('#goVerify');
   const list = $('#goRewardList');
   list.replaceChildren();
   $('#goTotal').textContent = '…';
+  $('#goUpgradeHint').classList.add('hidden');
   $('#hud').classList.add('hidden');
   $('#gameover').classList.remove('hidden');
 
+  const showRows = (rows) =>
+    rows.forEach(([label, v, unit = '◆'], i) => {
+      const value = unit === '' ? v : `+${v} ${unit}`;
+      list.append(el('li', { style: `animation-delay:${0.15 + i * 0.12}s` }, [el('span', {}, label), el('b', {}, value)]));
+    });
+  const afterRewards = () => {
+    const pl = pilot();
+    $('#goUpgradeHint').classList.toggle('hidden', !canUpgradeAny(pl.cores, pl.talents));
+    updateMenu();
+  };
+
   if (game.offline || !game.run?.runId) {
-    verify.className = 'verify err';
-    verify.textContent = 'Partida de práctica: sin conexión, no genera recompensas.';
-    $('#goTotal').textContent = '0';
+    // Práctica: el progreso (Núcleos, misiones y racha) se guarda en este dispositivo.
+    verify.className = 'verify';
+    verify.textContent = t('go.practice');
+    $('#goTotalLabel').textContent = t('go.coresEarned');
+    const res = recordLocalRun(app.progress, local);
+    const rows = [[t('go.rowCores'), res.cores, '✦']];
+    if (res.streak) rows.push([t('go.rowStreak'), res.streak, '✦']);
+    for (const m of res.missions) rows.push([t('go.rowMission', { name: tx.missionName(m.id, m.name) }), m.reward, '✦']);
+    if (res.newBest && app.progress.runs > 1) rows.push([t('go.newBest'), fmtNum(local.score), '']);
+    showRows(rows);
+    countUp($('#goTotal'), res.total);
+    if (res.total > 0) setTimeout(() => audio.play('shard'), 400);
+    afterRewards();
     return;
   }
+  $('#goTotalLabel').textContent = t('go.shardsEarned');
   verify.className = 'verify';
-  verify.replaceChildren(el('span', { class: 'spinner' }), 'Verificando partida en el servidor (re-simulación completa)…');
+  verify.replaceChildren(el('span', { class: 'spinner' }), t('go.verifying'));
   try {
     const res = await api.finishRun({ runId: game.run.runId, ...game.rec.finish() });
     verify.className = 'verify ok';
-    verify.textContent = '✔ Partida verificada: el servidor re-simuló cada tick y obtuvo el mismo resultado.';
+    verify.textContent = t('go.verified');
     const rows = [];
-    if (game.run.mode === 'arena') rows.push(['Puntaje registrado en la Arena', fmtNum(res.summary.score), false]);
+    if (game.run.mode === 'arena') rows.push([t('go.rowArena'), fmtNum(res.summary.score), '']);
     else {
-      rows.push([`Botín de la partida (x${res.summary.yieldMult.toFixed(2)} por tu nave)`, res.rewards.run]);
-      if (res.rewards.streak) rows.push([`Bonus de racha diaria`, res.rewards.streak]);
-      for (const m of res.rewards.missions) rows.push([`Misión: ${m.name}`, m.reward]);
+      rows.push([t('go.rowRun', { m: res.summary.yieldMult.toFixed(2) }), res.rewards.run]);
+      if (res.rewards.streak) rows.push([t('go.rowStreak'), res.rewards.streak]);
+      for (const m of res.rewards.missions) rows.push([t('go.rowMission', { name: tx.missionName(m.id, m.name) }), m.reward]);
     }
-    rows.forEach(([label, v, isShard = true], i) => {
-      const li = el('li', { style: `animation-delay:${0.15 + i * 0.12}s` }, [el('span', {}, label), el('b', {}, isShard === false ? v : `+${v} ◆`)]);
-      list.append(li);
-    });
+    if (res.cores) rows.push([t('go.rowCores'), res.cores, '✦']);
+    showRows(rows);
     countUp($('#goTotal'), res.totalShards);
     if (res.totalShards > 0) setTimeout(() => audio.play('shard'), 400);
     app.profile = res.profile;
-    updateMenu();
+    afterRewards();
   } catch (err) {
     verify.className = 'verify err';
     verify.textContent = `✖ ${err.message}`;
@@ -438,16 +499,16 @@ function announce(title, sub, cls = 'good') {
 function loadoutSlots(s) {
   const slots = [];
   for (const w of s.player.weapons) {
-    const name = w.evolved ? WEAPONS[w.id].evo.name : WEAPONS[w.id].name;
+    const name = w.evolved ? tx.evoName(w.id) : tx.weaponName(w.id);
     slots.push(
       el('div', { class: `slot${w.evolved ? ' evo' : ''}`, title: name }, [
-        iconCanvas(w.id, w.evolved ? '#ffd23d' : WEAPONS[w.id].color, 60),
+        iconCopy(w.id, w.evolved ? '#ffd23d' : WEAPONS[w.id].color, 60),
         el('b', {}, w.evolved ? '★' : String(w.level))
       ])
     );
   }
   for (const p of s.player.passives) {
-    slots.push(el('div', { class: 'slot passive', title: PASSIVES[p.id].name }, [iconCanvas(p.id, '#ffc94d', 60), el('b', {}, String(p.level))]));
+    slots.push(el('div', { class: 'slot passive', title: tx.passiveName(p.id) }, [iconCopy(p.id, '#ffc94d', 60), el('b', {}, String(p.level))]));
   }
   return slots;
 }
@@ -468,7 +529,7 @@ function setWidth(id, pct) {
 function updateHud(s) {
   const p = s.player;
   setWidth('xpFill', (p.xp / p.xpNext) * 100);
-  setText('levelTag', `NV ${p.level}`);
+  setText('levelTag', t('hud.level', { n: p.level }));
   setText('hpText', `${Math.ceil(p.hp)} / ${Math.round(p.stats.maxHp)}`);
   setWidth('hpFill', (p.hp / p.stats.maxHp) * 100);
   setWidth('hpGhost', (p.hp / p.stats.maxHp) * 100);
@@ -504,14 +565,14 @@ function onSimEvent(ev, s, live) {
   audio.event(ev);
   switch (ev.t) {
     case 'warning':
-      if (ev.kind === 'boss') announce('⚠ GUARDIÁN DEL RIFT', 'se aproxima', 'danger');
-      else announce('ENJAMBRE', 'te están rodeando', 'danger');
+      if (ev.kind === 'boss') announce(t('ann.boss'), t('ann.bossSub'), 'danger');
+      else announce(t('ann.swarm'), t('ann.swarmSub'), 'danger');
       break;
     case 'bossDead':
-      announce('GUARDIÁN DERROTADO', 'recoge su cofre', 'good');
+      announce(t('ann.bossDead'), t('ann.bossDeadSub'), 'good');
       break;
     case 'evolve':
-      announce(WEAPONS[ev.id].evo.name.toUpperCase(), 'arma evolucionada', 'good');
+      announce(tx.evoName(ev.id).toUpperCase(), t('ann.evolved'), 'good');
       break;
     case 'hurt': {
       const f = $('#hurtFlash');
@@ -595,6 +656,20 @@ function frame(now) {
 $('#playBtn').addEventListener('click', () => startRun('normal'));
 $('#againBtn').addEventListener('click', () => startRun(game.run?.mode === 'arena' ? 'arena' : 'normal'));
 $('#menuBtn').addEventListener('click', backToMenu);
+$('#goTalentsBtn').addEventListener('click', () => {
+  backToMenu();
+  panels.open('profile');
+});
+$('#shareBtn').addEventListener('click', async () => {
+  if (!lastResult) return;
+  const b = $('#shareBtn');
+  b.disabled = true;
+  try {
+    await shareResult(lastResult);
+  } finally {
+    b.disabled = false;
+  }
+});
 $('#pauseBtn').addEventListener('click', () => setPaused(true));
 $('#resumeBtn').addEventListener('click', () => setPaused(false));
 $('#quitBtn').addEventListener('click', () => {
@@ -636,9 +711,10 @@ window.addEventListener('keydown', (e) => {
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && game.mode === 'play' && !game.choiceOpen) setPaused(true);
 });
-if (matchMedia('(pointer: coarse)').matches) {
-  $('#controlsHint').textContent = 'Arrastra el dedo en cualquier parte para moverte · las armas disparan solas';
-}
+$('#controlsHint').textContent = matchMedia('(pointer: coarse)').matches ? t('menu.hintTouch') : t('menu.hintKeys');
+const langSel = $('#langSel');
+for (const [code, name] of Object.entries(LANGS)) langSel.append(el('option', { value: code, selected: code === lang }, name));
+langSel.addEventListener('change', () => setLang(langSel.value));
 
 // --------------------------------------------------------------------- arranque
 
@@ -654,9 +730,9 @@ async function boot() {
       brandText($('#menu'), app.config.chain.tokenSymbol);
       app.wallet = createWallet(app.config.chain);
       app.wallet.onChange(() => location.reload());
-      setNet(`● En línea · red ${app.config.chain.network} (${app.config.chain.chainId})`, 'ok');
+      setNet(t('net.online', { net: app.config.chain.network, id: app.config.chain.chainId }), 'ok');
     } else {
-      setNet('● En línea · blockchain no configurada (modo invitado)', 'warn');
+      setNet(t('net.onlineNoChain'), 'warn');
     }
     if (app.ship.tokenId && !app.config.chain) selectShip({ key: 'spark', tokenId: null, level: 1 });
   } catch {
@@ -671,9 +747,9 @@ async function boot() {
       brandText($('#menu'), app.config.chain.tokenSymbol);
       app.wallet = createWallet(app.config.chain);
       app.wallet.onChange(() => location.reload());
-      setNet('● Tienda de naves activa · partidas en modo práctica', 'warn');
+      setNet(t('net.shop'), 'warn');
     } else {
-      setNet('● Sin servidor: modo práctica sin recompensas', 'warn');
+      setNet(t('net.practice'), 'warn');
     }
   }
   updateMenu();

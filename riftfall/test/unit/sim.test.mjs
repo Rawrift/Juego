@@ -15,7 +15,10 @@ import {
   dsin,
   MAX_TICKS,
   weaponStats,
-  WEAPONS
+  WEAPONS,
+  sanitizeTalents,
+  coresFromSummary,
+  talentCost
 } from '../../src/sim/index.js';
 import { dsin as dsin2, dcos } from '../../src/sim/dmath.js';
 
@@ -142,4 +145,46 @@ test('los combos se encadenan con bajas seguidas y se cortan tras 1,5 s', () => 
   for (let i = 0; i < 95 && s.phase === 'running'; i++) stepSim(s, 0);
   assert.equal(s.combo, 0);
   assert.ok(summarize(s).bestCombo >= 5);
+});
+
+test('los talentos del piloto mejoran las estadísticas y el replay los respeta', () => {
+  const base = createSim({ seed: 7 });
+  const t = { hull: 5, power: 2, reflex: 1, engines: 3, magnet: 4, memory: 5 };
+  const pro = createSim({ seed: 7, talents: t });
+  assert.equal(pro.player.stats.maxHp, base.player.stats.maxHp * 1.3);
+  assert.equal(pro.player.hp, pro.player.stats.maxHp);
+  assert.ok(Math.abs(pro.player.stats.might - (base.player.stats.might + 0.08)) < 1e-12);
+  assert.ok(pro.player.stats.speed > base.player.stats.speed);
+  assert.ok(pro.player.stats.magnet > base.player.stats.magnet);
+
+  // Se ignoran ids desconocidos y niveles fuera de rango.
+  assert.deepEqual(sanitizeTalents({ hull: 9, power: -1, hack: 3, magnet: 2.5, memory: '2' }), { hull: 5, memory: 2 });
+
+  // Una partida con talentos solo se reproduce con los mismos talentos.
+  const s = createSim({ seed: 99, talents: t });
+  const rec = new InputRecorder();
+  while (s.phase !== 'dead' && s.phase !== 'victory' && s.tick < 60 * 90) {
+    if (s.phase === 'choice') {
+      const c = botChoice(s);
+      rec.choice(c);
+      chooseUpgrade(s, c);
+      continue;
+    }
+    const d = botInput(s);
+    rec.push(d);
+    stepSim(s, d);
+    s.events.length = 0;
+  }
+  const { inputs, choices } = rec.finish();
+  const same = replayRun({ seed: 99, ship: 'spark', shipLevel: 1, talents: t, inputs, choices });
+  assert.equal(same.hash, stateHash(s));
+  const other = replayRun({ seed: 99, ship: 'spark', shipLevel: 1, talents: {}, inputs, choices });
+  assert.notEqual(other.hash, stateHash(s), 'sin los talentos la partida es otra');
+});
+
+test('Núcleos por partida y costo de talentos', () => {
+  assert.equal(coresFromSummary({ kills: 400, timeSec: 300, bossesKilled: 1, victory: false, shardsCollected: 0 }), 20 + 20 + 20);
+  assert.equal(coresFromSummary({ kills: 0, timeSec: 600, bossesKilled: 3, victory: true, shardsCollected: 43 }), 40 + 60 + 60 + 10);
+  assert.deepEqual([1, 2, 3, 4, 5].map(talentCost), [40, 90, 160, 250, 360]);
+  assert.equal(talentCost(6), Infinity);
 });

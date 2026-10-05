@@ -1,10 +1,15 @@
-// Paneles laterales: Hangar, Mercado, Arena, Ranking, Canje, Economía y Piloto.
+// Paneles laterales: Hangar, Mercado, Arena, Ranking, Canje, Economía y Piloto (talentos).
 
 import { formatEther, parseEther } from 'ethers';
-import { SHIPS, SHIP_BY_CLASS, shipYield } from '../sim/index.js';
-import { drawShipPreview } from './sprites.js';
+import { SHIPS, SHIP_BY_CLASS, shipYield, TALENT_ORDER, TALENT_MAX, TALENTS, talentCost } from '../sim/index.js';
+import { drawShipPreview, iconCopy } from './sprites.js';
 import { explainError } from './wallet.js';
 import { $, el, toast, fmtTime, fmtNum, shortAddr, fmtRift, brandText } from './dom.js';
+import { t, tx, locale } from './i18n.js';
+
+/** Ícono de cada talento (reutiliza los de las mejoras parecidas). */
+const TALENT_ICON = { hull: 'hull', power: 'might', reflex: 'haste', engines: 'thrust', magnet: 'magnet', memory: 'growth' };
+const num = (v, opts) => Number(v).toLocaleString(locale, opts);
 
 export function createPanels(app) {
   const sheet = $('#sheet');
@@ -30,7 +35,7 @@ export function createPanels(app) {
     $('#sheetKicker').textContent = kicker;
     $('#sheetTitle').textContent = title;
     brandText($('#sheet header'), tokenSymbol());
-    body.replaceChildren(el('p', { class: 'hint' }, 'Cargando…'));
+    body.replaceChildren(el('p', { class: 'hint' }, t('sheet.loading')));
     sheet.classList.remove('hidden');
   }
 
@@ -39,7 +44,7 @@ export function createPanels(app) {
     cancelAnimationFrame(anim);
     const view = VIEWS[name];
     if (!view) return;
-    frame(view.kicker, view.title);
+    frame(t(view.kicker), t(view.title));
     try {
       const nodes = await view.render();
       if (current === name) {
@@ -71,12 +76,12 @@ export function createPanels(app) {
 
   function needWalletNotice(text) {
     if (!app.config?.chain) {
-      return el('div', { class: 'notice' }, 'Este servidor aún no tiene la blockchain configurada: puedes jugar con la nave SPARK como invitado. El creador debe desplegar los contratos (ver README).');
+      return el('div', { class: 'notice' }, t('n.noChain'));
     }
     if (!app.wallet?.connected) {
       return el('div', { class: 'notice info' }, [
         el('p', {}, text),
-        el('button', { class: 'btn primary small', style: 'margin-top:10px', onclick: async () => (await app.connectWallet()) && open(current) }, 'Conectar wallet')
+        el('button', { class: 'btn primary small', style: 'margin-top:10px', onclick: async () => (await app.connectWallet()) && open(current) }, t('menu.connect'))
       ]);
     }
     return null;
@@ -104,12 +109,12 @@ export function createPanels(app) {
   function shipCard({ key, level = 1, tokenId = null, selected, actions = [], extra = null, tag = null }) {
     const s = SHIPS[key];
     return el('div', { class: `ship-card${selected ? ' selected' : ''}`, style: `--accent:${s.color}` }, [
-      tokenId ? el('span', { class: 'lv' }, `#${tokenId} · NV ${level}`) : tag ? el('span', { class: 'lv' }, tag) : null,
+      tokenId ? el('span', { class: 'lv' }, `#${tokenId} · ${t('hud.level', { n: level })}`) : tag ? el('span', { class: 'lv' }, tag) : null,
       shipCanvas(key),
-      el('span', { class: 'tier' }, s.tier.toUpperCase()),
+      el('span', { class: 'tier' }, tx.shipTier(key).toUpperCase()),
       el('b', {}, s.name),
-      el('span', { class: 'meta' }, s.desc),
-      el('span', { class: 'yield' }, `Recompensa x${shipYield(key, level).toFixed(2)}`),
+      el('span', { class: 'meta' }, tx.shipDesc(key)),
+      el('span', { class: 'yield' }, t('ship.yield', { m: shipYield(key, level).toFixed(2) })),
       extra,
       actions.length ? el('div', { class: 'row' }, actions) : null
     ]);
@@ -119,24 +124,24 @@ export function createPanels(app) {
 
   const VIEWS = {
     hangar: {
-      kicker: 'NAVES',
-      title: 'Hangar',
+      kicker: 'h.kicker',
+      title: 'h.title',
       async render() {
         const out = [];
         const sel = app.ship;
         const pick = (choice) => () => {
           app.selectShip(choice);
-          toast(`${SHIPS[choice.key].name} lista para despegar`, 'ok');
+          toast(t('h.ready', { name: SHIPS[choice.key].name }), 'ok');
           open('hangar');
         };
-        out.push(el('p', {}, 'La nave define tu arma inicial, tus estadísticas y el multiplicador de Shards. Cada nivel de Forja suma +2% de daño y +3% de recompensa.'));
-        out.push(el('h3', {}, 'Tus naves'));
+        out.push(el('p', {}, t('h.intro')));
+        out.push(el('h3', {}, t('h.yours')));
         const mine = [
           shipCard({
             key: 'spark',
             selected: sel.key === 'spark',
-            tag: 'GRATIS',
-            actions: [el('button', { class: 'btn ghost small', onclick: pick({ key: 'spark', tokenId: null, level: 1 }) }, sel.key === 'spark' ? 'En uso' : 'Usar')]
+            tag: t('h.free'),
+            actions: [el('button', { class: 'btn ghost small', onclick: pick({ key: 'spark', tokenId: null, level: 1 }) }, sel.key === 'spark' ? t('h.inUse') : t('h.use'))]
           })
         ];
         if (app.config?.demoShips) {
@@ -145,9 +150,9 @@ export function createPanels(app) {
             mine.push(
               shipCard({
                 key,
-                tag: 'DEMO',
+                tag: t('h.demo'),
                 selected: sel.key === key,
-                actions: [el('button', { class: 'btn ghost small', onclick: pick({ key, tokenId: null, level: 1 }) }, sel.key === key ? 'En uso' : 'Probar')]
+                actions: [el('button', { class: 'btn ghost small', onclick: pick({ key, tokenId: null, level: 1 }) }, sel.key === key ? t('h.inUse') : t('h.try'))]
               })
             );
           }
@@ -160,19 +165,19 @@ export function createPanels(app) {
             if (!key) continue;
             const isSel = sel.tokenId === s.tokenId;
             const actions = [
-              el('button', { class: 'btn ghost small', onclick: pick({ key, tokenId: s.tokenId, level: s.level }) }, isSel ? 'En uso' : 'Usar')
+              el('button', { class: 'btn ghost small', onclick: pick({ key, tokenId: s.tokenId, level: s.level }) }, isSel ? t('h.inUse') : t('h.use'))
             ];
             if (s.level < 10) {
               const cost = await app.wallet.forgeCost(s.level);
-              const b = el('button', { class: 'btn gold small' }, `Forjar NV ${s.level + 1} · ${fmtRift(cost)} RIFT`);
-              b.addEventListener('click', () => act(b, 'Forjando…', () => app.wallet.forge(s.tokenId, cost), `¡Nave #${s.tokenId} subió a nivel ${s.level + 1}!`));
+              const b = el('button', { class: 'btn gold small' }, t('h.forge', { n: s.level + 1, c: fmtRift(cost), sym: 'RIFT' }));
+              b.addEventListener('click', () => act(b, t('h.forging'), () => app.wallet.forge(s.tokenId, cost), t('h.forged', { id: s.tokenId, n: s.level + 1 })));
               actions.push(b);
             }
-            const sell = el('button', { class: 'btn ghost small' }, 'Vender');
+            const sell = el('button', { class: 'btn ghost small' }, t('h.sell'));
             sell.addEventListener('click', () => {
-              const v = prompt(`Precio de venta en ${tokenSymbol()}:`, '1000');
+              const v = prompt(t('h.sellPrompt', { sym: tokenSymbol() }), '1000');
               if (!v || !(Number(v) > 0)) return;
-              act(sell, 'Publicando…', () => app.wallet.list(s.tokenId, parseEther(String(v))), 'Nave publicada en el Mercado');
+              act(sell, t('h.publishing'), () => app.wallet.list(s.tokenId, parseEther(String(v))), t('h.published'));
             });
             actions.push(sell);
             mine.push(shipCard({ key, level: s.level, tokenId: s.tokenId, selected: isSel, actions }));
@@ -184,8 +189,12 @@ export function createPanels(app) {
         }
         out.push(el('div', { class: 'ship-grid' }, mine));
 
-        out.push(el('h3', {}, 'Astillero · naves NFT'));
-        const notice = needWalletNotice('Conecta tu wallet para comprar naves NFT. Son tuyas: puedes usarlas, forjarlas o venderlas en el Mercado.');
+        out.push(el('h3', {}, t('h.shipyard')));
+        if (!app.config?.chain) {
+          out.push(el('div', { class: 'notice info' }, t('h.noShop')));
+          return out;
+        }
+        const notice = needWalletNotice(t('h.connect'));
         if (notice) out.push(notice);
         if (app.config?.chain) {
           const catalog = await (app.wallet ?? null)?.catalog?.().catch(() => null);
@@ -199,7 +208,7 @@ export function createPanels(app) {
                 const b = el('button', { class: 'btn primary small', disabled: !k.active || left <= 0 }, `${formatEther(k.priceWei)} ${nativeSymbol()}`);
                 b.addEventListener('click', async () => {
                   if (!app.wallet.connected && !(await app.connectWallet())) return;
-                  act(b, 'Comprando…', () => app.wallet.mint(k.classId, 'eth', k.priceWei), `¡${k.name} es tuya!`);
+                  act(b, t('h.buying'), () => app.wallet.mint(k.classId, 'eth', k.priceWei), t('h.bought', { name: k.name }));
                 });
                 actions.push(b);
               }
@@ -207,18 +216,18 @@ export function createPanels(app) {
                 const b = el('button', { class: 'btn gold small', disabled: !k.active || left <= 0 }, `${fmtRift(k.priceRift)} RIFT`);
                 b.addEventListener('click', async () => {
                   if (!app.wallet.connected && !(await app.connectWallet())) return;
-                  act(b, 'Comprando…', () => app.wallet.mint(k.classId, 'rift', k.priceRift), `¡${k.name} es tuya!`);
+                  act(b, t('h.buying'), () => app.wallet.mint(k.classId, 'rift', k.priceRift), t('h.bought', { name: k.name }));
                 });
                 actions.push(b);
               }
               return shipCard({
                 key,
-                extra: el('span', { class: 'meta' }, left > 0 ? `${fmtNum(left)} de ${fmtNum(k.maxSupply)} disponibles` : 'AGOTADA'),
+                extra: el('span', { class: 'meta' }, left > 0 ? t('h.left', { n: fmtNum(left), m: fmtNum(k.maxSupply) }) : t('h.soldOut')),
                 actions
               });
             });
             out.push(el('div', { class: 'ship-grid' }, cards));
-            out.push(el('p', { class: 'hint' }, 'Los pagos en RIFT se reparten: 40% se quema, 30% vuelve al pool de recompensas de los jugadores y 30% a la tesorería del proyecto.'));
+            out.push(el('p', { class: 'hint' }, t('h.split')));
           }
         }
         return out;
@@ -226,16 +235,16 @@ export function createPanels(app) {
     },
 
     market: {
-      kicker: 'P2P',
-      title: 'Mercado',
+      kicker: 'm.kicker',
+      title: 'm.title',
       async render() {
-        const notice = needWalletNotice('Conecta tu wallet para comprar y vender naves con otros pilotos.');
+        const notice = needWalletNotice(t('m.connect'));
         if (!app.config?.chain) return [notice];
         const listings = await app.wallet.listings();
         const fee = await app.wallet.marketFee();
-        const out = [el('p', {}, `Compra naves de otros jugadores pagando en RIFT. Comisión del mercado: ${fee / 100}% (la paga el vendedor). Sin custodia: la nave queda en la wallet del vendedor hasta la venta.`)];
+        const out = [el('p', {}, t('m.intro', { fee: fee / 100 }))];
         if (notice) out.push(notice);
-        if (!listings.length) out.push(el('div', { class: 'notice info' }, 'No hay naves en venta ahora mismo. Publica la tuya desde el Hangar.'));
+        if (!listings.length) out.push(el('div', { class: 'notice info' }, t('m.empty')));
         const me = app.wallet.address?.toLowerCase();
         out.push(
           el(
@@ -244,13 +253,13 @@ export function createPanels(app) {
             listings.map((l) => {
               const key = SHIP_BY_CLASS[l.classId];
               const mine = l.seller.toLowerCase() === me;
-              const b = el('button', { class: `btn ${mine ? 'ghost' : 'primary'} small` }, mine ? 'Retirar' : `Comprar · ${fmtRift(l.price)} RIFT`);
+              const b = el('button', { class: `btn ${mine ? 'ghost' : 'primary'} small` }, mine ? t('m.withdraw') : t('m.buy', { p: fmtRift(l.price), sym: 'RIFT' }));
               b.addEventListener('click', async () => {
                 if (!app.wallet.connected && !(await app.connectWallet())) return;
-                if (mine) act(b, 'Retirando…', () => app.wallet.cancelListing(l.tokenId), 'Anuncio retirado');
-                else act(b, 'Comprando…', () => app.wallet.buy(l.tokenId, l.price), `¡Compraste la nave #${l.tokenId}!`);
+                if (mine) act(b, t('m.withdrawing'), () => app.wallet.cancelListing(l.tokenId), t('m.withdrawn'));
+                else act(b, t('h.buying'), () => app.wallet.buy(l.tokenId, l.price), t('m.bought', { id: l.tokenId }));
               });
-              return shipCard({ key, level: l.level, tokenId: l.tokenId, extra: el('span', { class: 'meta' }, `Vende ${shortAddr(l.seller)}`), actions: [b] });
+              return shipCard({ key, level: l.level, tokenId: l.tokenId, extra: el('span', { class: 'meta' }, t('m.seller', { a: shortAddr(l.seller) })), actions: [b] });
             })
           )
         );
@@ -259,55 +268,53 @@ export function createPanels(app) {
     },
 
     arena: {
-      kicker: 'TORNEOS',
-      title: 'Arena',
+      kicker: 'a.kicker',
+      title: 'a.title',
       async render() {
-        if (app.config?.staticMode) return [serverNotice('Los torneos de la Arena se activan cuando el servidor de recompensas esté en línea.')];
-        const out = [
-          el('p', {}, 'Paga la inscripción en RIFT y compite por el bote. Todos usan la nave SPARK (habilidad pura). Cuenta tu mejor puntaje; puedes jugar todas las veces que quieras hasta el cierre.')
-        ];
+        if (!app.online) return [serverNotice(t('a.server'))];
+        const out = [el('p', {}, t('a.intro'))];
         const { tournaments } = await app.api.arena();
-        const t = tournaments.find((x) => !x.settled && x.endsAt * 1000 > Date.now());
-        if (!t) {
-          out.push(el('div', { class: 'notice info' }, 'No hay un torneo abierto en este momento. ¡Vuelve pronto!'));
+        const tour = tournaments.find((x) => !x.settled && x.endsAt * 1000 > Date.now());
+        if (!tour) {
+          out.push(el('div', { class: 'notice info' }, t('a.none')));
         } else {
-          const oc = t.onchain;
-          const left = Math.max(0, t.endsAt - Math.floor(Date.now() / 1000));
+          const oc = tour.onchain;
+          const left = Math.max(0, tour.endsAt - Math.floor(Date.now() / 1000));
           out.push(
             el('div', { class: 'stat-grid' }, [
-              stat('BOTE', oc ? `${Number(oc.pool).toLocaleString('es')} RIFT` : '—', 'gold'),
-              stat('INSCRIPCIÓN', oc ? `${Number(oc.entryFee).toLocaleString('es')} RIFT` : '—'),
-              stat('PILOTOS', oc ? oc.entrants : '—', 'cyan'),
-              stat('CIERRA EN', `${Math.floor(left / 3600)}h ${Math.floor((left % 3600) / 60)}m`)
+              stat(t('a.pool'), oc ? `${num(oc.pool)} RIFT` : '—', 'gold'),
+              stat(t('a.fee'), oc ? `${num(oc.entryFee)} RIFT` : '—'),
+              stat(t('a.pilots'), oc ? oc.entrants : '—', 'cyan'),
+              stat(t('a.closes'), `${Math.floor(left / 3600)}h ${Math.floor((left % 3600) / 60)}m`)
             ])
           );
           if (oc) {
-            out.push(el('p', { class: 'hint' }, `Del bote: ${oc.rakeBps / 100}% para el proyecto, ${oc.burnBps / 100}% se quema y el resto se reparte entre el top ${oc.payoutBps.length} (1º: ${oc.payoutBps[0] / 100}%). Lo no repartido vuelve al pool de recompensas.`));
+            out.push(el('p', { class: 'hint' }, t('a.split', { rake: oc.rakeBps / 100, burn: oc.burnBps / 100, top: oc.payoutBps.length, first: oc.payoutBps[0] / 100 })));
           }
-          const notice = needWalletNotice('Conecta tu wallet para inscribirte en la Arena.');
+          const notice = needWalletNotice(t('a.connect'));
           if (notice) out.push(notice);
           else {
             const st = await app.api.arenaStatus();
             if (st.entered) {
-              out.push(el('button', { class: 'btn secondary big', onclick: () => app.startRun('arena') }, 'JUGAR ARENA'));
+              out.push(el('button', { class: 'btn secondary big', onclick: () => app.startRun('arena') }, t('a.play')));
             } else {
-              const b = el('button', { class: 'btn primary big' }, `Inscribirme · ${oc ? Number(oc.entryFee).toLocaleString('es') : ''} RIFT`);
-              b.addEventListener('click', () => act(b, 'Inscribiendo…', () => app.wallet.enterArena(t.id, parseEther(String(oc.entryFee))), '¡Inscrito! Ya puedes jugar la Arena'));
+              const b = el('button', { class: 'btn primary big' }, t('a.enter', { fee: oc ? num(oc.entryFee) : '', sym: 'RIFT' }));
+              b.addEventListener('click', () => act(b, t('a.entering'), () => app.wallet.enterArena(tour.id, parseEther(String(oc.entryFee))), t('a.entered')));
               out.push(b);
             }
           }
-          out.push(el('h3', {}, 'Clasificación'));
+          out.push(el('h3', {}, t('a.standings')));
           out.push(
-            t.ranking.length
-              ? rankingTable(t.ranking.map((r) => ({ ...r, ship: 'spark' })), app.profile?.wallet ? shortAddr(app.profile.wallet) : null, 'wallet')
-              : el('p', { class: 'hint' }, 'Aún no hay puntajes en este torneo. ¡El primero marca el ritmo!')
+            tour.ranking.length
+              ? rankingTable(tour.ranking.map((r) => ({ ...r, ship: 'spark' })), app.profile?.wallet ? shortAddr(app.profile.wallet) : null, 'wallet')
+              : el('p', { class: 'hint' }, t('a.noScores'))
           );
         }
         const past = tournaments.filter((x) => x.settled).slice(0, 3);
         if (past.length) {
-          out.push(el('h3', {}, 'Torneos anteriores'));
+          out.push(el('h3', {}, t('a.past')));
           for (const p of past) {
-            out.push(el('p', { class: 'hint' }, `#${p.id} · ganador: ${p.ranking[0]?.name ?? '—'} (${fmtNum(p.ranking[0]?.score ?? 0)} pts)`));
+            out.push(el('p', { class: 'hint' }, t('a.pastRow', { id: p.id, name: p.ranking[0]?.name ?? '—', score: fmtNum(p.ranking[0]?.score ?? 0) })));
           }
         }
         return out;
@@ -315,21 +322,21 @@ export function createPanels(app) {
     },
 
     ranking: {
-      kicker: 'TOP PILOTOS',
-      title: 'Ranking',
+      kicker: 'r.kicker',
+      title: 'r.title',
       async render() {
-        if (app.config?.staticMode) return [serverNotice('El ranking se activa cuando el servidor de recompensas esté en línea.')];
+        if (!app.online) return [serverNotice(t('r.server'))];
         const wrap = el('div', {});
         const tabs = el('div', { class: 'tabs' });
         const load = async (scope) => {
           [...tabs.children].forEach((b) => b.classList.toggle('on', b.dataset.scope === scope));
-          wrap.replaceChildren(el('p', { class: 'hint' }, 'Cargando…'));
+          wrap.replaceChildren(el('p', { class: 'hint' }, t('sheet.loading')));
           const { entries } = await app.api.leaderboard(scope);
           wrap.replaceChildren(
-            entries.length ? rankingTable(entries, app.profile?.name, 'name') : el('div', { class: 'notice info' }, 'Todavía no hay partidas. ¡Sé el primero!')
+            entries.length ? rankingTable(entries, app.profile?.name, 'name') : el('div', { class: 'notice info' }, t('r.empty'))
           );
         };
-        for (const [scope, label] of [['daily', 'HOY'], ['all', 'HISTÓRICO']]) {
+        for (const [scope, label] of [['daily', t('r.today')], ['all', t('r.all')]]) {
           tabs.append(el('button', { 'data-scope': scope, onclick: () => load(scope) }, label));
         }
         load('daily');
@@ -338,57 +345,57 @@ export function createPanels(app) {
     },
 
     vault: {
-      kicker: 'SHARDS → $RIFT',
-      title: 'Canjear',
+      kicker: 'v.kicker',
+      title: 'v.title',
       async render() {
-        if (app.config?.staticMode) return [serverNotice('El canje de Shards por tu token se activa cuando el servidor de recompensas esté en línea. Mientras tanto la tienda de naves y el mercado ya funcionan.')];
+        if (!app.online) return [serverNotice(t('v.server'))];
         const p = app.profile;
         const cfg = app.config;
         const out = [];
         out.push(
           el('div', { class: 'stat-grid' }, [
-            stat('TUS SHARDS', fmtNum(p?.shards ?? 0), 'gold'),
-            stat('TASA', `1 ◆ = ${cfg?.riftPerShard ?? 1} RIFT`),
-            stat('MÍNIMO', `${cfg?.minClaimShards ?? 100} ◆`),
-            stat('SALDO RIFT', app.balances ? fmtRift(app.balances.rift) : '—', 'cyan')
+            stat(t('v.yours'), fmtNum(p?.shards ?? 0), 'gold'),
+            stat(t('v.rate'), `1 ◆ = ${cfg?.riftPerShard ?? 1} RIFT`),
+            stat(t('v.min'), `${cfg?.minClaimShards ?? 100} ◆`),
+            stat(t('v.balance'), app.balances ? fmtRift(app.balances.rift) : '—', 'cyan')
           ])
         );
-        const notice = needWalletNotice('Conecta tu wallet para convertir tus Shards en tokens $RIFT reales.');
+        const notice = needWalletNotice(t('v.connect'));
         if (notice) {
           out.push(notice);
           return out;
         }
         const eco = await app.api.economy().catch(() => null);
         if (eco?.vault) {
-          out.push(el('p', { class: 'hint' }, `Emisión de hoy: quedan ${Number(eco.vault.remainingToday).toLocaleString('es')} de ${Number(eco.vault.dailyBudget).toLocaleString('es')} RIFT. Límite por jugador: ${Number(eco.vault.maxPerPlayer).toLocaleString('es')} RIFT/día.`));
+          out.push(el('p', { class: 'hint' }, t('v.today', { left: num(eco.vault.remainingToday), budget: num(eco.vault.dailyBudget), cap: num(eco.vault.maxPerPlayer) })));
         }
         const inputEl = el('input', { type: 'number', min: cfg.minClaimShards, step: 1, value: Math.max(cfg.minClaimShards, p?.shards ?? 0) });
-        const btn = el('button', { class: 'btn gold' }, 'Canjear');
+        const btn = el('button', { class: 'btn gold' }, t('v.claim'));
         btn.addEventListener('click', () =>
-          act(btn, 'Firmando…', async () => {
+          act(btn, t('v.signing'), async () => {
             const res = await app.api.claim(Number(inputEl.value));
-            toast('Vale firmado por el servidor. Confirma la transacción en tu wallet.', 'gold');
+            toast(t('v.signed'), 'gold');
             await app.wallet.claim(res.claim);
-          }, '¡$RIFT recibidos en tu wallet!')
+          }, t('v.received'))
         );
         out.push(el('div', { class: 'field' }, [inputEl, btn]));
-        out.push(el('p', { class: 'hint' }, 'El servidor firma un vale (EIP-712) válido 1 hora. Si no lo cobras, vence y los Shards vuelven a tu cuenta automáticamente.'));
+        out.push(el('p', { class: 'hint' }, t('v.voucher')));
         const claims = p?.claims ?? [];
         if (claims.length) {
-          out.push(el('h3', {}, 'Historial'));
+          out.push(el('h3', {}, t('v.history')));
           out.push(
             el(
               'div',
               { class: 'claim-list' },
               claims.map((c) => {
-                const statusLabel = { pending: 'PENDIENTE', paid: 'COBRADO', expired: 'VENCIDO' }[c.status];
+                const statusLabel = { pending: t('v.pending'), paid: t('v.paid'), expired: t('v.expired') }[c.status];
                 const row = el('div', { class: 'claim-item' }, [
                   el('span', {}, `${fmtNum(c.shards)} ◆ → ${fmtRift(BigInt(c.amountWei))} RIFT`),
                   el('span', { class: `status ${c.status}` }, statusLabel)
                 ]);
                 if (c.status === 'pending' && c.signature && c.deadline * 1000 > Date.now()) {
-                  const b = el('button', { class: 'btn ghost small' }, 'Cobrar');
-                  b.addEventListener('click', () => act(b, 'Cobrando…', () => app.wallet.claim(c), '¡$RIFT recibidos!'));
+                  const b = el('button', { class: 'btn ghost small' }, t('v.collect'));
+                  b.addEventListener('click', () => act(b, t('v.collecting'), () => app.wallet.claim(c), t('v.receivedShort')));
                   row.append(b);
                 }
                 return row;
@@ -401,20 +408,17 @@ export function createPanels(app) {
     },
 
     economy: {
-      kicker: 'TRANSPARENCIA',
-      title: 'Economía $RIFT',
+      kicker: 'e.kicker',
+      title: 'e.title',
       async render() {
-        const eco = await app.api.economy().catch(() => null);
-        const out = [
-          el('p', {}, '$RIFT tiene un suministro fijo de 1.000.000.000. El contrato no permite crear más tokens, no cobra impuestos por transferencia y nadie puede congelar tu saldo.'),
-          el('h3', {}, 'Distribución inicial')
-        ];
+        const eco = app.online ? await app.api.economy().catch(() => null) : null;
+        const out = [el('p', {}, t('e.supply')), el('h3', {}, t('e.alloc'))];
         const alloc = [
-          ['Recompensas de jugadores (vault con halving)', 40, '#4de8ff'],
-          ['Tesorería (marketing, botes, alianzas)', 20, '#9d6bff'],
-          ['Liquidez en DEX', 15, '#4dff9a'],
-          ['Equipo (bloqueado: 6 meses + 24 lineal)', 15, '#ff4dd2'],
-          ['Comunidad y airdrops', 10, '#ffc94d']
+          [t('e.a1'), 40, '#4de8ff'],
+          [t('e.a2'), 20, '#9d6bff'],
+          [t('e.a3'), 15, '#4dff9a'],
+          [t('e.a4'), 15, '#ff4dd2'],
+          [t('e.a5'), 10, '#ffc94d']
         ];
         out.push(
           el('div', { class: 'alloc' }, [
@@ -422,40 +426,40 @@ export function createPanels(app) {
             el('div', { class: 'alloc-legend' }, alloc.map(([n, p, c]) => el('span', { style: `--c:${c}` }, `${p}% ${n}`)))
           ])
         );
-        out.push(el('h3', {}, 'Emisión para jugadores'));
+        out.push(el('h3', {}, t('e.emission')));
         if (eco?.vault) {
           out.push(
             el('div', { class: 'stat-grid' }, [
-              stat('PRESUPUESTO HOY', `${Number(eco.vault.dailyBudget).toLocaleString('es')}`, 'cyan'),
-              stat('RESTANTE HOY', `${Number(eco.vault.remainingToday).toLocaleString('es')}`),
-              stat('EN EL VAULT', `${Number(eco.vault.balance).toLocaleString('es', { maximumFractionDigits: 0 })}`, 'gold'),
-              stat('TOPE/JUGADOR', `${Number(eco.vault.maxPerPlayer).toLocaleString('es')}`)
+              stat(t('e.budget'), num(eco.vault.dailyBudget), 'cyan'),
+              stat(t('e.remaining'), num(eco.vault.remainingToday)),
+              stat(t('e.vault'), num(eco.vault.balance, { maximumFractionDigits: 0 }), 'gold'),
+              stat(t('e.cap'), num(eco.vault.maxPerPlayer))
             ])
           );
         }
-        out.push(el('p', { class: 'hint' }, 'La emisión diaria se reduce a la mitad cada 180 días. Parte de lo que se gasta en Forja, compras con RIFT y torneos vuelve al vault, alargando su vida.'));
-        out.push(el('h3', {}, 'A dónde va cada RIFT gastado'));
+        out.push(el('p', { class: 'hint' }, t('e.halving')));
+        out.push(el('h3', {}, t('e.where')));
         out.push(
           el('table', { class: 'table' }, [
-            el('tr', {}, [el('th', {}, 'Acción'), el('th', {}, 'Quema'), el('th', {}, 'Pool jugadores'), el('th', {}, 'Proyecto')]),
-            el('tr', {}, [el('td', {}, 'Forja / compra de naves en RIFT'), el('td', {}, '40%'), el('td', {}, '30%'), el('td', {}, '30%')]),
-            el('tr', {}, [el('td', {}, 'Inscripción de Arena'), el('td', {}, '5%'), el('td', {}, 'premios no asignados'), el('td', {}, '10%')]),
-            el('tr', {}, [el('td', {}, 'Venta en el Mercado'), el('td', {}, '—'), el('td', {}, '—'), el('td', {}, '5% comisión')])
+            el('tr', {}, [el('th', {}, t('e.action')), el('th', {}, t('e.burn')), el('th', {}, t('e.pool')), el('th', {}, t('e.project'))]),
+            el('tr', {}, [el('td', {}, t('e.rowForge')), el('td', {}, '40%'), el('td', {}, '30%'), el('td', {}, '30%')]),
+            el('tr', {}, [el('td', {}, t('e.rowArena')), el('td', {}, '5%'), el('td', {}, t('e.rowArenaPool')), el('td', {}, '10%')]),
+            el('tr', {}, [el('td', {}, t('e.rowMarket')), el('td', {}, '—'), el('td', {}, '—'), el('td', {}, t('e.rowMarketFee'))])
           ])
         );
         if (eco) {
-          out.push(el('h3', {}, 'Actividad'));
+          out.push(el('h3', {}, t('e.activity')));
           out.push(
             el('div', { class: 'stat-grid' }, [
-              stat('PILOTOS', fmtNum(eco.players)),
-              stat('PARTIDAS VERIFICADAS', fmtNum(eco.stats.verifiedRuns), 'cyan'),
-              stat('RECHAZADAS', fmtNum(eco.stats.rejectedRuns)),
-              stat('SHARDS EMITIDOS', fmtNum(eco.stats.shardsIssued), 'gold')
+              stat(t('e.players'), fmtNum(eco.players)),
+              stat(t('e.verified'), fmtNum(eco.stats.verifiedRuns), 'cyan'),
+              stat(t('e.rejected'), fmtNum(eco.stats.rejectedRuns)),
+              stat(t('e.issued'), fmtNum(eco.stats.shardsIssued), 'gold')
             ])
           );
         }
         if (app.config?.chain) {
-          out.push(el('h3', {}, 'Contratos'));
+          out.push(el('h3', {}, t('e.contracts')));
           const ex = app.config.chain.explorerUrl;
           out.push(
             el(
@@ -472,43 +476,97 @@ export function createPanels(app) {
     },
 
     profile: {
-      kicker: 'PERFIL',
-      title: 'Piloto',
+      kicker: 'tal.kicker',
+      title: 'tal.title',
       async render() {
-        if (app.config?.staticMode) return [serverNotice('El perfil, las misiones y la racha se activan cuando el servidor de recompensas esté en línea.')];
-        await app.refreshProfile();
+        if (app.online) await app.refreshProfile();
+        const pl = app.pilot();
+        const out = [el('p', {}, t('tal.intro'))];
+        out.push(
+          el('div', { class: 'stat-grid' }, [
+            stat(t('tal.cores'), `${fmtNum(pl.cores)} ✦`, 'gold'),
+            stat(t('st.streak'), pl.streak === 1 ? t('st.day') : t('st.days', { n: pl.streak }))
+          ])
+        );
+        out.push(
+          el(
+            'div',
+            { class: 'talent-grid' },
+            TALENT_ORDER.map((id) => {
+              const lv = pl.talents[id] ?? 0;
+              const color = TALENTS[id].color;
+              const maxed = lv >= TALENT_MAX;
+              const cost = maxed ? 0 : talentCost(lv + 1);
+              const b = el('button', { class: 'btn gold small', disabled: maxed || pl.cores < cost }, maxed ? t('tal.max') : t('tal.upgrade', { c: fmtNum(cost) }));
+              b.addEventListener('click', async () => {
+                b.disabled = true;
+                try {
+                  const n = await app.upgradeTalent(id);
+                  app.audio?.play?.('choose');
+                  toast(t('tal.done', { name: tx.talentName(id), n }), 'ok');
+                } catch (err) {
+                  toast(err.message === 'poor' ? t('tal.poor') : explainError(err), 'err');
+                }
+                open('profile');
+              });
+              const ico = iconCopy(TALENT_ICON[id], color, 96);
+              ico.classList.add('ico');
+              return el('div', { class: `talent${maxed ? ' maxed' : ''}`, style: `--accent:${color}` }, [
+                ico,
+                el('b', {}, tx.talentName(id)),
+                el('span', { class: 'meta' }, t('tal.perLevel', { desc: tx.talentDesc(id) })),
+                el('div', { class: 'pips' }, Array.from({ length: TALENT_MAX }, (_, k) => el('i', { class: k < lv ? 'on' : '' }))),
+                b
+              ]);
+            })
+          )
+        );
+        out.push(el('p', { class: 'hint' }, `${t('tal.note')}${pl.online ? '' : ` ${t('tal.local')}`}`));
+
+        const st = pl.stats;
+        if (!pl.online) {
+          out.push(el('h3', {}, t('tal.stats')));
+          out.push(
+            el('div', { class: 'stat-grid' }, [
+              stat(t('st.runs'), fmtNum(st.runs)),
+              stat(t('st.best'), fmtNum(st.bestScore), 'cyan'),
+              stat(t('st.bestTime'), fmtTime(st.bestTime)),
+              stat(t('st.kills'), fmtNum(st.kills)),
+              stat(t('st.bosses'), fmtNum(st.bosses)),
+              stat(t('st.victories'), fmtNum(st.victories))
+            ])
+          );
+          return out;
+        }
+
+        // En línea: perfil del servidor (nombre, estadísticas verificadas y wallet).
         const p = app.profile;
-        if (!p) return [el('div', { class: 'notice' }, 'Sin conexión con el servidor.')];
         const nameIn = el('input', { value: p.name, maxlength: 16 });
-        const save = el('button', { class: 'btn ghost small' }, 'Guardar');
+        const save = el('button', { class: 'btn ghost small' }, t('p.save'));
         save.addEventListener('click', async () => {
           try {
             app.profile = await app.api.setName(nameIn.value);
-            toast('Nombre actualizado', 'ok');
+            toast(t('p.saved'), 'ok');
             app.updateMenu();
           } catch (err) {
             toast(err.message, 'err');
           }
         });
-        const out = [
-          el('div', { class: 'field' }, [nameIn, save]),
-          el('div', { class: 'stat-grid' }, [
-            stat('PARTIDAS', fmtNum(p.runs)),
-            stat('MEJOR PUNTAJE', fmtNum(p.bestScore), 'cyan'),
-            stat('MEJOR TIEMPO', fmtTime(p.bestTime)),
-            stat('BAJAS', fmtNum(p.kills)),
-            stat('GUARDIANES', fmtNum(p.bosses)),
-            stat('VICTORIAS', fmtNum(p.victories)),
-            stat('SHARDS TOTALES', fmtNum(p.lifetimeShards), 'gold'),
-            stat('RACHA', `${p.streak} días`)
-          ])
-        ];
-        out.push(el('p', {}, p.wallet ? `Wallet vinculada: ${p.wallet}` : 'Juegas como invitado. Conecta una wallet para guardar tu progreso en ella y canjear Shards.'));
-        if (!p.wallet && app.config?.chain) out.push(el('button', { class: 'btn primary', onclick: async () => (await app.connectWallet()) && open('profile') }, 'Conectar wallet'));
-        out.push(el('h3', {}, 'Cómo se gana'));
+        out.push(el('h3', {}, t('tal.stats')));
+        out.push(el('div', { class: 'field' }, [nameIn, save]));
         out.push(
-          el('p', {}, 'Cada partida da Shards por los Guardianes y élites que derrotes, por el tiempo sobrevivido y por ganar. Las misiones diarias y la racha de días suman extra. Tu nave multiplica el botín.')
+          el('div', { class: 'stat-grid' }, [
+            stat(t('st.runs'), fmtNum(p.runs)),
+            stat(t('st.best'), fmtNum(p.bestScore), 'cyan'),
+            stat(t('st.bestTime'), fmtTime(p.bestTime)),
+            stat(t('st.kills'), fmtNum(p.kills)),
+            stat(t('st.bosses'), fmtNum(p.bosses)),
+            stat(t('st.victories'), fmtNum(p.victories)),
+            stat(t('st.lifetimeShards'), fmtNum(p.lifetimeShards), 'gold')
+          ])
         );
+        out.push(el('p', {}, p.wallet ? t('p.wallet', { a: p.wallet }) : t('p.guest')));
+        if (!p.wallet && app.config?.chain) out.push(el('button', { class: 'btn primary', onclick: async () => (await app.connectWallet()) && open('profile') }, t('p.connect')));
         return out;
       }
     }
@@ -524,7 +582,7 @@ export function createPanels(app) {
 
   function rankingTable(entries, me, key) {
     return el('table', { class: 'table' }, [
-      el('tr', {}, [el('th', {}, '#'), el('th', {}, 'Piloto'), el('th', {}, 'Nave'), el('th', { class: 'num' }, 'Tiempo'), el('th', { class: 'num' }, 'Puntaje')]),
+      el('tr', {}, [el('th', {}, '#'), el('th', {}, t('r.pilot')), el('th', {}, t('r.ship')), el('th', { class: 'num' }, t('r.time')), el('th', { class: 'num' }, t('r.score'))]),
       ...entries.map((e, i) =>
         el('tr', { class: me && e[key] === me ? 'me' : '' }, [
           el('td', {}, el('span', { class: `rank r${i + 1}` }, String(i + 1))),

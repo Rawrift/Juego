@@ -1,4 +1,5 @@
 import { formatEther } from 'ethers';
+import { locale } from './i18n.js';
 
 export const $ = (sel) => document.querySelector(sel);
 
@@ -30,7 +31,7 @@ export function fmtTime(sec) {
 }
 
 export function fmtNum(n) {
-  return Number(n).toLocaleString('es');
+  return Number(n).toLocaleString(locale);
 }
 
 export function shortAddr(a) {
@@ -39,7 +40,7 @@ export function shortAddr(a) {
 
 export function fmtRift(wei, digits = 2) {
   const v = Number(formatEther(wei));
-  return v.toLocaleString('es', { maximumFractionDigits: v < 10 ? 4 : digits });
+  return v.toLocaleString(locale, { maximumFractionDigits: v < 10 ? 4 : digits });
 }
 
 /** Reemplaza la marca del token ("RIFT") por el símbolo elegido por el creador en los textos de un nodo. */
