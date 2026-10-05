@@ -1,0 +1,37 @@
+name: Verify RIFTFALL
+on:
+  push:
+    paths: ['riftfall/**', '.github/workflows/riftfall.yml']
+  pull_request:
+    paths: ['riftfall/**', '.github/workflows/riftfall.yml']
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: riftfall
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --no-audit --no-fund
+      - run: npm run test:contracts
+      - run: npm test
+      - run: npm run test:integration
+      - run: npm run build
+      - name: El build de producción no expone ganchos de test
+        run: "! grep -q __RIFTFALL__ dist/assets/*.js"
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - run: npm run test:e2e:chain
+      - name: Capturas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: RIFTFALL-SCREENSHOTS
+          path: riftfall/test-results/*.png
+          if-no-files-found: ignore

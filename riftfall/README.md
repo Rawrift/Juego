@@ -1,0 +1,102 @@
+# RIFTFALL
+
+**Juego web de supervivencia arcade con economía on-chain.** Esquiva hordas de enemigos de neón, elige mejoras
+en cada subida de nivel, derrota a los Guardianes del Rift y gana **Shards**, que se canjean por el token **$RIFT**.
+Las naves son **NFT** que se compran, se forjan y se revenden. En la **Arena** se compite por botes en RIFT.
+
+![Menú](docs/img/menu.jpg)
+
+| Partida | Jefe | Móvil |
+|---|---|---|
+| ![Partida](docs/img/gameplay.jpg) | ![Jefe](docs/img/boss.jpg) | ![Móvil](docs/img/mobile.jpg) |
+
+- **Jugable en cualquier navegador** (escritorio y móvil con joystick táctil). No requiere instalar nada; la wallet solo se pide para cobrar.
+- **Adictivo por diseño:** partidas de 3 a 10 minutos, 6 armas y 11 mejoras combinables, 3 jefes, misiones diarias, racha de días, ranking y torneos.
+- **Economía con anti-trampas real ("Proof of Play"):** el servidor re-simula cada partida tick a tick antes de pagar.
+- **Ingresos para el creador:** venta de naves, comisiones de Forja, Mercado y Arena, regalías y liquidez. Detalle en [`docs/ECONOMIA.md`](docs/ECONOMIA.md).
+
+## Inicio rápido (todo en local, con blockchain)
+
+Requisitos: Node.js 22.9 o superior.
+
+```bash
+cd riftfall
+npm install
+npm run build
+npm run local          # nodo Hardhat + despliegue de contratos + servidor en http://localhost:8787
+```
+
+Para usar una wallet en local, importa en MetaMask la clave **de prueba** de la cuenta #3 de Hardhat, que ya tiene 250.000 RIFT
+y 10.000 ETH de prueba: `0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6`.
+El juego te propone añadir la red "RIFTFALL Local" (chainId 31337). Esa clave es pública: no la uses nunca fuera de local.
+
+**Solo el juego, sin blockchain** (modo invitado, sin canjes): `npm run build && npm run server`.
+Para desarrollo con recarga en caliente usa `npm run server` en una terminal y `npm run dev` en otra (http://localhost:5173).
+
+## Cómo está construido
+
+```
+riftfall/
+├── contracts/            Solidity (OpenZeppelin 5)
+│   ├── RiftToken.sol       $RIFT: ERC-20 de suministro fijo, sin mint, sin impuestos, sin listas negras
+│   ├── RewardVault.sol     pool de recompensas: vales EIP-712, halving cada 180 días, topes diarios, timelock
+│   ├── RiftShips.sol       naves ERC-721 con clase y nivel, Forja, SVG on-chain, regalías ERC-2981
+│   ├── RiftMarket.sol      mercado P2P sin custodia pagado en RIFT (comisión ≤ 10%)
+│   ├── RiftArena.sol       torneos: inscripción, rake ≤ 15%, quema, reparto del bote, reembolsos
+│   └── TeamVesting.sol     vesting del equipo (cliff + lineal)
+├── src/sim/              simulación DETERMINISTA compartida por navegador y servidor
+├── src/client/           render Canvas2D con brillos y partículas, audio sintetizado, UI, wallet (ethers v6)
+├── src/shared/abis.js    ABIs usados por cliente y servidor
+├── server/               API Node (sin frameworks): sesiones, replay en workers, vales, misiones, ranking, Arena
+├── scripts/              despliegue, stack local, equilibrado con bot y simulador económico
+├── test/                 contratos, simulación, servidor, integración on-chain y E2E en navegador
+└── docs/                 ECONOMIA.md (diseño) y PROYECCION.md (modelo a 24 meses)
+```
+
+### Proof of Play (anti-trampas)
+
+1. `POST /api/run/start` entrega una semilla aleatoria y fija la nave, cuya propiedad se verifica on-chain.
+2. El navegador juega a 60 ticks/s fijos y graba solo las direcciones y elecciones (comprimidas con RLE).
+3. `POST /api/run/finish` re-simula la partida completa en un worker y calcula él mismo las recompensas.
+   También exige que la partida haya durado en tiempo real lo que dice la simulación.
+4. Los Shards se canjean por $RIFT con un vale EIP-712 que el contrato `RewardVault` valida y limita.
+
+## Scripts
+
+| Comando | Qué hace |
+|---|---|
+| `npm run local` | Stack local completo (blockchain + contratos + servidor + Arena automática) |
+| `npm run server` / `npm start` | Solo el servidor (lee `.env`) |
+| `npm run dev` | Cliente con recarga en caliente (proxy `/api` → 8787) |
+| `npm run build` | Compila el cliente en `dist/` |
+| `npm test` | Tests de simulación y servidor |
+| `npm run test:contracts` | Tests de los contratos (22) |
+| `npm run test:integration` | Flujo on-chain completo contra un nodo Hardhat |
+| `npm run test:e2e` | Partida real en Chromium verificada por el servidor + móvil |
+| `npm run test:e2e:chain` | E2E con wallet: comprar, forjar, jugar, canjear, vender e inscribirse en la Arena |
+| `npm run balance -- 8 spark 1` | Juega 8 partidas con el bot para medir dificultad y recompensas |
+| `npm run economy -- --md` | Proyección económica a 24 meses (regenera `docs/PROYECCION.md`) |
+
+## Lanzar en Base (testnet y luego mainnet)
+
+1. Copia `.env.example` a `.env` y completa `DEPLOYER_PRIVATE_KEY`, y `RIFT_OWNER` y `RIFT_TREASURY` (idealmente una Safe multisig).
+   Completa también `RIFT_SIGNER`: la dirección de una clave nueva, solo para el servidor.
+2. `npm run deploy:testnet` → genera `deployments/84532.json`.
+3. Configura el servidor en `.env`: `DEPLOYMENT_FILE=deployments/84532.json`, `RPC_URL`, `PUBLIC_RPC_URL`, `EXPLORER_URL`,
+   `SIGNER_PRIVATE_KEY` (la clave de `RIFT_SIGNER`), `ADMIN_TOKEN` y `ARENA_AUTO=1`.
+4. `npm run build && npm start` y prueba con jugadores reales.
+5. Cuando todo esté probado y auditado: `npm run deploy:mainnet`. Después crea el pool RIFT/ETH con la asignación
+   de liquidez y sigue el checklist de [`docs/ECONOMIA.md`](docs/ECONOMIA.md#12-checklist-de-lanzamiento).
+
+**Hosting:** cualquier servicio que ejecute Node de forma continua (Railway, Render, Fly.io o un VPS) sirve.
+Un solo proceso entrega el juego y la API. Haz copias de seguridad de `server/data/`.
+Para miles de jugadores concurrentes, migra `server/db.mjs` a Postgres o Supabase.
+
+**Seguridad de claves:** la clave del deployer y la de la Safe nunca van al servidor. La del servidor
+(`SIGNER_PRIVATE_KEY`) solo puede firmar vales dentro de los topes diarios. Si se filtra, pausa el vault,
+llama a `setSigner` con una nueva y reanuda.
+
+## Licencias
+
+Código propio del proyecto. Dependencias: OpenZeppelin Contracts (MIT), ethers (MIT), Hardhat (MIT), Vite (MIT),
+fuentes Orbitron y Rajdhani (SIL Open Font License). Todos los gráficos y sonidos se generan por código.

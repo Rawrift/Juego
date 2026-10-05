@@ -1,0 +1,43 @@
+{
+  "name": "riftfall",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "RIFTFALL — juego web de supervivencia arcade con economía on-chain ($RIFT)",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4174",
+    "server": "node --env-file-if-exists=.env server/index.mjs",
+    "chain": "hardhat node --hostname 127.0.0.1",
+    "compile": "hardhat compile",
+    "deploy:local": "hardhat run scripts/deploy.cjs --network localhost",
+    "deploy:testnet": "hardhat run scripts/deploy.cjs --network baseSepolia",
+    "deploy:mainnet": "hardhat run scripts/deploy.cjs --network base",
+    "test": "node --test \"test/unit/*.test.mjs\"",
+    "test:contracts": "hardhat test",
+    "test:integration": "node --test \"test/integration/*.test.mjs\"",
+    "test:e2e": "playwright test",
+    "economy": "node scripts/simulate-economy.mjs",
+    "local": "node scripts/local-stack.mjs",
+    "test:e2e:chain": "playwright test -c playwright.chain.config.js",
+    "balance": "node scripts/balance.mjs",
+    "start": "node --env-file-if-exists=.env server/index.mjs",
+    "build:e2e": "vite build --mode e2e --outDir dist-e2e"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^6.1.2",
+    "@openzeppelin/contracts": "5.6.1",
+    "@playwright/test": "^1.63.0",
+    "hardhat": "^2.29.1",
+    "vite": "^8.3.2"
+  },
+  "dependencies": {
+    "@fontsource/orbitron": "^5.3.0",
+    "@fontsource/rajdhani": "^5.3.0",
+    "ethers": "^6.17.0"
+  },
+  "engines": {
+    "node": ">=22.9"
+  }
+}

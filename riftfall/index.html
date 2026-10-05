@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+  <meta name="theme-color" content="#05060f" />
+  <meta name="description" content="RIFTFALL — sobrevive al Rift, gana Shards y canjéalos por $RIFT." />
+  <title>RIFTFALL</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M32 4 50 52 40 47 32 60 24 47 14 52Z' fill='%2305060f' stroke='%234de8ff' stroke-width='4' stroke-linejoin='round'/%3E%3C/svg%3E" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="vignette"></div>
+  <div id="hurtFlash"></div>
+
+  <!-- ===================================================== HUD -->
+  <div id="hud" class="hidden">
+    <div class="xpbar"><i id="xpFill"></i><span id="levelTag">NV 1</span></div>
+    <div class="hud-top">
+      <div class="hud-hp">
+        <div class="hp-label"><b>CASCO</b><span id="hpText">100</span></div>
+        <div class="hpbar"><i id="hpFill"></i><em id="hpGhost"></em></div>
+      </div>
+      <div class="hud-time" id="timer">00:00</div>
+      <div class="hud-stats">
+        <div><small>BAJAS</small><b id="killCount">0</b></div>
+        <div class="shard-stat"><small>SHARDS</small><b id="shardCount">0</b></div>
+      </div>
+    </div>
+    <div id="bossBar" class="hidden">
+      <span>GUARDIÁN DEL RIFT</span>
+      <div class="bossbar"><i id="bossFill"></i></div>
+    </div>
+    <div id="loadout"></div>
+    <button id="pauseBtn" class="icon-btn" aria-label="Pausa">❚❚</button>
+    <div id="announce"></div>
+    <div id="joystick" class="hidden"><i></i></div>
+  </div>
+
+  <!-- ===================================================== MENÚ PRINCIPAL -->
+  <div id="menu" class="screen">
+    <header class="topbar">
+      <div class="brand-mini"><span class="logo-glyph"></span>RIFTFALL</div>
+      <div class="chips">
+        <div class="chip shard-chip" title="Shards (moneda del juego)"><i class="gem gold"></i><b id="menuShards">0</b></div>
+        <div class="chip rift-chip hidden" id="riftChip" title="Saldo de $RIFT"><i class="gem cyan"></i><b id="menuRift">0</b></div>
+        <button id="walletBtn" class="btn ghost small">Conectar wallet</button>
+        <button id="muteBtn" class="icon-btn" aria-label="Sonido">♪</button>
+      </div>
+    </header>
+
+    <main class="menu-main">
+      <div class="title-block">
+        <div class="eyebrow">TEMPORADA 1 · PROOF OF PLAY</div>
+        <h1 class="logo">RIFT<span>FALL</span></h1>
+        <p class="tagline">Sobrevive a la grieta. Derrota a los Guardianes. Gana <b>Shards</b> y canjéalos por <b>$RIFT</b>.</p>
+        <div class="ship-pick" id="shipPick">
+          <canvas id="shipPreview" width="160" height="160"></canvas>
+          <div>
+            <small>NAVE SELECCIONADA</small>
+            <b id="shipName">SPARK</b>
+            <span id="shipDesc">Interceptor de serie.</span>
+            <em id="shipYield">Recompensa x1.00</em>
+          </div>
+          <button class="btn ghost small" data-open="hangar">Cambiar</button>
+        </div>
+        <div class="cta-row">
+          <button id="playBtn" class="btn primary big">JUGAR</button>
+          <button class="btn secondary big" data-open="arena">ARENA</button>
+        </div>
+        <p class="hint" id="controlsHint">WASD / flechas para moverte · las armas disparan solas · 1-2-3 para elegir mejoras</p>
+      </div>
+
+      <aside class="side-stack">
+        <section class="card daily">
+          <header><h3>Misiones diarias</h3><span class="streak" id="streakTag">Racha 0🔥</span></header>
+          <ul id="missionList" class="missions"></ul>
+        </section>
+        <nav class="nav-grid">
+          <button data-open="hangar"><i>⬢</i>Hangar</button>
+          <button data-open="market"><i>⇄</i>Mercado</button>
+          <button data-open="ranking"><i>♛</i>Ranking</button>
+          <button data-open="vault"><i>◈</i>Canjear</button>
+          <button data-open="economy"><i>∑</i>Economía</button>
+          <button data-open="profile"><i>☺</i>Piloto</button>
+        </nav>
+      </aside>
+    </main>
+    <footer class="menu-foot">
+      <span id="netStatus">Conectando…</span>
+      <span>Cada partida se re-simula en el servidor antes de pagar recompensas.</span>
+    </footer>
+  </div>
+
+  <!-- ===================================================== PANELES -->
+  <div id="sheet" class="sheet hidden" role="dialog" aria-modal="true">
+    <div class="sheet-card">
+      <header>
+        <div><small id="sheetKicker"></small><h2 id="sheetTitle"></h2></div>
+        <button class="icon-btn" id="sheetClose" aria-label="Cerrar">✕</button>
+      </header>
+      <div id="sheetBody" class="sheet-body"></div>
+    </div>
+  </div>
+
+  <!-- ===================================================== SUBIDA DE NIVEL -->
+  <div id="levelup" class="overlay hidden">
+    <div class="levelup-inner">
+      <div class="eyebrow">SUBISTE DE NIVEL</div>
+      <h2 id="levelupTitle">NIVEL 2</h2>
+      <div id="choices" class="choices"></div>
+      <p class="hint">Elige con clic, toque o las teclas 1 · 2 · 3</p>
+    </div>
+  </div>
+
+  <!-- ===================================================== PAUSA -->
+  <div id="pause" class="overlay hidden">
+    <div class="panel-small">
+      <h2>PAUSA</h2>
+      <div id="pauseLoadout" class="pause-loadout"></div>
+      <button id="resumeBtn" class="btn primary">Continuar</button>
+      <button id="quitBtn" class="btn ghost">Terminar partida</button>
+    </div>
+  </div>
+
+  <!-- ===================================================== FIN DE PARTIDA -->
+  <div id="gameover" class="overlay hidden">
+    <div class="gameover-card">
+      <div class="eyebrow" id="goKicker">FIN DE LA PARTIDA</div>
+      <h2 id="goTitle">RIFT COLAPSADO</h2>
+      <div class="go-stats" id="goStats"></div>
+      <div class="go-rewards">
+        <div class="verify" id="goVerify"><span class="spinner"></span> Verificando partida en el servidor…</div>
+        <ul id="goRewardList"></ul>
+        <div class="go-total"><small>SHARDS GANADOS</small><b id="goTotal">0</b></div>
+      </div>
+      <div class="go-actions">
+        <button id="againBtn" class="btn primary big">JUGAR OTRA VEZ</button>
+        <button id="menuBtn" class="btn ghost">Menú</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toasts"></div>
+  <script type="module" src="/src/client/main.js"></script>
+</body>
+</html>

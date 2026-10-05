@@ -1,0 +1,12 @@
+node_modules/
+dist/
+dist-e2e/
+cache/
+artifacts/
+typechain-types/
+coverage/
+test-results/
+playwright-report/
+server/data/
+.env
+deployments/31337.json
