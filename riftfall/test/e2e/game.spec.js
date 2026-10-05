@@ -497,7 +497,13 @@ test('versión para portales (CrazyGames): sin cripto, revivir y x2 Núcleos con
             gameplayStart: () => __cg.push('gameplayStart'), gameplayStop: () => __cg.push('gameplayStop'),
             happytime: () => __cg.push('happytime')
           },
-          ad: { requestAd: (type, cb) => { __cg.push('ad:' + type); setTimeout(() => { cb.adStarted(); setTimeout(cb.adFinished, 50); }, 50); }, hasAdblock: async () => false }
+          ad: { requestAd: (type, cb) => { __cg.push('ad:' + type); setTimeout(() => { cb.adStarted(); setTimeout(cb.adFinished, 50); }, 50); }, hasAdblock: async () => false },
+          // Cuenta del portal con progreso de otro dispositivo.
+          data: (() => {
+            const m = new Map([['riftfall.progress', JSON.stringify({ cores: 777, lifetimeCores: 777 })], ['riftfall.tutorial', '1']]);
+            window.__cgData = m;
+            return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k), clear: () => m.clear() };
+          })()
         } };`
     })
   );
@@ -514,6 +520,8 @@ test('versión para portales (CrazyGames): sin cripto, revivir y x2 Núcleos con
     }
     await expect(page.locator('.tagline')).toContainText('Rift Heart');
     await expect.poll(calls).toContain('loadingStop');
+    // El progreso guardado en la cuenta del portal se carga al arrancar.
+    await expect(page.locator('#menuCores')).toHaveText('777');
 
     await page.click('#playBtn');
     await expect(page.locator('#hud')).toBeVisible();
@@ -550,6 +558,9 @@ test('versión para portales (CrazyGames): sin cripto, revivir y x2 Núcleos con
     await expect(page.locator('#doubleBtn')).toBeHidden();
     const doubled = await page.evaluate(() => JSON.parse(localStorage.getItem('riftfall.progress')).cores);
     expect(doubled).toBeGreaterThan(before);
+    expect(before).toBeGreaterThan(777);
+    // Y cada cambio vuelve a la cuenta del portal.
+    expect(await page.evaluate(() => JSON.parse(window.__cgData.get('riftfall.progress')).cores)).toBe(doubled);
 
     // Compartir no enlaza a otra web; la próxima partida pasa por un anuncio entre partidas.
     await page.click('#againBtn');

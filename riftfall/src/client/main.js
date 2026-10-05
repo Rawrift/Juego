@@ -190,11 +190,14 @@ $('#dcPlay').addEventListener('click', () => startRun('daily'));
 
 const RIFT_KEY = 'riftfall.rift';
 let riftChoice = 0;
-try {
-  riftChoice = Math.max(0, Math.floor(Number(localStorage.getItem(RIFT_KEY)) || 0));
-} catch {
-  riftChoice = 0;
+function readRiftChoice() {
+  try {
+    riftChoice = Math.max(0, Math.floor(Number(localStorage.getItem(RIFT_KEY)) || 0));
+  } catch {
+    riftChoice = 0;
+  }
 }
+readRiftChoice();
 
 /** Nivel elegido, nunca por encima del máximo desbloqueado. */
 function riftLevel() {
@@ -1068,6 +1071,9 @@ async function boot() {
   if (PORTAL) {
     // Portales: sin servidor, sin wallet ni pagos; solo el juego, en modo práctica.
     await initPortal();
+    // El progreso puede venir de la cuenta del portal (otro dispositivo).
+    app.progress = loadProgress();
+    readRiftChoice();
     portal.loadingStart();
     $('.tagline').innerHTML = t('menu.taglinePortal');
     newDemo();

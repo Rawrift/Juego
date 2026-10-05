@@ -23,6 +23,33 @@ export async function initPortal() {
   } catch {
     sdk = null;
   }
+  if (sdk?.data) await syncProgress(sdk.data);
+}
+
+// Progreso en la cuenta del portal (Data Module de CrazyGames): el jugador lo recupera en cualquier
+// dispositivo. El juego sigue leyendo y escribiendo localStorage; acá se trae la copia del portal al
+// arrancar y se le reenvía cada cambio. Las preferencias del dispositivo (idioma, sonido, gráficos) no viajan.
+const SYNCED = ['riftfall.progress', 'riftfall.tutorial', 'riftfall.rift'];
+
+async function syncProgress(data) {
+  const setItem = Storage.prototype.setItem;
+  const removeItem = Storage.prototype.removeItem;
+  for (const key of SYNCED) {
+    try {
+      const v = await data.getItem(key);
+      if (typeof v === 'string') setItem.call(localStorage, key, v);
+    } catch {
+      /* sin copia en el portal: queda la local */
+    }
+  }
+  Storage.prototype.setItem = function (key, value) {
+    setItem.call(this, key, value);
+    if (this === localStorage && SYNCED.includes(key)) call(() => data.setItem(key, String(value)));
+  };
+  Storage.prototype.removeItem = function (key) {
+    removeItem.call(this, key);
+    if (this === localStorage && SYNCED.includes(key)) call(() => data.removeItem(key));
+  };
 }
 
 const call = (fn) => {
