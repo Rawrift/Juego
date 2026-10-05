@@ -192,13 +192,15 @@ async function startRun(mode = 'normal') {
       demoShip: app.config?.demoShips ? app.ship.key : undefined
     });
   } catch (err) {
-    if (err.status) {
+    // Con servidor en línea, un error de la API es un aviso real (p. ej. arena sin inscripción).
+    // Sin servidor (hosting estático) se juega en modo práctica.
+    if (err.status && app.online) {
       toast(err.message, 'err');
       return;
     }
     game.offline = true;
     run = { runId: null, seed: (Math.random() * 2 ** 32) >>> 0, ship: 'spark', shipLevel: 1, mode: 'normal' };
-    toast('Sin conexión con el servidor: partida de práctica sin recompensas.', 'err');
+    toast('Modo práctica: el servidor de recompensas no está conectado, esta partida no da Shards.', 'err');
   }
   game.run = run;
   game.sim = createSim({ seed: run.seed, ship: run.ship, shipLevel: run.shipLevel });

@@ -31,6 +31,10 @@ export function createApi(base = '') {
       },
       body: body ? JSON.stringify(body) : undefined
     });
+    // Sin servidor del juego (p. ej. hosting estático) las rutas /api devuelven HTML: modo práctica.
+    if (!(res.headers.get('content-type') ?? '').includes('application/json')) {
+      throw new Error('Servidor del juego no disponible');
+    }
     let json = {};
     try {
       json = await res.json();
