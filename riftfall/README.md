@@ -12,7 +12,12 @@ Las naves son **NFT** que se compran, se forjan y se revenden. En la **Arena** s
 
 - **Jugable en cualquier navegador** (escritorio y móvil, vertical u horizontal, con joystick táctil). No requiere instalar nada; la wallet solo se pide para cobrar.
 - **En español, inglés y portugués:** se elige solo según el idioma del celular (o con `?lang=es|en|pt`) y se puede cambiar desde el menú.
-- **Adictivo por diseño:** partidas de 3 a 10 minutos, 6 armas y 11 mejoras combinables, **6 evoluciones de armas**, 3 jefes que sueltan **cofres**, **combos**, tutorial, misiones diarias, racha de días, ranking y torneos.
+- **Adictivo por diseño:** partidas de hasta 12 minutos, 6 armas y 11 mejoras combinables, **6 evoluciones de armas**, 3 jefes que sueltan **cofres**, **combos**, tutorial, misiones diarias, racha de días, ranking y torneos.
+- **Un desafío que no se regala:** la dificultad crece al ritmo del jugador y hay 10 tipos de enemigo. Los últimos llegan en la segunda mitad: minas kamikaze, espectros que se teletransportan, Aegis que blindan a los cercanos y francotiradores con láser.
+  - Hay lluvias de meteoritos que también dañan a los enemigos y escuadrones de élite.
+  - Para ganar hay que destruir al **Corazón del Rift** (aparece a los 10:00). Si sigue vivo a los 12:00, el Rift colapsa.
+  - **Niveles del Rift 1–10:** se desbloquean ganando; cada uno da más vida y daño a los enemigos y **paga más** (hasta x2,5). Se verifican en el replay del servidor.
+  - La curva se mide con `node` y el piloto automático; los datos están en [docs/INVESTIGACION-JUGABILIDAD.md](docs/INVESTIGACION-JUGABILIDAD.md).
 - **Progreso permanente:** **habilidades del piloto** que se compran con **Núcleos ✦** (moneda de progreso que no se canjea por tokens). Sin servidor, el progreso, las misiones y la racha se guardan en el dispositivo.
 - **Viral:** al terminar, el botón **Compartir** genera una imagen con tu resultado y la manda por WhatsApp, Instagram o lo que tenga el celular.
 - **Economía con anti-trampas real ("Proof of Play"):** el servidor re-simula cada partida tick a tick antes de pagar.

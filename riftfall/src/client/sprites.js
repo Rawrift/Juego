@@ -123,6 +123,72 @@ function enemyPath(g, shape, r) {
       g.closePath();
       break;
     }
+    case 'star': {
+      // mina: estrella de púas
+      g.beginPath();
+      for (let i = 0; i < 14; i++) {
+        const a = (i / 14) * Math.PI * 2;
+        const rr = i % 2 === 0 ? r * 1.25 : r * 0.62;
+        if (i === 0) g.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+        else g.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+      }
+      g.closePath();
+      break;
+    }
+    case 'crescent': {
+      // espectro: cabeza redonda adelante y tres colas onduladas atrás
+      g.beginPath();
+      g.moveTo(-r * 0.2, -r * 0.95);
+      g.bezierCurveTo(r * 0.75, -r * 1.05, r * 1.2, -r * 0.35, r * 1.15, 0);
+      g.bezierCurveTo(r * 1.2, r * 0.35, r * 0.75, r * 1.05, -r * 0.2, r * 0.95);
+      g.quadraticCurveTo(-r * 0.75, r * 0.95, -r * 1.25, r * 0.7);
+      g.quadraticCurveTo(-r * 0.75, r * 0.45, -r * 1.05, r * 0.2);
+      g.quadraticCurveTo(-r * 0.6, 0, -r * 1.05, -r * 0.2);
+      g.quadraticCurveTo(-r * 0.75, -r * 0.45, -r * 1.25, -r * 0.7);
+      g.quadraticCurveTo(-r * 0.75, -r * 0.95, -r * 0.2, -r * 0.95);
+      g.closePath();
+      break;
+    }
+    case 'shield':
+      // égida: escudo con la punta hacia adelante
+      g.beginPath();
+      g.moveTo(r * 1.15, 0);
+      g.quadraticCurveTo(r * 0.75, -r * 0.95, -r * 0.55, -r * 1.0);
+      g.quadraticCurveTo(-r * 1.0, -r * 0.55, -r * 0.92, 0);
+      g.quadraticCurveTo(-r * 1.0, r * 0.55, -r * 0.55, r * 1.0);
+      g.quadraticCurveTo(r * 0.75, r * 0.95, r * 1.15, 0);
+      g.closePath();
+      break;
+    case 'cross': {
+      // francotirador: cruz con un cañón largo hacia adelante
+      const w = r * 0.38;
+      g.beginPath();
+      g.moveTo(r * 1.45, -w * 0.55);
+      g.lineTo(r * 1.45, w * 0.55);
+      g.lineTo(w, w * 0.8);
+      g.lineTo(w * 0.8, r * 1.0);
+      g.lineTo(-w * 0.8, r * 1.0);
+      g.lineTo(-w, w);
+      g.lineTo(-r * 1.0, w * 0.8);
+      g.lineTo(-r * 1.0, -w * 0.8);
+      g.lineTo(-w, -w);
+      g.lineTo(-w * 0.8, -r * 1.0);
+      g.lineTo(w * 0.8, -r * 1.0);
+      g.lineTo(w, -w * 0.8);
+      g.closePath();
+      break;
+    }
+    case 'core':
+      // Corazón del Rift: corona de púas grandes
+      g.beginPath();
+      for (let i = 0; i < 32; i++) {
+        const a = (i / 32) * Math.PI * 2;
+        const rr = i % 4 === 0 ? r * 1.22 : i % 2 === 0 ? r * 1.0 : r * 0.88;
+        if (i === 0) g.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+        else g.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+      }
+      g.closePath();
+      break;
     case 'boss':
       g.beginPath();
       for (let i = 0; i < 24; i++) {
@@ -173,7 +239,21 @@ function drawEye(g, x, y, s, color) {
  * contorno oscuro, brillo superior, ojo expresivo y halo de neón para leerse sobre el fondo.
  */
 export function enemySprite(shape, color, r, flash = false, elite = false) {
-  return cached(`en2|${shape}|${color}|${r}|${flash}|${elite}`, () => {
+  if (flash) {
+    // Golpe: el mismo dibujo con un velo blanco encima (se sigue viendo el ojo y el contorno).
+    // En los jefes el velo es más suave, porque reciben golpes todo el tiempo.
+    return cached(`en3f|${shape}|${color}|${r}|${elite}`, () => {
+      const base = enemySprite(shape, color, r, false, elite);
+      const c = makeCanvas(base.img.width, base.img.height);
+      const g = c.getContext('2d');
+      g.drawImage(base.img, 0, 0);
+      g.globalCompositeOperation = 'source-atop';
+      g.fillStyle = shape === 'boss' || shape === 'core' ? 'rgba(255,255,255,0.32)' : 'rgba(255,255,255,0.62)';
+      g.fillRect(0, 0, c.width, c.height);
+      return { img: c, size: base.size };
+    });
+  }
+  return cached(`en3|${shape}|${color}|${r}|${elite}`, () => {
     const pad = r * 0.9 + 10;
     const half = r * 1.35 + pad;
     const c = makeCanvas(half * 2 * RES, half * 2 * RES);
@@ -186,12 +266,6 @@ export function enemySprite(shape, color, r, flash = false, elite = false) {
     g.shadowColor = elite ? '#ffd23d' : color;
     g.shadowBlur = elite ? 24 : 14;
     enemyPath(g, shape, r);
-    if (flash) {
-      g.fillStyle = '#ffffff';
-      g.fill();
-      g.shadowBlur = 0;
-      return { img: c, size: half * 2 };
-    }
     const body = g.createLinearGradient(-r * 0.6, -r, r * 0.4, r);
     body.addColorStop(0, mix(color, '#ffffff', 0.45));
     body.addColorStop(0.45, color);
@@ -216,7 +290,52 @@ export function enemySprite(shape, color, r, flash = false, elite = false) {
     g.strokeStyle = '#130a2b';
     g.stroke();
 
-    if (shape === 'boss') {
+    if (shape === 'core') {
+      // anillo interior de energía, pupila grande y dos ojos laterales
+      g.strokeStyle = rgba('#ffffff', 0.75);
+      g.lineWidth = 4;
+      g.beginPath();
+      g.arc(0, 0, r * 0.68, 0, Math.PI * 2);
+      g.stroke();
+      g.strokeStyle = rgba(mix(color, '#ffffff', 0.6), 0.9);
+      g.lineWidth = 2;
+      polygon(g, 8, r * 0.82, Math.PI / 8);
+      g.stroke();
+      drawEye(g, r * 0.08, 0, r * 0.36, color);
+      drawEye(g, -r * 0.36, -r * 0.42, r * 0.14, color);
+      drawEye(g, -r * 0.36, r * 0.42, r * 0.14, color);
+    } else if (shape === 'star') {
+      // núcleo inestable que brilla
+      g.fillStyle = '#fff3c4';
+      g.beginPath();
+      g.arc(0, 0, r * 0.34, 0, Math.PI * 2);
+      g.fill();
+      g.lineWidth = Math.max(1.5, r * 0.1);
+      g.strokeStyle = '#130a2b';
+      g.stroke();
+      drawEye(g, r * 0.05, 0, Math.max(2.2, r * 0.24), color);
+    } else if (shape === 'shield') {
+      // placa central con remaches
+      g.fillStyle = mix(color, '#ffffff', 0.25);
+      g.strokeStyle = '#130a2b';
+      g.lineWidth = Math.max(1.5, r * 0.08);
+      g.beginPath();
+      g.moveTo(r * 0.55, 0);
+      g.quadraticCurveTo(r * 0.3, -r * 0.5, -r * 0.45, -r * 0.55);
+      g.lineTo(-r * 0.45, r * 0.55);
+      g.quadraticCurveTo(r * 0.3, r * 0.5, r * 0.55, 0);
+      g.closePath();
+      g.fill();
+      g.stroke();
+      drawEye(g, r * 0.1, 0, r * 0.26, color);
+    } else if (shape === 'cross') {
+      // mira telescópica como ojo
+      g.fillStyle = '#1b2240';
+      g.beginPath();
+      g.arc(0, 0, r * 0.42, 0, Math.PI * 2);
+      g.fill();
+      drawEye(g, r * 0.04, 0, r * 0.3, color);
+    } else if (shape === 'boss') {
       // anillos de energía y tres ojos
       g.strokeStyle = rgba(mix(color, '#ffffff', 0.5), 0.85);
       g.lineWidth = 3;
@@ -396,6 +515,220 @@ export function missileSprite() {
     g.lineTo(-6, -5);
     g.closePath();
     g.fill();
+    return { img: c, size: half * 2 };
+  });
+}
+
+/** Rayo del bláster: cápsula de luz alargada (mira hacia +X), para dibujar con 'lighter'. */
+export function boltSprite(gold) {
+  return cached(`bolt|${gold}`, () => {
+    const len = 30;
+    const half = 18;
+    const c = makeCanvas(len * 2 * RES, half * 2 * RES);
+    const g = c.getContext('2d');
+    g.scale(RES, RES);
+    g.translate(len, half);
+    const col = gold ? '#ffd23d' : '#4de8ff';
+    g.shadowColor = col;
+    g.shadowBlur = 12;
+    const body = g.createLinearGradient(-len, 0, len * 0.6, 0);
+    body.addColorStop(0, rgba(col, 0));
+    body.addColorStop(0.6, rgba(col, 0.55));
+    body.addColorStop(1, rgba(col, 0.95));
+    g.fillStyle = body;
+    g.beginPath();
+    g.ellipse(-2, 0, len - 4, 4.6, 0, 0, Math.PI * 2);
+    g.fill();
+    g.shadowBlur = 0;
+    g.fillStyle = gold ? '#fff6cf' : '#ecfeff';
+    g.beginPath();
+    g.ellipse(8, 0, 12, 2, 0, 0, Math.PI * 2);
+    g.fill();
+    // el cuadro del sprite tiene alto `half * 2`; size se usa como ancho al dibujar
+    return { img: c, size: len * 2, h: half * 2 };
+  });
+}
+
+/** Bala del francotirador: aguja de luz ácida (mira hacia +X). */
+export function snipeSprite() {
+  return cached('snipe', () => {
+    const len = 22;
+    const half = 10;
+    const c = makeCanvas(len * 2 * RES, half * 2 * RES);
+    const g = c.getContext('2d');
+    g.scale(RES, RES);
+    g.translate(len, half);
+    g.shadowColor = '#d4ff3d';
+    g.shadowBlur = 10;
+    const body = g.createLinearGradient(-len, 0, len, 0);
+    body.addColorStop(0, rgba('#d4ff3d', 0));
+    body.addColorStop(1, rgba('#f3ffc4', 1));
+    g.fillStyle = body;
+    g.beginPath();
+    g.moveTo(len - 2, 0);
+    g.lineTo(-len + 2, -3);
+    g.lineTo(-len + 2, 3);
+    g.closePath();
+    g.fill();
+    return { img: c, size: len * 2, h: half * 2 };
+  });
+}
+
+/** Esquirla de una explosión (triángulo con borde), del color del enemigo. */
+export function debrisSprite(color) {
+  return cached(`debris|${color}`, () => {
+    const half = 8;
+    const c = makeCanvas(half * 2 * RES, half * 2 * RES);
+    const g = c.getContext('2d');
+    g.scale(RES, RES);
+    g.translate(half, half);
+    g.beginPath();
+    g.moveTo(6, 0);
+    g.lineTo(-4, 4.5);
+    g.lineTo(-3, -4);
+    g.closePath();
+    g.fillStyle = color;
+    g.fill();
+    g.lineWidth = 1.4;
+    g.strokeStyle = '#130a2b';
+    g.stroke();
+    g.fillStyle = 'rgba(255,255,255,0.45)';
+    g.beginPath();
+    g.moveTo(4, -0.5);
+    g.lineTo(-2.5, -3);
+    g.lineTo(-1, 0.5);
+    g.closePath();
+    g.fill();
+    return { img: c, size: half * 2 };
+  });
+}
+
+/** Bocanada de humo oscuro y suave (da volumen a las explosiones). */
+export function smokeSprite() {
+  return cached('smoke', () => {
+    const half = 32;
+    const c = makeCanvas(half * 2 * RES, half * 2 * RES);
+    const g = c.getContext('2d');
+    g.scale(RES, RES);
+    g.translate(half, half);
+    const grad = g.createRadialGradient(0, 0, 0, 0, 0, half);
+    grad.addColorStop(0, 'rgba(40, 30, 70, 0.55)');
+    grad.addColorStop(0.55, 'rgba(26, 20, 52, 0.3)');
+    grad.addColorStop(1, 'rgba(10, 8, 24, 0)');
+    g.fillStyle = grad;
+    g.fillRect(-half, -half, half * 2, half * 2);
+    return { img: c, size: half * 2 };
+  });
+}
+
+/** Meteorito: roca con borde encendido. */
+export function meteorSprite() {
+  return cached('meteor', () => {
+    const half = 30;
+    const c = makeCanvas(half * 2 * RES, half * 2 * RES);
+    const g = c.getContext('2d');
+    g.scale(RES, RES);
+    g.translate(half, half);
+    g.shadowColor = '#ff7a1f';
+    g.shadowBlur = 16;
+    g.beginPath();
+    const pts = 11;
+    for (let i = 0; i < pts; i++) {
+      const a = (i / pts) * Math.PI * 2;
+      const rr = 14 + ((i * 37) % 7) - 3;
+      if (i === 0) g.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+      else g.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+    }
+    g.closePath();
+    const body = g.createRadialGradient(-5, -5, 2, 0, 0, 18);
+    body.addColorStop(0, '#ffcf6b');
+    body.addColorStop(0.35, '#b4532a');
+    body.addColorStop(1, '#3a1a14');
+    g.fillStyle = body;
+    g.fill();
+    g.shadowBlur = 0;
+    g.lineWidth = 2;
+    g.strokeStyle = '#130a2b';
+    g.stroke();
+    for (const [x, y, rr] of [[-3, 4, 3], [5, -2, 2.2], [-6, -5, 1.8]]) {
+      g.fillStyle = 'rgba(19,10,43,0.45)';
+      g.beginPath();
+      g.arc(x, y, rr, 0, Math.PI * 2);
+      g.fill();
+    }
+    return { img: c, size: half * 2 };
+  });
+}
+
+/**
+ * Planeta lejano para el fondo: esfera sombreada con atmósfera y anillo.
+ * `hue` cambia la paleta; se dibuja una sola vez y se reutiliza.
+ */
+export function planetSprite(kind = 0) {
+  return cached(`planet|${kind}`, () => {
+    const R = kind === 0 ? 150 : 70;
+    const half = R * 2.1;
+    const c = makeCanvas(half * 2, half * 2);
+    const g = c.getContext('2d');
+    g.translate(half, half);
+    const pal = kind === 0 ? ['#ffb36b', '#c2456e', '#3a1650', '#ff7ad9'] : ['#9ff6ff', '#3c7bd6', '#141c4a', '#7fd0ff'];
+    // anillo (parte de atrás)
+    const ring = (front) => {
+      if (kind !== 0) return;
+      g.save();
+      g.rotate(-0.38);
+      g.scale(1, 0.26);
+      g.beginPath();
+      if (front) g.arc(0, 0, R * 1.75, 0, Math.PI);
+      else g.arc(0, 0, R * 1.75, Math.PI, Math.PI * 2);
+      g.lineWidth = R * 0.32;
+      const rg = g.createLinearGradient(-R * 1.75, 0, R * 1.75, 0);
+      rg.addColorStop(0, 'rgba(255, 210, 160, 0.05)');
+      rg.addColorStop(0.5, 'rgba(255, 210, 170, 0.42)');
+      rg.addColorStop(1, 'rgba(255, 160, 200, 0.08)');
+      g.strokeStyle = rg;
+      g.stroke();
+      g.restore();
+    };
+    ring(false);
+    // atmósfera
+    const atm = g.createRadialGradient(0, 0, R * 0.9, 0, 0, R * 1.35);
+    atm.addColorStop(0, rgba(pal[3], 0.4));
+    atm.addColorStop(1, rgba(pal[3], 0));
+    g.fillStyle = atm;
+    g.beginPath();
+    g.arc(0, 0, R * 1.35, 0, Math.PI * 2);
+    g.fill();
+    // esfera
+    const body = g.createRadialGradient(-R * 0.4, -R * 0.45, R * 0.1, 0, 0, R);
+    body.addColorStop(0, pal[0]);
+    body.addColorStop(0.5, pal[1]);
+    body.addColorStop(1, pal[2]);
+    g.fillStyle = body;
+    g.beginPath();
+    g.arc(0, 0, R, 0, Math.PI * 2);
+    g.fill();
+    // bandas suaves recortadas a la esfera
+    g.save();
+    g.beginPath();
+    g.arc(0, 0, R, 0, Math.PI * 2);
+    g.clip();
+    g.globalAlpha = 0.16;
+    for (let i = -4; i <= 4; i++) {
+      g.fillStyle = i % 2 ? '#ffffff' : pal[2];
+      g.beginPath();
+      g.ellipse(0, i * R * 0.22, R * 1.3, R * 0.07, -0.18, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.globalAlpha = 1;
+    // sombra del lado nocturno
+    const night = g.createLinearGradient(-R, -R, R, R);
+    night.addColorStop(0.45, 'rgba(4, 4, 16, 0)');
+    night.addColorStop(1, 'rgba(4, 4, 16, 0.75)');
+    g.fillStyle = night;
+    g.fillRect(-R, -R, R * 2, R * 2);
+    g.restore();
+    ring(true);
     return { img: c, size: half * 2 };
   });
 }

@@ -18,7 +18,7 @@ import { openDb } from './db.mjs';
 import { createReplayPool } from './replay-pool.mjs';
 import { initChain } from './chain.mjs';
 import { MISSIONS, dayKey, previousDayKey, streakBonus, freshDaily, applyRunToDaily, missionView } from './economy.mjs';
-import { SHIPS, SHIP_BY_CLASS, TICK_RATE, MAX_INPUT_NUMBERS, TALENTS, TALENT_MAX, talentCost, sanitizeTalents, coresFromSummary } from '../src/sim/index.js';
+import { SHIPS, SHIP_BY_CLASS, TICK_RATE, MAX_INPUT_NUMBERS, TALENTS, TALENT_MAX, talentCost, sanitizeTalents, coresFromSummary, RIFT_MAX } from '../src/sim/index.js';
 import { chainConfigFromDeployment } from '../src/shared/networks.js';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -111,6 +111,7 @@ export async function createApp(options = {}) {
       lifetimeShards: 0,
       cores: 0,
       talents: {},
+      riftMax: 0,
       runs: 0,
       bestScore: 0,
       bestTime: 0,
@@ -186,6 +187,7 @@ export async function createApp(options = {}) {
       lifetimeShards: p.lifetimeShards,
       cores: p.cores ?? 0,
       talents: sanitizeTalents(p.talents),
+      riftMax: p.riftMax ?? 0,
       runs: p.runs,
       bestScore: p.bestScore,
       bestTime: p.bestTime,
@@ -359,12 +361,15 @@ export async function createApp(options = {}) {
       }
       const id = `r_${crypto.randomBytes(10).toString('hex')}`;
       const seed = crypto.randomBytes(4).readUInt32LE(0);
-      // En la Arena no hay talentos: todos compiten en igualdad.
+      // En la Arena no hay talentos ni niveles del Rift: todos compiten en igualdad.
       const talents = mode === 'arena' ? {} : sanitizeTalents(p.talents);
-      D.runs[id] = { id, playerId: p.id, mode, seed, ...ship, talents, tournamentId, startedAt: Date.now(), status: 'active' };
+      const rift = mode === 'arena' ? 0 : Number(body.rift ?? 0);
+      if (!Number.isInteger(rift) || rift < 0 || rift > RIFT_MAX) throw bad('Nivel del Rift inválido');
+      if (rift > (p.riftMax ?? 0)) throw bad('Ese nivel del Rift todavía está bloqueado');
+      D.runs[id] = { id, playerId: p.id, mode, seed, ...ship, talents, rift, tournamentId, startedAt: Date.now(), status: 'active' };
       D.stats.totalRuns++;
       db.save();
-      return { runId: id, seed, ship: ship.ship, shipLevel: ship.shipLevel, talents, mode, tournamentId };
+      return { runId: id, seed, ship: ship.ship, shipLevel: ship.shipLevel, talents, rift, mode, tournamentId };
     },
 
     'POST /api/run/finish': async ({ ip, req, body }) => {
@@ -377,7 +382,7 @@ export async function createApp(options = {}) {
       if (!Array.isArray(inputs) || inputs.length > MAX_INPUT_NUMBERS) throw bad('Entradas inválidas');
       run.status = 'verifying';
 
-      const result = await pool.run({ seed: run.seed, ship: run.ship, shipLevel: run.shipLevel, talents: run.talents, inputs, choices });
+      const result = await pool.run({ seed: run.seed, ship: run.ship, shipLevel: run.shipLevel, talents: run.talents, rift: run.rift ?? 0, inputs, choices });
       if (!result.ok) {
         run.status = 'rejected';
         run.reason = result.error;
@@ -432,6 +437,12 @@ export async function createApp(options = {}) {
       p.bosses += sum.bossesKilled;
       if (sum.victory) p.victories++;
       p.bestTime = Math.max(p.bestTime, sum.timeSec);
+      // Ganar un nivel del Rift desbloquea el siguiente.
+      let riftUnlocked = null;
+      if (run.mode === 'normal' && sum.victory && (run.rift ?? 0) >= (p.riftMax ?? 0) && (p.riftMax ?? 0) < RIFT_MAX) {
+        p.riftMax = Math.min(RIFT_MAX, (run.rift ?? 0) + 1);
+        riftUnlocked = p.riftMax;
+      }
 
       if (run.mode === 'normal') {
         rollLeaderboard();
@@ -442,7 +453,7 @@ export async function createApp(options = {}) {
       }
       pruneReplays();
       db.save();
-      return { summary: sum, rewards, totalShards: total, cores, profile: profileView(p) };
+      return { summary: sum, rewards, totalShards: total, cores, riftUnlocked, profile: profileView(p) };
     },
 
     'GET /api/leaderboard': async ({ url }) => {
@@ -460,6 +471,7 @@ export async function createApp(options = {}) {
         ship: run.ship,
         shipLevel: run.shipLevel,
         talents: run.talents ?? {},
+        rift: run.rift ?? 0,
         inputs: run.inputs,
         choices: run.choices,
         summary: run.summary,

@@ -165,6 +165,24 @@ test('modo práctica sin servidor: inglés, Núcleos, habilidades, misiones loca
     await expect(page.locator('#missionList li')).toHaveCount(5);
     await expect(page.locator('#missionList')).toContainText('Play 3 runs');
     await expect(page.locator('#menuCores')).toHaveText('0');
+    // Niveles del Rift: empieza en 0 y el siguiente está bloqueado hasta ganar.
+    await expect(page.locator('#riftNum')).toHaveText('0');
+    await expect(page.locator('#riftDesc')).toContainText('Reward x1.00');
+    await page.click('#riftNext');
+    await expect(page.locator('.toast').last()).toContainText('Win level 0 to unlock 1');
+    // Con el nivel 3 abierto (como si hubiera ganado), se puede elegir y cambia la descripción.
+    await page.evaluate(() => {
+      const p = JSON.parse(localStorage.getItem('riftfall.progress') || '{}');
+      localStorage.setItem('riftfall.progress', JSON.stringify({ ...p, riftMax: 3 }));
+    });
+    await page.reload();
+    await page.click('#riftNext');
+    await page.click('#riftNext');
+    await expect(page.locator('#riftNum')).toHaveText('2');
+    await expect(page.locator('#riftDesc')).toContainText('+36% HP');
+    await page.click('#riftPrev');
+    await page.click('#riftPrev');
+    await expect(page.locator('#riftNum')).toHaveText('0');
 
     await page.click('#playBtn');
     await expect(page.locator('#hud')).toBeVisible();

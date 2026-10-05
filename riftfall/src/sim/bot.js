@@ -36,6 +36,33 @@ export function botInput(s) {
     ax += dx * w;
     ay += dy * w;
   }
+  // Amenazas con aviso: zonas de meteorito, minas a punto de explotar, el punto donde va a
+  // aparecer un Wraith y la línea de tiro de un Lancer.
+  const flee = (x, y, radius, k) => {
+    const dx = p.x - x;
+    const dy = p.y - y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 > radius * radius) return;
+    const w = k / (d2 + 60);
+    ax += dx * w;
+    ay += dy * w;
+  };
+  for (const h of s.hazards ?? []) flee(h.x, h.y, h.r + 70, 6);
+  for (const e of s.enemies) {
+    if (e.def.ai === 'mine' && e.mode === 1) flee(e.x, e.y, e.def.blast + 50, 8);
+    else if (e.def.ai === 'blink' && e.mode === 1) flee(e.ax, e.ay, 160, 3);
+    else if (e.def.ai === 'sniper' && e.mode === 1) {
+      // alejarse en perpendicular a la línea del láser
+      const rx = p.x - e.x;
+      const ry = p.y - e.y;
+      const side = rx * e.ay - ry * e.ax;
+      if (Math.abs(side) < 60 && rx * e.ax + ry * e.ay > 0) {
+        const sgn = side >= 0 ? 1 : -1;
+        ax += e.ay * sgn * 0.02;
+        ay += -e.ax * sgn * 0.02;
+      }
+    }
+  }
   let gem = null;
   let best = 380 * 380;
   for (const o of s.pickups) {

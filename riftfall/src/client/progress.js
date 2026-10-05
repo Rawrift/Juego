@@ -1,7 +1,7 @@
 // Progreso del piloto en modo práctica (sin servidor): Núcleos, talentos, misiones diarias, racha
 // y estadísticas, guardados en este dispositivo. Usa las mismas reglas que el servidor.
 
-import { TALENTS, TALENT_MAX, talentCost, sanitizeTalents, coresFromSummary } from '../sim/index.js';
+import { TALENTS, TALENT_MAX, talentCost, sanitizeTalents, coresFromSummary, RIFT_MAX } from '../sim/index.js';
 import { MISSIONS, freshDaily, applyRunToDaily, missionView, streakBonus } from '../shared/missions.js';
 
 const KEY = 'riftfall.progress';
@@ -17,6 +17,7 @@ function blank() {
     cores: 0,
     lifetimeCores: 0,
     talents: {},
+    riftMax: 0,
     runs: 0,
     bestScore: 0,
     bestTime: 0,
@@ -39,6 +40,7 @@ export function loadProgress() {
   }
   p.talents = sanitizeTalents(p.talents);
   p.cores = Math.max(0, Math.floor(Number(p.cores) || 0));
+  p.riftMax = Math.max(0, Math.min(RIFT_MAX, Math.floor(Number(p.riftMax) || 0)));
   rollDay(p);
   return p;
 }
@@ -59,7 +61,12 @@ function rollDay(p) {
 /** Aplica una partida de práctica terminada. Devuelve el detalle de lo ganado. */
 export function recordLocalRun(p, sum) {
   rollDay(p);
-  const out = { cores: coresFromSummary(sum), streak: 0, missions: [], newBest: sum.score > p.bestScore };
+  const out = { cores: coresFromSummary(sum), streak: 0, missions: [], newBest: sum.score > p.bestScore, riftUnlocked: null };
+  // Ganar un nivel del Rift desbloquea el siguiente.
+  if (sum.victory && (sum.rift ?? 0) >= p.riftMax && p.riftMax < RIFT_MAX) {
+    p.riftMax = Math.min(RIFT_MAX, (sum.rift ?? 0) + 1);
+    out.riftUnlocked = p.riftMax;
+  }
   const today = localDay();
   if (p.lastDay !== today) {
     const yesterday = localDay(Date.now() - 86_400_000);

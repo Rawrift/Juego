@@ -21,14 +21,14 @@
         <div class="hp-label"><b data-i18n="hud.hull">CASCO</b><span id="hpText">100</span></div>
         <div class="hpbar"><i id="hpFill"></i><em id="hpGhost"></em></div>
       </div>
-      <div class="hud-time" id="timer">00:00</div>
+      <div class="hud-time"><span id="timer">00:00</span><em id="hudRift" class="hud-rift hidden"></em></div>
       <div class="hud-stats">
         <div><small data-i18n="hud.kills">BAJAS</small><b id="killCount">0</b></div>
         <div class="shard-stat"><small data-i18n="hud.shards">SHARDS</small><b id="shardCount">0</b></div>
       </div>
     </div>
     <div id="bossBar" class="hidden">
-      <span data-i18n="hud.boss">GUARDIÁN DEL RIFT</span>
+      <span id="bossName" data-i18n="hud.boss">GUARDIÁN DEL RIFT</span>
       <div class="bossbar"><i id="bossFill"></i></div>
     </div>
     <div id="loadout"></div>
@@ -67,6 +67,15 @@
             <em id="shipYield"></em>
           </div>
           <button class="btn ghost small" data-open="hangar" data-i18n="menu.change">Cambiar</button>
+        </div>
+        <div class="rift-pick" id="riftPick">
+          <button class="rift-arrow" id="riftPrev" aria-label="Nivel anterior" data-i18n-aria="menu.riftPrev">‹</button>
+          <div class="rift-core">
+            <small data-i18n="menu.riftLevel">NIVEL DEL RIFT</small>
+            <div class="rift-row"><b id="riftNum">0</b><div class="rift-pips" id="riftPips"></div></div>
+            <span id="riftDesc"></span>
+          </div>
+          <button class="rift-arrow" id="riftNext" aria-label="Nivel siguiente" data-i18n-aria="menu.riftNext">›</button>
         </div>
         <div class="cta-row">
           <button id="playBtn" class="btn primary big" data-i18n="menu.play">JUGAR</button>

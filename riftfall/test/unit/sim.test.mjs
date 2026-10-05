@@ -14,6 +14,12 @@ import {
   replayRun,
   dsin,
   MAX_TICKS,
+  FINAL_TICK,
+  riftMods,
+  enemyHpScale,
+  RIFT_MAX,
+  RUN,
+  ENEMIES,
   weaponStats,
   WEAPONS,
   sanitizeTalents,
@@ -187,4 +193,96 @@ test('Núcleos por partida y costo de talentos', () => {
   assert.equal(coresFromSummary({ kills: 0, timeSec: 600, bossesKilled: 3, victory: true, shardsCollected: 43 }), 40 + 60 + 60 + 10);
   assert.deepEqual([1, 2, 3, 4, 5].map(talentCost), [40, 90, 160, 250, 360]);
   assert.equal(talentCost(6), Infinity);
+});
+
+test('el Corazón del Rift aparece a los 10:00: destruirlo es la victoria y si no, el Rift colapsa', () => {
+  const s = createSim({ seed: 5 });
+  s.tick = FINAL_TICK - 1;
+  stepSim(s, 0);
+  assert.ok(s.finalBoss, 'aparece el jefe final');
+  assert.equal(s.finalBoss.kind, 'heart');
+  assert.equal(s.boss, s.finalBoss);
+  assert.ok(s.events.some((e) => e.t === 'boss' && e.final));
+  // Pasar los 10:00 ya no alcanza para ganar.
+  stepSim(s, 0);
+  assert.equal(s.phase, 'running');
+  s.finalBoss.dead = true;
+  stepSim(s, 0);
+  assert.equal(s.phase, 'victory');
+  assert.equal(summarize(s).victory, true);
+
+  const late = createSim({ seed: 5 });
+  late.tick = FINAL_TICK - 1;
+  stepSim(late, 0);
+  late.player.invuln = 1e9;
+  late.tick = MAX_TICKS - 1;
+  stepSim(late, 0);
+  assert.equal(late.phase, 'dead', 'a los 12:00 el Rift colapsa');
+  assert.ok(late.events.some((e) => e.t === 'dead' && e.collapse));
+  assert.equal(summarize(late).victory, false);
+});
+
+test('niveles del Rift: más vida y daño enemigo, más premio, y el replay exige el mismo nivel', () => {
+  assert.deepEqual(riftMods(0), { level: 0, hp: 1, dmg: 1, spawn: 1, early: 1, eliteEverySec: 40, reward: 1 });
+  const m5 = riftMods(5);
+  assert.equal(m5.hp, 1.9);
+  assert.equal(m5.reward, 1.75);
+  assert.equal(riftMods(99).level, RIFT_MAX, 'se limita al máximo');
+  assert.equal(createSim({ seed: 1, rift: -3 }).rift, 0);
+
+  // Mismo enemigo en el mismo momento: en el nivel 5 tiene 90% más vida.
+  const a = createSim({ seed: 21 });
+  const b = createSim({ seed: 21, rift: 5 });
+  const hpOf = (s) => {
+    while (!s.enemies.length) stepSim(s, 0);
+    const e = s.enemies[0];
+    return e.maxHp / ENEMIES[e.kind].hp / enemyHpScale(s.tick / 60);
+  };
+  assert.ok(Math.abs(hpOf(a) - 1) < 1e-9);
+  assert.ok(Math.abs(hpOf(b) - 1.9) < 1e-9);
+
+  // El premio y los Núcleos escalan con el nivel.
+  const base = { kills: 400, timeSec: 300, bossesKilled: 1, victory: false, shardsCollected: 0 };
+  assert.equal(coresFromSummary({ ...base, rift: 4 }), Math.floor(60 * 1.6));
+
+  const s = createSim({ seed: 31, rift: 3 });
+  const rec = new InputRecorder();
+  while (s.phase !== 'dead' && s.phase !== 'victory' && s.tick < 60 * 60) {
+    if (s.phase === 'choice') {
+      const c = botChoice(s);
+      rec.choice(c);
+      chooseUpgrade(s, c);
+      continue;
+    }
+    const d = botInput(s);
+    rec.push(d);
+    stepSim(s, d);
+    s.events.length = 0;
+  }
+  const { inputs, choices } = rec.finish();
+  const same = replayRun({ seed: 31, ship: 'spark', shipLevel: 1, rift: 3, inputs, choices });
+  assert.equal(same.hash, stateHash(s));
+  assert.equal(same.summary.rift, 3);
+  assert.ok(Math.abs(same.summary.yieldMult - 1.45) < 1e-9);
+  const other = replayRun({ seed: 31, ship: 'spark', shipLevel: 1, rift: 0, inputs, choices });
+  assert.notEqual(other.hash, stateHash(s), 'con otro nivel la partida es otra');
+});
+
+test('meteoritos: avisan antes de caer y dañan a la nave y a los enemigos', () => {
+  const s = createSim({ seed: 8 });
+  s.tick = RUN.meteorTimes[0] * 60 - 1;
+  stepSim(s, 0);
+  assert.equal(s.hazards.length, 1);
+  const h = s.hazards[0];
+  assert.ok(h.timer > 30, 'hay tiempo para esquivarlo');
+  // Lo ponemos justo sobre la nave y un enemigo débil al lado.
+  h.x = s.player.x;
+  h.y = s.player.y;
+  h.timer = 1;
+  s.enemies.length = 0;
+  s.hazards.length = 1;
+  const hp0 = s.player.hp;
+  stepSim(s, 0);
+  assert.ok(s.player.hp < hp0, 'el impacto daña a la nave');
+  assert.ok(s.events.some((e) => e.t === 'meteor'));
 });

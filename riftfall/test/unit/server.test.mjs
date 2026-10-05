@@ -147,3 +147,36 @@ test('talentos: se compran con Núcleos, se aplican en el replay y no en la Aren
     await app.close();
   }
 });
+
+test('niveles del Rift: bloqueados hasta ganar el anterior, se verifican en el replay y la Arena no los usa', async () => {
+  const { app, call } = await boot({ minRealtimeRatio: 0 });
+  try {
+    const g = (await call('POST', '/api/auth/guest')).json;
+    const token = g.token;
+    assert.equal(g.profile.riftMax, 0);
+    const locked = await call('POST', '/api/run/start', { rift: 1 }, token);
+    assert.equal(locked.status, 400);
+    assert.match(locked.json.error, /bloqueado/);
+    assert.equal((await call('POST', '/api/run/start', { rift: 2.5 }, token)).status, 400);
+
+    // Con el nivel 2 desbloqueado, la partida se juega y se re-simula en ese nivel.
+    app.db.data.players[g.profile.id].riftMax = 2;
+    const s = (await call('POST', '/api/run/start', { rift: 2 }, token)).json;
+    assert.equal(s.rift, 2);
+    const run = playLocal(s.seed, 'spark', 1, 60 * 60, null, 2);
+    const fin = await call('POST', '/api/run/finish', { runId: s.runId, inputs: run.inputs, choices: run.choices }, token);
+    assert.equal(fin.status, 200, JSON.stringify(fin.json));
+    assert.deepEqual(fin.json.summary, run.summary);
+    assert.equal(fin.json.summary.rift, 2);
+    assert.equal(fin.json.riftUnlocked, null, 'sin ganar no se desbloquea nada');
+    assert.equal((await call('GET', `/api/replay?id=${s.runId}`)).json.rift, 2);
+
+    // Mentir sobre el nivel (jugar en 0 y declararlo como 2) no pasa la verificación.
+    const s2 = (await call('POST', '/api/run/start', { rift: 2 }, token)).json;
+    const easy = playLocal(s2.seed, 'spark', 1, 60 * 60, null, 0);
+    const fin2 = await call('POST', '/api/run/finish', { runId: s2.runId, inputs: easy.inputs, choices: easy.choices }, token);
+    if (fin2.status === 200) assert.notDeepEqual(fin2.json.summary, easy.summary);
+  } finally {
+    await app.close();
+  }
+});

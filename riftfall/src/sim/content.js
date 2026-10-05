@@ -2,10 +2,18 @@
 // Compartido por el cliente (render/UI) y el servidor (verificación por replay).
 
 export const RUN = {
+  /** A los 10:00 aparece el Corazón del Rift: hay que destruirlo para ganar. */
   durationSec: 600,
+  /** Si el Corazón sigue vivo a los 12:00, el Rift colapsa y la partida termina. */
+  hardLimitSec: 720,
   maxEnemies: 380,
   bossTimes: [180, 360, 540],
   swarmTimes: [120, 300, 450],
+  /** Escuadrones de élite: tres élites juntos. */
+  elitePackTimes: [150, 330, 480],
+  /** Lluvias de meteoritos (duran `meteorSec`): dañan a la nave y también a los enemigos. */
+  meteorTimes: [285, 420, 560],
+  meteorSec: 20,
   eliteEverySec: 40,
   spawnRadiusMin: 760,
   spawnRadiusMax: 880,
@@ -242,29 +250,62 @@ export function sanitizeTalents(t) {
 
 /** Núcleos que da una partida (resumen de `summarize`): bajas, tiempo, jefes, victoria y Shards recogidos. */
 export function coresFromSummary(sum) {
-  return (
+  const base =
     Math.floor(sum.kills / 20) +
     Math.floor(sum.timeSec / 15) +
     sum.bossesKilled * 20 +
     (sum.victory ? 60 : 0) +
-    Math.floor((sum.shardsCollected ?? 0) / 4)
-  );
+    Math.floor((sum.shardsCollected ?? 0) / 4);
+  return Math.floor(base * riftMods(sum.rift ?? 0).reward);
 }
 
 /**
  * Enemigos. `from` = segundo en que empiezan a aparecer; `weight` = frecuencia relativa.
  */
 export const ENEMIES = {
+  // ai: chase = persigue · dash = carga en línea · ranged = dispara de lejos · mine = se acerca y explota
+  //     blink = se teletransporta junto a la nave · sniper = apunta un láser y dispara rápido · boss = jefe
   mite: { name: 'Mite', hp: 5, speed: 148, dmg: 6, r: 9, xp: 1, ai: 'chase', color: '#ff4d8d', from: 0, weight: 5, shape: 'tri' },
   drone: { name: 'Drone', hp: 13, speed: 104, dmg: 8, r: 13, xp: 2, ai: 'chase', color: '#ff7a3d', from: 0, weight: 6, shape: 'diamond' },
   splitter: { name: 'Splitter', hp: 30, speed: 92, dmg: 9, r: 16, xp: 3, ai: 'chase', split: 3, color: '#ffd23d', from: 40, weight: 3, shape: 'hex' },
   dasher: { name: 'Dasher', hp: 22, speed: 96, dmg: 12, r: 14, xp: 4, ai: 'dash', dashSpeed: 540, color: '#ff3d3d', from: 85, weight: 3, shape: 'arrow' },
   spitter: { name: 'Spitter', hp: 20, speed: 88, dmg: 9, r: 14, xp: 4, ai: 'ranged', bulletSpeed: 230, color: '#c84dff', from: 130, weight: 2.4, shape: 'circle' },
   brute: { name: 'Brute', hp: 85, speed: 66, dmg: 16, r: 24, xp: 8, ai: 'chase', kbResist: 0.4, color: '#ff5a1f', from: 200, weight: 2, shape: 'square' },
-  warden: { name: 'Guardián del Rift', hp: 600, speed: 112, dmg: 22, r: 50, xp: 150, ai: 'boss', kbResist: 0.05, color: '#ff2a6d', boss: true, shape: 'boss' }
+  // Segunda mitad de la partida: enemigos que obligan a cambiar de táctica.
+  mine: { name: 'Nova Mine', hp: 26, speed: 150, dmg: 30, r: 12, xp: 4, ai: 'mine', fuse: 40, blast: 82, color: '#ffb02e', from: 300, weight: 2.4, shape: 'star' },
+  wraith: { name: 'Wraith', hp: 46, speed: 92, dmg: 15, r: 15, xp: 6, ai: 'blink', color: '#d8c8ff', from: 330, weight: 2, shape: 'crescent' },
+  aegis: { name: 'Aegis', hp: 170, speed: 58, dmg: 18, r: 26, xp: 12, ai: 'chase', aura: 160, auraDR: 0.45, kbResist: 0.3, color: '#5468ff', from: 390, weight: 1.3, shape: 'shield' },
+  lancer: { name: 'Lancer', hp: 38, speed: 82, dmg: 20, r: 15, xp: 7, ai: 'sniper', range: 430, aim: 52, bulletSpeed: 640, color: '#d4ff3d', from: 450, weight: 1.8, shape: 'cross' },
+  warden: { name: 'Guardián del Rift', hp: 600, speed: 112, dmg: 22, r: 50, xp: 150, ai: 'boss', kbResist: 0.05, color: '#ff2a6d', boss: true, shape: 'boss' },
+  heart: { name: 'Corazón del Rift', hp: 5200, speed: 88, dmg: 30, r: 72, xp: 0, ai: 'boss', kbResist: 0, color: '#ff3df0', boss: true, final: true, shape: 'core' }
 };
 
-export const ENEMY_ORDER = ['mite', 'drone', 'splitter', 'dasher', 'spitter', 'brute'];
+export const ENEMY_ORDER = ['mite', 'drone', 'splitter', 'dasher', 'spitter', 'brute', 'mine', 'wraith', 'aegis', 'lancer'];
+
+/**
+ * Niveles del Rift: dificultad que el jugador elige y desbloquea ganando. Cada nivel endurece la
+ * partida y paga más (Shards y Núcleos), así el desafío se premia por habilidad y no por pagar.
+ */
+export const RIFT_MAX = 10;
+
+export function riftMods(level) {
+  const L = Math.max(0, Math.min(RIFT_MAX, level | 0));
+  return {
+    level: L,
+    hp: 1 + 0.18 * L,
+    dmg: 1 + 0.1 * L,
+    spawn: 1 + 0.06 * L,
+    early: 1 - 0.05 * L, // los enemigos nuevos llegan antes
+    eliteEverySec: Math.max(20, 40 - 2 * L),
+    reward: 1 + 0.15 * L
+  };
+}
+
+/** Multiplicador de vida enemiga por tiempo: lineal al principio y cada vez más empinado al final. */
+export function enemyHpScale(t) {
+  const late = t > 270 ? (t - 270) / 330 : 0;
+  return (1 + t / 95) * (1 + late * late * 1.6);
+}
 
 export const BASE_STATS = {
   maxHp: 100,
@@ -283,5 +324,7 @@ export const BASE_STATS = {
 
 export function xpToNext(level) {
   const l = level - 1;
-  return 5 + l * 5 + Math.floor(l * l * 0.22);
+  // Pasado el nivel 25 cuesta bastante más subir: corta la bola de nieve del final.
+  const late = Math.max(0, l - 24);
+  return 5 + l * 5 + Math.floor(l * l * 0.22) + Math.floor(late * late * 1.4);
 }

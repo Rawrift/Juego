@@ -15,10 +15,13 @@ import {
   InputRecorder,
   DT,
   MAX_TICKS,
+  FINAL_TICK,
   SHIPS,
   WEAPONS,
   PASSIVES,
-  shipYield
+  shipYield,
+  riftMods,
+  RIFT_MAX
 } from '../sim/index.js';
 import { createRenderer, QUALITY_LEVELS } from './renderer.js';
 import { createAudio } from './audio.js';
@@ -103,11 +106,77 @@ function loadShipChoice() {
 function pilot() {
   if (app.online && app.profile) {
     const p = app.profile;
-    return { online: true, cores: p.cores ?? 0, talents: p.talents ?? {}, missions: p.missions ?? [], streak: p.streak ?? 0, stats: p };
+    return { online: true, cores: p.cores ?? 0, talents: p.talents ?? {}, missions: p.missions ?? [], streak: p.streak ?? 0, riftMax: p.riftMax ?? 0, stats: p };
   }
   const p = app.progress;
-  return { online: false, cores: p.cores, talents: p.talents, missions: localMissions(p), streak: p.streak, stats: p };
+  return { online: false, cores: p.cores, talents: p.talents, missions: localMissions(p), streak: p.streak, riftMax: p.riftMax ?? 0, stats: p };
 }
+
+// --------------------------------------------------------------------- Nivel del Rift
+
+const RIFT_KEY = 'riftfall.rift';
+let riftChoice = 0;
+try {
+  riftChoice = Math.max(0, Math.floor(Number(localStorage.getItem(RIFT_KEY)) || 0));
+} catch {
+  riftChoice = 0;
+}
+
+/** Nivel elegido, nunca por encima del máximo desbloqueado. */
+function riftLevel() {
+  return Math.min(riftChoice, pilot().riftMax);
+}
+
+function setRift(n) {
+  riftChoice = Math.max(0, Math.min(pilot().riftMax, n));
+  try {
+    localStorage.setItem(RIFT_KEY, String(riftChoice));
+  } catch {
+    /* sin almacenamiento */
+  }
+  updateRiftPick();
+}
+
+function updateRiftPick() {
+  const max = pilot().riftMax;
+  const lv = riftLevel();
+  const m = riftMods(lv);
+  const box = $('#riftPick');
+  box.style.setProperty('--heat', String(Math.round(190 - (lv / RIFT_MAX) * 190)));
+  $('#riftNum').textContent = String(lv);
+  $('#riftPips').replaceChildren(
+    ...Array.from({ length: RIFT_MAX }, (_, i) => el('i', { class: i < lv ? 'on' : i < max ? 'open' : '' }))
+  );
+  const desc = $('#riftDesc');
+  if (lv === 0) desc.replaceChildren(t('rift.normal'), ' · ', el('em', {}, t('rift.reward', { r: '1.00' })));
+  else {
+    desc.replaceChildren(
+      t('rift.mods', { hp: Math.round((m.hp - 1) * 100), dmg: Math.round((m.dmg - 1) * 100) }),
+      ' · ',
+      el('em', {}, t('rift.reward', { r: m.reward.toFixed(2) }))
+    );
+  }
+  $('#riftPrev').disabled = lv === 0;
+  const next = $('#riftNext');
+  const locked = lv >= max;
+  next.disabled = lv >= RIFT_MAX;
+  next.classList.toggle('locked', locked && lv < RIFT_MAX);
+  next.textContent = locked && lv < RIFT_MAX ? '🔒' : '›';
+}
+
+$('#riftPrev').addEventListener('click', () => {
+  audio.play('click');
+  setRift(riftLevel() - 1);
+});
+$('#riftNext').addEventListener('click', () => {
+  const lv = riftLevel();
+  if (lv >= pilot().riftMax) {
+    toast(t('rift.locked', { n: lv, m: lv + 1 }));
+    return;
+  }
+  audio.play('click');
+  setRift(lv + 1);
+});
 
 async function upgradeTalent(id) {
   if (app.online && app.profile) {
@@ -159,6 +228,7 @@ function updateMenu() {
     wb.textContent = app.config?.chain ? t('menu.connect') : t('menu.walletNoNet');
   }
   $('#streakTag').textContent = t('menu.streak', { n: pl.streak });
+  updateRiftPick();
   const unit = pl.online ? '◆' : '✦';
   $('#missionList').replaceChildren(
     ...pl.missions.map((m) =>
@@ -253,6 +323,7 @@ async function startRun(mode = 'normal') {
   try {
     run = await api.startRun({
       mode,
+      rift: mode === 'arena' ? 0 : riftLevel(),
       shipTokenId: app.ship.tokenId ?? undefined,
       demoShip: app.config?.demoShips ? app.ship.key : undefined
     });
@@ -266,14 +337,14 @@ async function startRun(mode = 'normal') {
     game.offline = true;
     // En práctica puedes volar tu nave NFT (no hay recompensas que verificar).
     const own = app.config?.staticMode && app.wallet?.connected && app.ship.tokenId ? app.ship : { key: 'spark', level: 1 };
-    run = { runId: null, seed: (Math.random() * 2 ** 32) >>> 0, ship: own.key, shipLevel: own.level, talents: app.progress.talents, mode: 'normal' };
+    run = { runId: null, seed: (Math.random() * 2 ** 32) >>> 0, ship: own.key, shipLevel: own.level, talents: app.progress.talents, rift: riftLevel(), mode: 'normal' };
     if (!practiceNoticeShown) {
       practiceNoticeShown = true;
       toast(t('toast.practice'));
     }
   }
   game.run = run;
-  game.sim = createSim({ seed: run.seed, ship: run.ship, shipLevel: run.shipLevel, talents: run.talents });
+  game.sim = createSim({ seed: run.seed, ship: run.ship, shipLevel: run.shipLevel, talents: run.talents, rift: run.rift ?? 0 });
   game.rec = new InputRecorder();
   game.acc = 0;
   game.mode = 'play';
@@ -286,6 +357,9 @@ async function startRun(mode = 'normal') {
   $('#gameover').classList.add('hidden');
   $('#hud').classList.remove('hidden');
   $('#bossBar').classList.add('hidden');
+  const hudRift = $('#hudRift');
+  hudRift.textContent = t('hud.rift', { n: game.sim.rift });
+  hudRift.classList.toggle('hidden', game.sim.rift === 0);
   input.setEnabled(true);
   announce(run.mode === 'arena' ? t('ann.arena') : t('ann.survive'), run.mode === 'arena' ? t('ann.arenaSub') : t('ann.surviveSub'), 'good');
   showTutorial();
@@ -295,7 +369,8 @@ const TUTORIAL = [
   () => (matchMedia('(pointer: coarse)').matches ? t('tut.moveTouch') : t('tut.moveKeys')),
   () => t('tut.auto'),
   () => t('tut.gems'),
-  () => t('tut.evo')
+  () => t('tut.evo'),
+  () => t('tut.final')
 ];
 function showTutorial() {
   let seen = false;
@@ -397,7 +472,8 @@ async function showGameOver(local, victory) {
   card.classList.toggle('victory', victory);
   card.classList.toggle('defeat', !victory);
   const retreat = !victory && game.sim.phase !== 'dead';
-  const title = victory ? t('go.titleVictory') : retreat ? t('go.titleRetreat') : t('go.titleDead');
+  const collapse = !victory && game.sim.tick >= MAX_TICKS;
+  const title = victory ? t('go.titleVictory') : collapse ? t('go.titleCollapse') : retreat ? t('go.titleRetreat') : t('go.titleDead');
   $('#goKicker').textContent = victory ? t('go.victory') : t('go.kicker');
   $('#goTitle').textContent = title;
   lastResult = { summary: local, shipKey: game.sim.shipKey, title };
@@ -438,6 +514,7 @@ async function showGameOver(local, victory) {
     if (res.streak) rows.push([t('go.rowStreak'), res.streak, '✦']);
     for (const m of res.missions) rows.push([t('go.rowMission', { name: tx.missionName(m.id, m.name) }), m.reward, '✦']);
     if (res.newBest && app.progress.runs > 1) rows.push([t('go.newBest'), fmtNum(local.score), '']);
+    if (res.riftUnlocked) rows.push([`🔓 ${t('go.riftUnlocked', { n: res.riftUnlocked })}`, '', '']);
     showRows(rows);
     countUp($('#goTotal'), res.total);
     if (res.total > 0) setTimeout(() => audio.play('shard'), 400);
@@ -459,6 +536,7 @@ async function showGameOver(local, victory) {
       for (const m of res.rewards.missions) rows.push([t('go.rowMission', { name: tx.missionName(m.id, m.name) }), m.reward]);
     }
     if (res.cores) rows.push([t('go.rowCores'), res.cores, '✦']);
+    if (res.riftUnlocked) rows.push([`🔓 ${t('go.riftUnlocked', { n: res.riftUnlocked })}`, '', '']);
     showRows(rows);
     countUp($('#goTotal'), res.totalShards);
     if (res.totalShards > 0) setTimeout(() => audio.play('shard'), 400);
@@ -559,6 +637,7 @@ function updateHud(s) {
   setText('shardCount', fmtNum(s.shards));
   const boss = s.boss && !s.boss.dead ? s.boss : null;
   $('#bossBar').classList.toggle('hidden', !boss);
+  if (boss) setText('bossName', boss.def.final ? t('hud.final') : t('hud.boss'));
   if (boss) setWidth('bossFill', (boss.hp / boss.maxHp) * 100);
   const combo = $('#combo');
   if (s.combo >= 10) {
@@ -587,6 +666,9 @@ function onSimEvent(ev, s, live) {
   switch (ev.t) {
     case 'warning':
       if (ev.kind === 'boss') announce(t('ann.boss'), t('ann.bossSub'), 'danger');
+      else if (ev.kind === 'final') announce(t('ann.final'), t('ann.finalSub'), 'danger');
+      else if (ev.kind === 'meteors') announce(t('ann.meteors'), t('ann.meteorsSub'), 'danger');
+      else if (ev.kind === 'elites') announce(t('ann.elites'), t('ann.elitesSub'), 'danger');
       else announce(t('ann.swarm'), t('ann.swarmSub'), 'danger');
       break;
     case 'bossDead':
@@ -679,7 +761,7 @@ function frame(now) {
     if (s.phase === 'choice' && !game.choiceOpen) openChoice();
     if (s.phase === 'choice' && game.autopilot && game.choiceOpen) pickChoice(botChoice(s));
     if (s.phase === 'dead' || s.phase === 'victory') endRun();
-    audio.setIntensity(s.boss && !s.boss.dead ? 1 : 0.5 + Math.min(0.45, s.tick / MAX_TICKS));
+    audio.setIntensity(s.boss && !s.boss.dead ? 1 : 0.5 + Math.min(0.45, s.tick / FINAL_TICK));
     updateHud(s);
   } else if (game.mode === 'demo') {
     game.acc += dt;

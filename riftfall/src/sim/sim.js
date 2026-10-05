@@ -20,12 +20,18 @@ import {
   sanitizeTalents,
   xpToNext,
   shipYield,
-  weaponStats
+  weaponStats,
+  riftMods,
+  enemyHpScale,
+  RIFT_MAX
 } from './content.js';
 
 export const TICK_RATE = 60;
 export const DT = 1 / TICK_RATE;
-export const MAX_TICKS = RUN.durationSec * TICK_RATE;
+/** A este tick aparece el Corazón del Rift (el jefe final). */
+export const FINAL_TICK = RUN.durationSec * TICK_RATE;
+/** Duración máxima de una partida: si el Corazón no cae, el Rift colapsa. */
+export const MAX_TICKS = RUN.hardLimitSec * TICK_RATE;
 export const DIR_COUNT = 32;
 
 /** DIRS[0] = quieto; DIRS[k] (k = 1..32) = dirección (k-1) * 360/32 grados. */
@@ -43,9 +49,13 @@ const MAX_GEMS = 300;
 
 // ------------------------------------------------------------------- creación
 
-export function createSim({ seed, ship = 'spark', shipLevel = 1, talents = null } = {}) {
+export function createSim({ seed, ship = 'spark', shipLevel = 1, talents = null, rift = 0 } = {}) {
   const shipKey = SHIPS[ship] ? ship : 'spark';
+  const riftLevel = clamp(rift | 0, 0, RIFT_MAX);
+  const mods = riftMods(riftLevel);
   const s = {
+    rift: riftLevel,
+    mods,
     seed: seed >>> 0,
     rng: createRng(seed >>> 0),
     tick: 0,
@@ -69,7 +79,10 @@ export function createSim({ seed, ship = 'spark', shipLevel = 1, talents = null 
     elitesKilled: 0,
     damageTaken: 0,
     spawnAcc: 0,
-    nextElite: RUN.eliteEverySec * TICK_RATE,
+    nextElite: mods.eliteEverySec * TICK_RATE,
+    hazards: [],
+    auras: [],
+    finalBoss: null,
     bossIdx: 0,
     swarmIdx: 0,
     boss: null,
@@ -123,6 +136,7 @@ export function stepSim(s, dir) {
   updateEnemies(s);
   buildGrid(s);
   separate(s);
+  updateHazards(s);
   updateWeapons(s);
   updateProjectiles(s);
   updateEnemyBullets(s);
@@ -135,9 +149,14 @@ export function stepSim(s, dir) {
     p.hp = 0;
     s.phase = 'dead';
     s.events.push({ t: 'dead', x: p.x, y: p.y });
-  } else if (s.tick >= MAX_TICKS) {
+  } else if (s.finalBoss && s.finalBoss.dead) {
     s.phase = 'victory';
     s.events.push({ t: 'victory' });
+  } else if (s.tick >= MAX_TICKS) {
+    // El Rift colapsa: se acabó el tiempo para destruir el Corazón.
+    p.hp = 0;
+    s.phase = 'dead';
+    s.events.push({ t: 'dead', x: p.x, y: p.y, collapse: true });
   } else if (s.pendingLevels > 0 || s.pendingChests > 0) {
     openChoice(s);
   }
@@ -177,6 +196,35 @@ function director(s) {
     }
   }
 
+  if (s.tick === FINAL_TICK - 240) s.events.push({ t: 'warning', kind: 'final' });
+  if (s.tick === FINAL_TICK) {
+    const a = s.rng.next() * TAU;
+    const e = spawnEnemy(s, 'heart', p.x + dcos(a) * 640, p.y + dsin(a) * 640, false);
+    s.boss = e;
+    s.finalBoss = e;
+    s.events.push({ t: 'boss', n: 4, final: true });
+  }
+
+  for (const at of RUN.elitePackTimes) {
+    if (s.tick !== at * TICK_RATE) continue;
+    for (let i = 0; i < 3; i++) spawnAtEdge(s, pickKind(s, t, true), true);
+    s.events.push({ t: 'warning', kind: 'elites' });
+  }
+
+  for (const at of RUN.meteorTimes) {
+    const start = at * TICK_RATE;
+    if (s.tick === start) s.events.push({ t: 'warning', kind: 'meteors' });
+    // Un meteorito cada medio segundo durante la lluvia; uno de cada tres apunta a la nave.
+    if (s.tick >= start && s.tick < start + RUN.meteorSec * TICK_RATE && (s.tick - start) % 30 === 0) {
+      const aimed = s.rng.next() < 0.34;
+      const a = s.rng.next() * TAU;
+      const d = aimed ? 0 : 60 + s.rng.next() * 300;
+      // apunta adonde va la nave, no adonde está
+      const lead = aimed ? 40 : 0;
+      s.hazards.push({ x: p.x + p.fx * lead + dcos(a) * d, y: p.y + p.fy * lead + dsin(a) * d, r: 58, timer: 54, max: 54, dmg: 16 * s.mods.dmg * (1 + t / 300) });
+    }
+  }
+
   if (s.swarmIdx < RUN.swarmTimes.length && s.tick === RUN.swarmTimes[s.swarmIdx] * TICK_RATE) {
     const n = 30 + s.swarmIdx * 12;
     for (let i = 0; i < n; i++) {
@@ -188,12 +236,14 @@ function director(s) {
   }
 
   if (s.tick >= s.nextElite) {
-    s.nextElite += RUN.eliteEverySec * TICK_RATE;
+    s.nextElite += s.mods.eliteEverySec * TICK_RATE;
     spawnAtEdge(s, pickKind(s, t, true), true);
   }
 
-  const target = Math.min(RUN.maxEnemies, Math.floor(16 + t * 0.62));
-  s.spawnAcc += (2.4 + t * 0.052) * DT;
+  // Con el Corazón en pantalla siguen llegando enemigos, pero menos.
+  const final = s.finalBoss && !s.finalBoss.dead ? 0.6 : 1;
+  const target = Math.min(RUN.maxEnemies, Math.floor((16 + t * 0.62) * s.mods.spawn * final));
+  s.spawnAcc += (2.4 + t * 0.052) * s.mods.spawn * DT;
   while (s.spawnAcc >= 1) {
     s.spawnAcc -= 1;
     if (s.enemies.length >= target) continue;
@@ -203,15 +253,16 @@ function director(s) {
 }
 
 function pickKind(s, t, noMite) {
+  const early = s.mods.early;
   let total = 0;
   for (const k of ENEMY_ORDER) {
     const d = ENEMIES[k];
-    if (d.from <= t && !(noMite && k === 'mite')) total += d.weight;
+    if (d.from * early <= t && !(noMite && (k === 'mite' || k === 'mine'))) total += d.weight;
   }
   let r = s.rng.next() * total;
   for (const k of ENEMY_ORDER) {
     const d = ENEMIES[k];
-    if (d.from > t || (noMite && k === 'mite')) continue;
+    if (d.from * early > t || (noMite && (k === 'mite' || k === 'mine'))) continue;
     r -= d.weight;
     if (r <= 0) return k;
   }
@@ -227,9 +278,9 @@ function spawnAtEdge(s, kind, elite) {
 function spawnEnemy(s, kind, x, y, elite) {
   const def = ENEMIES[kind];
   const t = s.tick / TICK_RATE;
-  let hp = def.hp * (1 + t / 95);
+  let hp = def.hp * enemyHpScale(t) * s.mods.hp;
   if (elite) hp *= 9;
-  if (def.boss) hp = def.hp * (1 + s.bossIdx * 1.8) * (1 + t / 300);
+  if (def.boss) hp = def.hp * (def.final ? 1 : 1 + s.bossIdx * 1.8) * (1 + t / 300) * s.mods.hp;
   const e = {
     id: s.nextId++,
     kind,
@@ -239,7 +290,7 @@ function spawnEnemy(s, kind, x, y, elite) {
     maxHp: hp,
     r: def.r * (elite ? 1.6 : 1),
     speed: def.speed * (1 + t / 900) * (elite ? 0.9 : 1),
-    dmg: def.dmg * (1 + t / 260) * (elite ? 1.5 : 1),
+    dmg: def.dmg * (1 + t / 260) * (elite ? 1.5 : 1) * s.mods.dmg,
     xp: def.xp * (elite ? 6 : 1),
     elite,
     boss: !!def.boss,
@@ -247,7 +298,7 @@ function spawnEnemy(s, kind, x, y, elite) {
     flash: 0,
     orbitCd: 0,
     mode: 0,
-    timer: def.ai === 'ranged' ? 60 + s.rng.int(60) : def.ai === 'boss' ? 150 : 50,
+    timer: def.ai === 'ranged' || def.ai === 'sniper' ? 60 + s.rng.int(60) : def.ai === 'boss' ? 150 : def.ai === 'blink' ? 90 + s.rng.int(90) : 50,
     pattern: 0,
     ax: 0,
     ay: 0
@@ -261,9 +312,11 @@ function spawnEnemy(s, kind, x, y, elite) {
 function updateEnemies(s) {
   const p = s.player;
   const en = s.enemies;
+  s.auras.length = 0;
   for (let i = 0; i < en.length; i++) {
     const e = en[i];
     if (e.dead) continue;
+    if (e.def.aura) s.auras.push(e);
     e.px = e.x;
     e.py = e.y;
     if (e.flash > 0) e.flash--;
@@ -322,6 +375,81 @@ function updateEnemies(s) {
           fireEnemyBullet(s, e.x, e.y, nx, ny, e.def.bulletSpeed, e.dmg * 0.9, 7);
         }
         break;
+      case 'mine':
+        // Se acerca rápido; al llegar se detiene, titila y explota (aviso de 2/3 de segundo).
+        if (e.mode === 0) {
+          vx = nx * e.speed;
+          vy = ny * e.speed;
+          if (d < 64) {
+            e.mode = 1;
+            e.timer = e.def.fuse;
+          }
+        } else if (--e.timer <= 0) {
+          const bx = p.x - e.x;
+          const by = p.y - e.y;
+          const blast = e.def.blast;
+          if (bx * bx + by * by < blast * blast) hurtPlayer(s, e.dmg);
+          e.dead = true; // se autodestruye: no deja botín
+          s.events.push({ t: 'mineBoom', x: e.x, y: e.y, r: blast });
+        }
+        break;
+      case 'blink':
+        // Persigue lento; cada tanto marca un punto junto a la nave, se teletransporta y embiste.
+        if (e.mode === 0) {
+          vx = nx * e.speed;
+          vy = ny * e.speed;
+          if (--e.timer <= 0 && d < 700) {
+            const a = s.rng.next() * TAU;
+            e.ax = p.x + dcos(a) * 120;
+            e.ay = p.y + dsin(a) * 120;
+            e.mode = 1;
+            e.timer = 42;
+          }
+        } else if (e.mode === 1) {
+          if (--e.timer <= 0) {
+            e.x = e.ax;
+            e.y = e.ay;
+            e.px = e.x;
+            e.py = e.y;
+            e.mode = 2;
+            e.timer = 26;
+            s.events.push({ t: 'blink', x: e.x, y: e.y });
+          }
+        } else {
+          vx = nx * e.speed * 3.4;
+          vy = ny * e.speed * 3.4;
+          if (--e.timer <= 0) {
+            e.mode = 0;
+            e.timer = 150 + s.rng.int(90);
+          }
+        }
+        break;
+      case 'sniper':
+        // Mantiene distancia; se detiene, apunta un láser y dispara una bala muy rápida.
+        if (e.mode === 0) {
+          const range = e.def.range;
+          if (d > range + 40) {
+            vx = nx * e.speed;
+            vy = ny * e.speed;
+          } else if (d < range - 90) {
+            vx = -nx * e.speed;
+            vy = -ny * e.speed;
+          } else {
+            vx = -ny * e.speed * 0.5;
+            vy = nx * e.speed * 0.5;
+          }
+          if (--e.timer <= 0 && d < range + 160) {
+            e.mode = 1;
+            e.timer = e.def.aim;
+            e.ax = nx;
+            e.ay = ny;
+          }
+        } else if (--e.timer <= 0) {
+          fireEnemyBullet(s, e.x, e.y, e.ax, e.ay, e.def.bulletSpeed, e.dmg, 6, 'snipe');
+          e.mode = 0;
+          e.timer = 170 + s.rng.int(40);
+        }
+        break;
       case 'boss': {
         const v = bossAI(s, e, nx, ny);
         vx = v[0];
@@ -345,6 +473,9 @@ function updateEnemies(s) {
 const BOSS_V = [0, 0];
 function bossAI(s, e, nx, ny) {
   e.timer--;
+  // El Corazón usa los ataques del nivel más alto y, herido, se enfurece (ataca más seguido).
+  const tier = e.def.final ? 5 : s.bossIdx;
+  const rage = e.def.final && e.hp < e.maxHp * 0.5 ? 0.6 : 1;
   if (e.mode === 0) {
     BOSS_V[0] = nx * e.speed;
     BOSS_V[1] = ny * e.speed;
@@ -360,7 +491,6 @@ function bossAI(s, e, nx, ny) {
     BOSS_V[0] = nx * e.speed * 0.15;
     BOSS_V[1] = ny * e.speed * 0.15;
     if (e.timer <= 0) {
-      const tier = s.bossIdx;
       if (e.pattern === 0) {
         const n = 16 + tier * 4;
         const off = s.tick * 0.13;
@@ -389,7 +519,7 @@ function bossAI(s, e, nx, ny) {
         return BOSS_V;
       }
       e.mode = 0;
-      e.timer = 130 - tier * 10;
+      e.timer = Math.round((130 - tier * 10) * rage);
     }
     return BOSS_V;
   }
@@ -402,8 +532,43 @@ function bossAI(s, e, nx, ny) {
   return BOSS_V;
 }
 
-function fireEnemyBullet(s, x, y, dx, dy, speed, dmg, r) {
-  s.ebullets.push({ x, y, px: x, py: y, vx: dx * speed, vy: dy * speed, dmg, r, life: 300 });
+function fireEnemyBullet(s, x, y, dx, dy, speed, dmg, r, kind = 'orb') {
+  s.ebullets.push({ x, y, px: x, py: y, vx: dx * speed, vy: dy * speed, dmg, r, life: 300, kind });
+}
+
+// ------------------------------------------------------------------- peligros (meteoritos)
+
+function updateHazards(s) {
+  const hz = s.hazards;
+  if (!hz.length) return;
+  const p = s.player;
+  let w = 0;
+  for (let i = 0; i < hz.length; i++) {
+    const h = hz[i];
+    if (--h.timer > 0) {
+      hz[w++] = h;
+      continue;
+    }
+    // Impacto: daña a la nave y a los enemigos que estén dentro (se los puede atraer).
+    const dx = p.x - h.x;
+    const dy = p.y - h.y;
+    if (dx * dx + dy * dy < h.r * h.r) hurtPlayer(s, h.dmg);
+    const n = query(s, h.x, h.y, h.r + MAX_ENEMY_R);
+    for (let k = 0; k < n; k++) {
+      const e = s.enemies[s.qbuf[k]];
+      if (e.dead || e.boss) continue;
+      const ex = e.x - h.x;
+      const ey = e.y - h.y;
+      const rr = h.r + e.r;
+      if (ex * ex + ey * ey > rr * rr) continue;
+      // daño "del entorno": no usa el poder del jugador, pero cuenta como baja
+      e.hp -= h.dmg * 3;
+      e.flash = 5;
+      if (e.hp <= 0) killEnemy(s, e);
+    }
+    s.events.push({ t: 'meteor', x: h.x, y: h.y, r: h.r });
+  }
+  hz.length = w;
 }
 
 // ------------------------------------------------------------------- grilla espacial
@@ -504,6 +669,17 @@ function damageEnemy(s, e, base, kx, ky, kb) {
   let dmg = base * st.might;
   const crit = s.rng.next() < st.crit;
   if (crit) dmg *= 2;
+  // Escudo de un Aegis cercano (no se protege a sí mismo).
+  for (const a of s.auras) {
+    if (a === e || a.dead) continue;
+    const ax = e.x - a.x;
+    const ay = e.y - a.y;
+    const R = a.def.aura;
+    if (ax * ax + ay * ay < R * R) {
+      dmg *= 1 - a.def.auraDR;
+      break;
+    }
+  }
   dmg = Math.floor(dmg + 0.5);
   e.hp -= dmg;
   e.flash = 5;
@@ -1027,7 +1203,8 @@ export function summarize(s) {
   const timeSec = Math.floor(s.tick / TICK_RATE);
   const victory = s.phase === 'victory';
   const base = s.shards + Math.floor(timeSec / 30) * 3 + (victory ? 150 : 0);
-  const mult = shipYield(s.shipKey, s.shipLevel);
+  // El nivel del Rift multiplica el premio: más difícil, más paga.
+  const mult = shipYield(s.shipKey, s.shipLevel) * s.mods.reward;
   return {
     ticks: s.tick,
     timeSec,
@@ -1040,7 +1217,11 @@ export function summarize(s) {
     shardsEarned: Math.floor(base * mult),
     yieldMult: mult,
     bestCombo: s.bestCombo,
-    score: s.kills + timeSec * 2 + s.player.level * 25 + s.bossesKilled * 500 + Math.floor(s.bestCombo / 2) + (victory ? 2000 : 0)
+    rift: s.rift,
+    score: Math.floor(
+      (s.kills + timeSec * 2 + s.player.level * 25 + s.bossesKilled * 500 + Math.floor(s.bestCombo / 2) + (victory ? 2000 : 0)) *
+        (1 + 0.1 * s.rift)
+    )
   };
 }
 

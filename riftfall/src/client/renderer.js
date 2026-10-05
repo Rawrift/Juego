@@ -12,7 +12,13 @@ import {
   missileSprite,
   enemyBulletSprite,
   textSprite,
-  drawShipFast
+  drawShipFast,
+  boltSprite,
+  snipeSprite,
+  debrisSprite,
+  smokeSprite,
+  meteorSprite,
+  planetSprite
 } from './sprites.js';
 import { t } from './i18n.js';
 
@@ -39,8 +45,23 @@ export function createRenderer(canvas) {
     // transformación del mundo (para dibujar sin save/restore) y nave en pantalla (para el mouse)
     k: 1, ox: 0, oy: 0, shipSX: 0, shipSY: 0,
     textsThisFrame: 0,
-    groups: new Map()
+    groups: new Map(),
+    // "Clima" del fondo: 0 = calma (azul), 1 = peligro (carmesí). Sube con el tiempo y con el jefe.
+    mood: 0,
+    moodStep: -1,
+    flashColor: '255,255,255',
+    trail: [],
+    debris: [],
+    smoke: []
   };
+
+  /** Mezcla dos colores hex (t = 0 → a, t = 1 → b). */
+  function mixHex(a, b, t) {
+    const pa = parseInt(a.slice(1), 16);
+    const pb = parseInt(b.slice(1), 16);
+    const ch = (sh) => Math.round(((pa >> sh) & 255) + (((pb >> sh) & 255) - ((pa >> sh) & 255)) * t);
+    return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
+  }
   let bg = null;
   let nebula = null;
   let stars = [];
@@ -54,9 +75,10 @@ export function createRenderer(canvas) {
     bg.height = Math.max(1, Math.floor(R.h * R.dpr / 2));
     const g = bg.getContext('2d');
     const grad = g.createRadialGradient(bg.width * 0.5, bg.height * 0.45, 0, bg.width * 0.5, bg.height * 0.5, Math.max(bg.width, bg.height) * 0.75);
-    grad.addColorStop(0, '#111735');
-    grad.addColorStop(0.5, '#0a0b22');
-    grad.addColorStop(1, '#04040c');
+    const m = Math.max(0, R.moodStep) / 10;
+    grad.addColorStop(0, mixHex('#111735', '#3d1030', m));
+    grad.addColorStop(0.5, mixHex('#0a0b22', '#1c0718', m));
+    grad.addColorStop(1, mixHex('#04040c', '#070209', m));
     g.fillStyle = grad;
     g.fillRect(0, 0, bg.width, bg.height);
   }
@@ -169,6 +191,34 @@ export function createRenderer(canvas) {
     R.particles.push({ x, y, vx, vy, life, max: life, size, color, drag });
   }
 
+  /** Esquirlas que giran y se frenan (dan cuerpo a las explosiones). */
+  function debris(x, y, color, n, speed) {
+    n = Math.round(n * R.Q.parts);
+    for (let i = 0; i < n && R.debris.length < 260 * R.Q.parts; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const v = speed * (0.35 + Math.random() * 0.8);
+      const life = 0.45 + Math.random() * 0.4;
+      R.debris.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, rot: a, vr: (Math.random() - 0.5) * 16, life, max: life, size: 0.7 + Math.random() * 0.7, color });
+    }
+  }
+
+  /** Humo oscuro que se expande lento. */
+  function smoke(x, y, n, size = 1) {
+    n = Math.round(n * R.Q.parts);
+    for (let i = 0; i < n && R.smoke.length < 120 * R.Q.parts; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const v = 20 + Math.random() * 50;
+      const life = 0.6 + Math.random() * 0.5;
+      R.smoke.push({ x: x + Math.cos(a) * 6, y: y + Math.sin(a) * 6, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life, max: life, size: size * (0.6 + Math.random() * 0.5) });
+    }
+  }
+
+  /** Destello blanco breve en el centro de una explosión. */
+  function flashFx(x, y, r, life = 0.14) {
+    if (R.fx.length > 90) return;
+    R.fx.push({ type: 'flash', x, y, r, life, max: life });
+  }
+
   function burst(x, y, color, n, speed, size = 3, life = 0.5) {
     // Con la pantalla llena se emiten menos chispas por explosión (se nota poco y alivia mucho).
     const load = R.particles.length / (MAX_PARTICLES * R.Q.parts);
@@ -198,25 +248,32 @@ export function createRenderer(canvas) {
     R.shake = Math.min(26, Math.max(R.shake, v));
   }
 
-  const KIND_COLORS = { mite: '#ff4d8d', drone: '#ff7a3d', splitter: '#ffd23d', dasher: '#ff3d3d', spitter: '#c84dff', brute: '#ff5a1f', warden: '#ff2a6d' };
+  const KIND_COLORS = {
+    mite: '#ff4d8d', drone: '#ff7a3d', splitter: '#ffd23d', dasher: '#ff3d3d', spitter: '#c84dff', brute: '#ff5a1f',
+    mine: '#ffb02e', wraith: '#d8c8ff', aegis: '#5468ff', lancer: '#d4ff3d', warden: '#ff2a6d', heart: '#ff3df0'
+  };
 
   function handleEvent(ev, sim) {
     switch (ev.t) {
       case 'hit':
         if (Math.random() < 0.6) burst(ev.x, ev.y, ev.c ? '#ffe66b' : '#bff6ff', 2, 220, 2.2, 0.25);
-        if (ev.c || Math.random() < 0.45) {
+        if (ev.c || Math.random() < 0.28) {
           text(ev.x + (Math.random() - 0.5) * 16, ev.y - 10, String(ev.v), ev.c ? '#ffe66b' : '#ffffff', ev.c ? 22 : 15, ev.c ? 0.9 : 0.6, !ev.c);
         }
         break;
       case 'kill': {
         const col = KIND_COLORS[ev.kind] ?? '#ff4d8d';
-        burst(ev.x, ev.y, col, ev.boss ? 90 : ev.elite ? 36 : 10, ev.boss ? 520 : ev.elite ? 360 : 240, ev.boss ? 6 : 3.4, ev.boss ? 1.4 : 0.55);
-        burst(ev.x, ev.y, '#ffffff', ev.boss ? 30 : ev.elite ? 10 : 3, 180, 2, 0.3);
+        burst(ev.x, ev.y, col, ev.boss ? 90 : ev.elite ? 36 : 9, ev.boss ? 520 : ev.elite ? 360 : 240, ev.boss ? 6 : 3.4, ev.boss ? 1.4 : 0.55);
+        burst(ev.x, ev.y, '#ffffff', ev.boss ? 30 : ev.elite ? 10 : 2, 180, 2, 0.3);
+        debris(ev.x, ev.y, col, ev.boss ? 26 : ev.elite ? 12 : 4, ev.boss ? 420 : 260);
+        if (ev.boss || ev.elite || Math.random() < 0.35) smoke(ev.x, ev.y, ev.boss ? 10 : ev.elite ? 4 : 1, ev.boss ? 2.4 : ev.elite ? 1.4 : 0.8);
+        flashFx(ev.x, ev.y, ev.r * (ev.boss ? 4 : 2.2), ev.boss ? 0.35 : 0.14);
         ring(ev.x, ev.y, ev.r * 0.5, ev.r * (ev.boss ? 6 : 2.6), col, ev.boss ? 0.8 : 0.32, ev.boss ? 10 : 3);
         if (ev.elite) addShake(7);
         if (ev.boss) {
           addShake(26);
           R.flash = 0.9;
+          R.flashColor = '255,255,255';
         }
         break;
       }
@@ -305,14 +362,40 @@ export function createRenderer(canvas) {
         break;
       }
       case 'boss':
-        addShake(14);
+        addShake(ev.final ? 24 : 14);
+        R.flash = ev.final ? 0.8 : 0.45;
+        R.flashColor = ev.final ? '255,61,240' : '255,42,109';
+        break;
+      case 'meteor':
+        ring(ev.x, ev.y, 8, ev.r * 1.5, '#ffb02e', 0.4, 8);
+        flashFx(ev.x, ev.y, ev.r * 1.6, 0.2);
+        burst(ev.x, ev.y, '#ff8a3d', 18, 340, 3.6, 0.6);
+        burst(ev.x, ev.y, '#fff1d1', 6, 200, 2.4, 0.3);
+        debris(ev.x, ev.y, '#7a3a24', 9, 320);
+        smoke(ev.x, ev.y, 4, 1.6);
+        addShake(6);
+        break;
+      case 'mineBoom':
+        ring(ev.x, ev.y, 6, ev.r, '#ffb02e', 0.36, 7);
+        flashFx(ev.x, ev.y, ev.r * 1.4, 0.18);
+        burst(ev.x, ev.y, '#ffb02e', 20, 360, 3.4, 0.5);
+        debris(ev.x, ev.y, '#ffb02e', 6, 300);
+        smoke(ev.x, ev.y, 3, 1.3);
+        addShake(5);
+        break;
+      case 'blink':
+        ring(ev.x, ev.y, 40, 6, '#d8c8ff', 0.3, 4);
+        burst(ev.x, ev.y, '#d8c8ff', 12, 220, 2.6, 0.4);
         break;
       case 'dead':
         burst(ev.x, ev.y, SHIPS[sim.shipKey].color, 120, 600, 5, 1.6);
         burst(ev.x, ev.y, '#ffffff', 40, 300, 3, 1);
         ring(ev.x, ev.y, 10, 500, '#ffffff', 1, 12);
+        debris(ev.x, ev.y, SHIPS[sim.shipKey].color, 24, 420);
+        smoke(ev.x, ev.y, 10, 2.2);
         addShake(26);
         R.flash = 1;
+        R.flashColor = ev.collapse ? '255,61,240' : '255,255,255';
         break;
       default:
     }
@@ -341,9 +424,47 @@ export function createRenderer(canvas) {
     if (alpha !== 1) ctx.globalAlpha = 1;
   }
 
+  /** Igual que drawSprite pero para sprites alargados (ancho `size`, alto `h`). */
+  function drawLong(spr, x, y, angle, alpha = 1) {
+    const k = R.k;
+    const c = Math.cos(angle) * k;
+    const sn = Math.sin(angle) * k;
+    if (alpha !== 1) ctx.globalAlpha = alpha;
+    ctx.setTransform(c, sn, -sn, c, k * x + R.ox, k * y + R.oy);
+    ctx.drawImage(spr.img, -spr.size / 2, -spr.h / 2, spr.size, spr.h);
+    ctx.setTransform(k, 0, 0, k, R.ox, R.oy);
+    if (alpha !== 1) ctx.globalAlpha = 1;
+  }
+
+  /** Dibuja un sprite de fondo que se repite cada `period` px de pantalla, con parallax `par`. */
+  function drawPeriodic(img, size, par, ax, ay, period, camX, camY) {
+    const { w, h, scale } = R;
+    let x = ax - camX * par * scale;
+    let y = ay - camY * par * scale;
+    x = (((x % period) + period * 1.5) % period) - period / 2;
+    y = (((y % period) + period * 1.5) % period) - period / 2;
+    for (const ox of [0, -period, period]) {
+      for (const oy of [0, -period, period]) {
+        const cx = w / 2 + x + ox;
+        const cy = h / 2 + y + oy;
+        if (cx + size / 2 < 0 || cx - size / 2 > w || cy + size / 2 < 0 || cy - size / 2 > h) continue;
+        ctx.drawImage(img, cx - size / 2, cy - size / 2, size, size);
+      }
+    }
+  }
+
   function render(sim, alpha, dt, opts = {}) {
     R.time += dt;
     R.textsThisFrame = 0;
+    // El fondo se tiñe de carmesí a medida que avanza la partida y con un jefe en pantalla.
+    const bossOn = sim.boss && !sim.boss.dead;
+    const targetMood = Math.min(1, (sim.tick / 36000) * 0.7 + (bossOn ? (sim.boss.def.final ? 0.45 : 0.25) : 0));
+    R.mood += (targetMood - R.mood) * Math.min(1, dt * 1.5);
+    const step = Math.round(R.mood * 10);
+    if (step !== R.moodStep) {
+      R.moodStep = step;
+      buildBackground();
+    }
     const p = sim.player;
     const px = lerp(p.px, p.x, alpha);
     const py = lerp(p.py, p.y, alpha);
@@ -374,6 +495,17 @@ export function createRenderer(canvas) {
       const oy = -((camY * 0.08 * scale) % size) - size;
       for (let x = ox; x < w; x += size) for (let y = oy; y < h; y += size) ctx.drawImage(nebula, x, y);
     }
+    // planetas lejanos (tapan la nebulosa, quedan detrás de las estrellas cercanas)
+    ctx.globalCompositeOperation = 'source-over';
+    {
+      const big = planetSprite(0);
+      const moon = planetSprite(1);
+      ctx.globalAlpha = 0.82; // un poco apagados: son fondo, no objetos del juego
+      drawPeriodic(big.img, big.size * 0.85 * scale, 0.035, -w * 0.3, -h * 0.22, 2600 * scale, camX, camY);
+      drawPeriodic(moon.img, moon.size * 0.8 * scale, 0.06, w * 0.34, h * 0.26, 2100 * scale, camX, camY);
+      ctx.globalAlpha = 1;
+    }
+    ctx.globalCompositeOperation = 'lighter';
     for (let li = stars.length - R.Q.stars; li < stars.length; li++) {
       const layer = stars[li];
       const size = 512;
@@ -407,6 +539,25 @@ export function createRenderer(canvas) {
     ctx.globalCompositeOperation = 'lighter';
     const shipColor = SHIPS[sim.shipKey]?.color ?? '#4de8ff';
     drawSprite(glow(shipColor, 260, 0.22), px, py);
+
+    // zonas de meteorito: círculo rojo que se llena y la roca que cae al final
+    for (const hz of sim.hazards ?? []) {
+      if (!visible(hz.x, hz.y)) continue;
+      const k = 1 - hz.timer / hz.max;
+      const pulse = 0.55 + 0.45 * Math.sin(R.time * 18);
+      ctx.strokeStyle = '#ff3d3d';
+      ctx.globalAlpha = 0.35 + 0.4 * k * pulse;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(hz.x, hz.y, hz.r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = '#ff3d3d';
+      ctx.globalAlpha = 0.12 + 0.18 * k;
+      ctx.beginPath();
+      ctx.arc(hz.x, hz.y, hz.r * k, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
     ctx.globalCompositeOperation = 'source-over';
 
     // Los dibujos se agrupan en pasadas por modo de mezcla: cambiar entre 'lighter' y
@@ -452,6 +603,47 @@ export function createRenderer(canvas) {
         drawSprite(glow('#ffe7a3', e.r * 2.2, 0.6), x, y, 0, 0.75 + 0.25 * Math.sin(R.time * 5 + e.id));
       }
     }
+    // avisos de ataque (aditivos): auras de Aegis, minas por explotar, destino de un Wraith y
+    // láser de un Lancer. Son lo que hace justo al juego: todo peligro se ve venir.
+    for (const e of en) {
+      const def = e.def;
+      if (def.aura) {
+        const x = lerp(e.px, e.x, alpha);
+        const y = lerp(e.py, e.y, alpha);
+        if (!visible(x, y)) continue;
+        drawSprite(glow(def.color, def.aura, 0.3), x, y, 0, 0.75);
+      } else if (def.ai === 'mine' && e.mode === 1) {
+        const k = 1 - e.timer / def.fuse;
+        const fast = 0.5 + 0.5 * Math.sin(R.time * (14 + k * 30));
+        ctx.strokeStyle = '#ff6a3d';
+        ctx.globalAlpha = 0.3 + 0.6 * k * fast;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, def.blast, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      } else if (def.ai === 'blink' && e.mode === 1) {
+        const k = e.timer / 42;
+        ctx.strokeStyle = def.color;
+        ctx.globalAlpha = 0.85 - k * 0.5;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(e.ax, e.ay, 10 + 34 * k, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        drawSprite(glow(def.color, 30, 0.6), e.ax, e.ay, 0, 0.5 + 0.5 * (1 - k));
+      } else if (def.ai === 'sniper' && e.mode === 1) {
+        const k = 1 - e.timer / def.aim;
+        ctx.strokeStyle = '#d4ff3d';
+        ctx.globalAlpha = 0.15 + 0.6 * k;
+        ctx.lineWidth = 1 + 2.5 * k;
+        ctx.beginPath();
+        ctx.moveTo(e.x, e.y);
+        ctx.lineTo(e.x + e.ax * 800, e.y + e.ay * 800);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
     ctx.globalCompositeOperation = 'source-over';
     for (const e of en) {
       const x = lerp(e.px, e.x, alpha);
@@ -490,8 +682,12 @@ export function createRenderer(canvas) {
       let ang = Math.atan2(p.y - e.y, p.x - e.x);
       if (def.ai === 'dash' && e.mode === 1) ang = Math.atan2(e.ay, e.ax);
       else if (def.shape === 'boss' || def.shape === 'hex' || def.shape === 'circle') ang += Math.sin(R.time * 2.2 + e.id) * 0.18;
-      const spr = enemySprite(def.shape, def.color, Math.round(def.r * (e.elite ? 1.6 : 1)), e.flash > 0, e.elite);
-      drawSprite(spr, x, y, ang);
+      // Respiración suave y "aplastón" al recibir un golpe: se sienten vivos y los impactos pesan.
+      const sc = (1 + Math.sin(R.time * 5 + e.id) * 0.035) * (e.flash > 0 ? 1.14 : 1);
+      const blinkWhite = def.ai === 'mine' && e.mode === 1 && Math.floor(R.time * (10 + (1 - e.timer / def.fuse) * 20)) % 2 === 0;
+      const spr = enemySprite(def.shape, def.color, Math.round(def.r * (e.elite ? 1.6 : 1)), e.flash > 0 || blinkWhite, e.elite);
+      const fade = def.ai === 'blink' && e.mode === 1 ? 0.35 + 0.65 * (e.timer / 42) : 1;
+      drawSprite(spr, x, y, ang, fade, sc);
     }
     if (special) {
       for (const e of en) {
@@ -525,16 +721,53 @@ export function createRenderer(canvas) {
       }
     }
 
-    // nave
+    // nave: estela del motor, cuerpo y escudo de invulnerabilidad
     if (sim.phase !== 'dead') {
-      const blink = p.invuln > 0 && Math.floor(R.time * 20) % 2 === 0;
-      if (!blink) {
+      const tr = R.trail;
+      const tailX = px - p.fx * 15;
+      const tailY = py - p.fy * 15;
+      const last = tr[tr.length - 1];
+      const jump = last ? Math.hypot(tailX - last.x, tailY - last.y) : 0;
+      if (jump > 80) tr.length = 0; // salto (avance rápido, cambio de partida): la estela empieza de nuevo
+      if (!last || jump > 5) tr.push({ x: tailX, y: tailY });
+      if (tr.length > 18 || (!p.moving && tr.length > 1)) tr.shift();
+      if (tr.length > 1) {
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = shipColor;
+        for (let i = 1; i < tr.length; i++) {
+          const k = i / tr.length;
+          ctx.globalAlpha = k * 0.42;
+          ctx.lineWidth = 2 + k * 9;
+          ctx.beginPath();
+          ctx.moveTo(tr[i - 1].x, tr[i - 1].y);
+          ctx.lineTo(i === tr.length - 1 ? tailX : tr[i].x, i === tr.length - 1 ? tailY : tr[i].y);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = 'source-over';
+      }
+      {
         const k = R.k * 1.15;
         const c = p.fx * k;
         const sn = p.fy * k;
         ctx.setTransform(c, sn, -sn, c, R.k * px + R.ox, R.k * py + R.oy);
         drawShipFast(ctx, sim.shipKey, shipColor, R.time, p.moving ? 1 : 0.35);
         ctx.setTransform(R.k, 0, 0, R.k, R.ox, R.oy);
+      }
+      if (p.invuln > 0) {
+        // burbuja de escudo en vez de parpadear: la nave se sigue viendo
+        const k = p.invuln / 30;
+        ctx.globalCompositeOperation = 'lighter';
+        drawSprite(glow(shipColor, 40, 0.5), px, py, 0, 0.35 + 0.35 * k);
+        ctx.strokeStyle = '#ffffff';
+        ctx.globalAlpha = (0.3 + 0.3 * Math.sin(R.time * 40)) * k + 0.15;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(px, py, 30, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = 'source-over';
       }
       if (p.moving && Math.random() < 0.7) {
         particle(px - p.fx * 14, py - p.fy * 14, -p.fx * 90 + (Math.random() - 0.5) * 40, -p.fy * 90 + (Math.random() - 0.5) * 40, 0.35, 3, shipColor, 0.92);
@@ -545,9 +778,8 @@ export function createRenderer(canvas) {
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
     const goldBolts = p.weapons.some((w) => w.id === 'blaster' && w.evolved);
-    let bolts = 0;
     let missiles = 0;
-    ctx.beginPath();
+    const boltSpr = boltSprite(goldBolts);
     for (const b of sim.projectiles) {
       if (b.kind !== 'bolt') {
         missiles++;
@@ -556,18 +788,8 @@ export function createRenderer(canvas) {
       const x = lerp(b.px, b.x, alpha);
       const y = lerp(b.py, b.y, alpha);
       if (!visible(x, y)) continue;
-      const sp = Math.hypot(b.vx, b.vy) || 1;
-      ctx.moveTo(x - (b.vx / sp) * 26, y - (b.vy / sp) * 26);
-      ctx.lineTo(x, y);
-      bolts++;
-    }
-    if (bolts) {
-      ctx.strokeStyle = goldBolts ? 'rgba(255, 210, 61, 0.4)' : 'rgba(77, 232, 255, 0.35)';
-      ctx.lineWidth = 9;
-      ctx.stroke();
-      ctx.strokeStyle = goldBolts ? '#fff6cf' : '#e6fdff';
-      ctx.lineWidth = 3;
-      ctx.stroke();
+      const a = Math.atan2(b.vy, b.vx);
+      drawLong(boltSpr, x - Math.cos(a) * 10, y - Math.sin(a) * 10, a);
     }
     if (missiles) {
       for (const pass of [0, 1]) {
@@ -583,6 +805,7 @@ export function createRenderer(canvas) {
           }
           drawSprite(glow('#ffb02e', 22, 0.7), x, y);
           if (Math.random() < 0.8) particle(x, y, (Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30, 0.4, 3.5, '#ff8a3d', 0.9);
+          if (Math.random() < 0.25) smoke(x, y, 1, 0.45);
         }
       }
       ctx.globalCompositeOperation = 'lighter';
@@ -591,7 +814,33 @@ export function createRenderer(canvas) {
       const x = lerp(b.px, b.x, alpha);
       const y = lerp(b.py, b.y, alpha);
       if (!visible(x, y)) continue;
-      drawSprite(enemyBulletSprite(b.r), x, y);
+      if (b.kind === 'snipe') drawLong(snipeSprite(), x, y, Math.atan2(b.vy, b.vx));
+      else drawSprite(enemyBulletSprite(b.r), x, y);
+    }
+
+    // meteoritos cayendo (encima de todo lo del suelo)
+    for (const hz of sim.hazards ?? []) {
+      const k = 1 - hz.timer / hz.max;
+      if (k < 0.55 || !visible(hz.x, hz.y)) continue;
+      const f = (k - 0.55) / 0.45;
+      const mx = hz.x + (1 - f) * 260;
+      const my = hz.y - (1 - f) * 480;
+      // cola de fuego: tres trazos superpuestos que se afinan (rojo → naranja → amarillo)
+      ctx.lineCap = 'round';
+      for (const [col, wdt, len, a] of [['#ff3d1f', 22, 1, 0.22], ['#ff8a3d', 13, 0.8, 0.4], ['#ffe08a', 5, 0.55, 0.75]]) {
+        ctx.strokeStyle = col;
+        ctx.globalAlpha = a;
+        ctx.lineWidth = wdt;
+        ctx.beginPath();
+        ctx.moveTo(mx + 65 * len, my - 120 * len);
+        ctx.lineTo(mx, my);
+        ctx.stroke();
+      }
+      drawSprite(glow('#ff8a3d', 40, 0.8), mx, my);
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
+      drawSprite(meteorSprite(), mx, my, R.time * 4, 1, 0.9 + f * 0.3);
+      ctx.globalCompositeOperation = 'lighter';
     }
 
     // efectos
@@ -603,6 +852,10 @@ export function createRenderer(canvas) {
         continue;
       }
       const t = 1 - f.life / f.max;
+      if (f.type === 'flash') {
+        drawSprite(glow('#ffffff', 40, 1), f.x, f.y, 0, 1 - t, (f.r / 40) * (0.5 + t * 0.9));
+        continue;
+      }
       if (f.type === 'ring') {
         const r = f.r0 + (f.r1 - f.r0) * (1 - (1 - t) * (1 - t));
         ctx.strokeStyle = f.color;
@@ -643,6 +896,45 @@ export function createRenderer(canvas) {
         ctx.globalAlpha = 1;
       }
     }
+
+    // humo (debajo) y esquirlas: mezcla normal
+    ctx.globalCompositeOperation = 'source-over';
+    {
+      const sm = R.smoke;
+      const spr = smokeSprite();
+      let wi = 0;
+      for (let i = 0; i < sm.length; i++) {
+        const q = sm[i];
+        q.life -= dt;
+        if (q.life <= 0) continue;
+        q.vx *= 0.96;
+        q.vy *= 0.96;
+        q.x += q.vx * dt;
+        q.y += q.vy * dt;
+        sm[wi++] = q;
+        if (!visible(q.x, q.y)) continue;
+        const k = q.life / q.max;
+        drawSprite(spr, q.x, q.y, 0, Math.min(1, k * 1.6) * 0.9, q.size * (1.4 - k * 0.7));
+      }
+      sm.length = wi;
+      const db = R.debris;
+      wi = 0;
+      for (let i = 0; i < db.length; i++) {
+        const q = db[i];
+        q.life -= dt;
+        if (q.life <= 0) continue;
+        q.vx *= 0.93;
+        q.vy *= 0.93;
+        q.x += q.vx * dt;
+        q.y += q.vy * dt;
+        q.rot += q.vr * dt;
+        db[wi++] = q;
+        if (!visible(q.x, q.y)) continue;
+        drawSprite(debrisSprite(q.color), q.x, q.y, q.rot, Math.min(1, (q.life / q.max) * 2), q.size);
+      }
+      db.length = wi;
+    }
+    ctx.globalCompositeOperation = 'lighter';
 
     // partículas: se mueven y después se dibujan agrupadas por color (misma imagen seguida =
     // una sola tanda en la placa de video; con mezcla aditiva el orden no cambia el resultado)
@@ -706,7 +998,7 @@ export function createRenderer(canvas) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     if (R.flash > 0) {
-      ctx.fillStyle = `rgba(255,255,255,${R.flash * 0.6})`;
+      ctx.fillStyle = `rgba(${R.flashColor},${R.flash * 0.6})`;
       ctx.fillRect(0, 0, w, h);
       R.flash = Math.max(0, R.flash - dt * 2.5);
     }
@@ -724,6 +1016,9 @@ export function createRenderer(canvas) {
       R.particles.length = 0;
       R.texts.length = 0;
       R.fx.length = 0;
+      R.debris.length = 0;
+      R.smoke.length = 0;
+      R.trail.length = 0;
       R.shake = 0;
       R.flash = 0;
     },
