@@ -10,6 +10,7 @@ import { t, tx, locale } from './i18n.js';
 /** Ícono de cada talento (reutiliza los de las mejoras parecidas). */
 const TALENT_ICON = { hull: 'hull', power: 'might', reflex: 'haste', engines: 'thrust', magnet: 'magnet', memory: 'growth' };
 const num = (v, opts) => Number(v).toLocaleString(locale, opts);
+const trimAmount = (v) => Number(v).toLocaleString(locale, { maximumFractionDigits: 4 });
 
 export function createPanels(app) {
   const sheet = $('#sheet');
@@ -209,6 +210,14 @@ export function createPanels(app) {
                 const b = el('button', { class: 'btn primary small', disabled: !k.active || left <= 0 }, `${formatEther(k.priceWei)} ${nativeSymbol()}`);
                 b.addEventListener('click', async () => {
                   if (!app.wallet.connected && !(await app.connectWallet())) return;
+                  // Antes de abrir la wallet: si no alcanza el saldo, explicarlo en vez de mostrar un error de la red.
+                  const have = (await app.wallet.balances().catch(() => null))?.eth;
+                  if (have !== undefined && have < k.priceWei) {
+                    const isTest = [97, 84532, 31337].includes(app.config.chain.chainId);
+                    const vars = { have: trimAmount(formatEther(have)), price: trimAmount(formatEther(k.priceWei)), sym: nativeSymbol() };
+                    toast(`${t('h.noFunds', vars)}${k.priceRift > 0n ? ` ${t('h.payRift')}` : ''}${isTest ? ` ${t('h.faucet')}` : ''}`, 'err');
+                    return;
+                  }
                   act(b, t('h.buying'), () => app.wallet.mint(k.classId, 'eth', k.priceWei), t('h.bought', { name: k.name }));
                 });
                 actions.push(b);

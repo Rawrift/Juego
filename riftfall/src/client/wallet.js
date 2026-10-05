@@ -41,7 +41,15 @@ const CHAINS = {
 export function explainError(err) {
   if (!err) return t('err.unknown');
   if (err.code === 'ACTION_REJECTED' || err.code === 4001 || err?.info?.error?.code === 4001) return t('err.rejected');
-  if (err.code === 'INSUFFICIENT_FUNDS') return t('err.funds');
+  let detail = String(err.shortMessage ?? err.message ?? '');
+  try {
+    detail += JSON.stringify(err.info ?? err.error ?? '', (k, v) => (typeof v === 'bigint' ? v.toString() : v));
+  } catch {
+    /* sin detalle */
+  }
+  if (err.code === 'INSUFFICIENT_FUNDS' || /insufficient funds|exceeds balance/i.test(detail)) return t('err.funds');
+  // MetaMask a veces devuelve el rechazo de la red sin motivo: se explica en vez de mostrar el texto técnico.
+  if (/missing revert data|could not coalesce/i.test(detail)) return t('err.network');
   const reason = err.reason || err.revert?.args?.[0] || err.shortMessage || err.message;
   return String(reason).replace(/^execution reverted:?\s*/i, '').slice(0, 180);
 }
