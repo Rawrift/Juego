@@ -85,6 +85,34 @@ describe('Despliegue', () => {
     expect(generated.deploy).to.deep.equal(JSON.parse(JSON.stringify(fresh.deploy)));
   });
 
+  it('una clave descartable puede pagar el gas y dejar todo a nombre del creador', async () => {
+    const [, , , , , , , payer, creator] = await ethers.getSigners();
+    const c = creator.address;
+    const d = await deployAll(ethers, {
+      deployer: payer,
+      owner: c,
+      treasury: c,
+      signer: c,
+      operator: c,
+      teamBeneficiary: c,
+      liquidityHolder: c,
+      communityHolder: c,
+      directOwner: true
+    });
+    for (const k of [d.vault, d.ships, d.market, d.arena]) {
+      expect(await k.owner()).to.equal(c);
+      expect(await k.pendingOwner()).to.equal(ethers.ZeroAddress);
+    }
+    expect(await d.token.balanceOf(payer.address)).to.equal(0n);
+    expect(await d.token.balanceOf(c)).to.equal(E(450_000_000));
+    expect(await d.token.balanceOf(d.vault.target)).to.equal(E(400_000_000));
+    expect(await d.token.balanceOf(d.vesting.target)).to.equal(E(150_000_000));
+    expect(await d.vesting.owner()).to.equal(c);
+    expect(await d.vault.signer()).to.equal(c);
+    expect(await d.arena.operator()).to.equal(c);
+    expect(await d.ships.treasury()).to.equal(c);
+  });
+
   it('el catálogo inicial queda creado en el constructor', async () => {
     const { ships } = await loadFixture(fixture);
     expect(await ships.classCount()).to.equal(4n);

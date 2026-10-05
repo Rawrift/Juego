@@ -135,7 +135,7 @@ test('Lanzador: crea token y contratos desde la wallet, reanuda tras un rechazo 
     game.on('pageerror', (e) => errors.push(e.message));
     await injectWallet(game, 0);
     await game.goto('http://127.0.0.1:4176/');
-    await expect(game.locator('#netStatus')).toContainText('Tienda de naves activa');
+    await expect(game.locator('#netStatus')).toContainText('Red de pruebas');
     await game.click('#walletBtn');
     await expect(game.locator('#walletBtn')).toContainText('0x9965', { timeout: 20_000 });
     await expect(game.locator('#menuRift')).not.toHaveText('0');

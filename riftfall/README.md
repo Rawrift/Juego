@@ -10,10 +10,10 @@ Las naves son **NFT** que se compran, se forjan y se revenden. En la **Arena** s
 |---|---|---|
 | ![Partida](docs/img/gameplay.jpg) | ![Jefe](docs/img/boss.jpg) | ![Móvil](docs/img/mobile.jpg) |
 
-- **Jugable en cualquier navegador** (escritorio y móvil con joystick táctil). No requiere instalar nada; la wallet solo se pide para cobrar.
+- **Jugable en cualquier navegador** (escritorio y móvil, vertical u horizontal, con joystick táctil). No requiere instalar nada; la wallet solo se pide para cobrar.
 - **En español, inglés y portugués:** se elige solo según el idioma del celular (o con `?lang=es|en|pt`) y se puede cambiar desde el menú.
 - **Adictivo por diseño:** partidas de 3 a 10 minutos, 6 armas y 11 mejoras combinables, **6 evoluciones de armas**, 3 jefes que sueltan **cofres**, **combos**, tutorial, misiones diarias, racha de días, ranking y torneos.
-- **Progreso permanente:** **talentos del piloto** que se compran con **Núcleos ✦** (moneda de progreso que no se canjea por tokens). Sin servidor, el progreso, las misiones y la racha se guardan en el dispositivo.
+- **Progreso permanente:** **habilidades del piloto** que se compran con **Núcleos ✦** (moneda de progreso que no se canjea por tokens). Sin servidor, el progreso, las misiones y la racha se guardan en el dispositivo.
 - **Viral:** al terminar, el botón **Compartir** genera una imagen con tu resultado y la manda por WhatsApp, Instagram o lo que tenga el celular.
 - **Economía con anti-trampas real ("Proof of Play"):** el servidor re-simula cada partida tick a tick antes de pagar.
 - **Ingresos para el creador:** venta de naves, comisiones de Forja, Mercado y Arena, regalías y liquidez. Detalle en [`docs/ECONOMIA.md`](docs/ECONOMIA.md).
@@ -109,6 +109,8 @@ El canje de Shards, el ranking y la Arena se activan al publicar el servidor.
 
 1. Copia `.env.example` a `.env` y completa `DEPLOYER_PRIVATE_KEY`, y `RIFT_OWNER` y `RIFT_TREASURY` (tu wallet o una Safe).
    Completa también `RIFT_SIGNER`: la dirección de una clave nueva, solo para el servidor.
+   Si otra clave paga el gas por el creador (por ejemplo, una descartable cargada con un faucet de testnet), pon todas las
+   direcciones `RIFT_*` en la wallet del creador y `RIFT_DIRECT_OWNER=1`: los contratos nacen a su nombre y quien paga no se queda con nada.
 2. `npm run deploy:testnet` (BNB Chain Testnet) → genera `deployments/97.json`. Para la red real: `npm run deploy:mainnet` (BSC, 56).
    Otras redes: `npm run deploy:base-testnet` / `npm run deploy:base`.
 3. Configura el servidor en `.env`: `DEPLOYMENT_FILE=deployments/97.json`, `RPC_URL`, `SIGNER_PRIVATE_KEY`, `ADMIN_TOKEN` y `ARENA_AUTO=1`.

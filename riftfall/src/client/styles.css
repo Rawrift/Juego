@@ -576,10 +576,74 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 .go-actions { flex-direction: column; align-items: stretch; }
 .go-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
-.go-row .btn { flex: 1; min-width: 120px; }
+.go-row .btn { flex: 1; min-width: 120px; white-space: nowrap; }
 #goUpgradeHint { margin: 2px 0 0; color: var(--gold); text-align: center; }
 @media (max-width: 520px) {
   .lang-sel { max-width: 104px; padding: 6px 8px; }
   .talent-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
   .talent { padding: 12px; }
+}
+
+/* ------------------------------------------------------------------ celular en horizontal */
+:root {
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+#hud { left: var(--safe-left); right: var(--safe-right); }
+.screen { padding-left: max(22px, var(--safe-left)); padding-right: max(22px, var(--safe-right)); }
+@media (orientation: landscape) and (max-height: 520px) {
+  /* Menú en dos columnas: JUGAR siempre a la vista. */
+  .screen { padding-top: calc(8px + var(--safe-top)); padding-bottom: 8px; padding-left: max(16px, var(--safe-left)); padding-right: max(16px, var(--safe-right)); }
+  .menu-main { grid-template-columns: minmax(0, 1.1fr) minmax(250px, 0.9fr); gap: 16px; align-items: start; padding-top: 6px; }
+  .title-block { gap: 8px; }
+  .title-block .eyebrow { font-size: 10px; }
+  .logo { font-size: 42px; }
+  .tagline, #controlsHint, .menu-foot { display: none; }
+  .ship-pick { grid-template-columns: 56px 1fr auto; padding: 8px 10px; gap: 10px; }
+  .ship-pick canvas { width: 56px; height: 56px; }
+  .ship-pick .btn { grid-column: auto; }
+  .btn.big { padding: 12px 18px; font-size: 16px; }
+  .side-stack { gap: 10px; }
+  .card.daily { padding: 10px 12px; }
+  .missions { gap: 6px; }
+  .missions li { font-size: 13px; }
+  .nav-grid { gap: 8px; }
+  .nav-grid button { padding: 8px 4px; font-size: 10px; }
+  .nav-grid button i { font-size: 18px; }
+
+  /* Mejoras: las tres en fila. */
+  .overlay { padding: 8px max(12px, var(--safe-right)) 8px max(12px, var(--safe-left)); place-items: start center; overflow-y: auto; }
+  .levelup-inner .eyebrow { font-size: 10px; }
+  .levelup-inner h2 { font-size: 26px; margin: 0 0 8px; }
+  .levelup-inner .hint { display: none; }
+  .choices { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .choice { display: block; padding: 12px 12px 10px; }
+  .choice .ico { width: 36px; height: 36px; margin: 0 0 6px; }
+  .choice h4 { font-size: 14px; padding-right: 64px; }
+  .choice p { font-size: 13px; }
+  .choice .pips { margin-top: 6px; }
+  .choice .tag { top: 10px; right: 10px; font-size: 9px; }
+
+  /* Fin de partida en dos columnas. */
+  .gameover-card {
+    width: min(800px, 100%); padding: 12px 16px;
+    display: grid; grid-template-columns: 1fr 1fr; column-gap: 14px; align-items: start; text-align: center;
+  }
+  #goKicker, #goTitle { grid-column: 1 / -1; }
+  .gameover-card h2 { font-size: 26px; margin: 0 0 8px; }
+  .go-stats { grid-column: 1; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 0 0 8px; }
+  .go-stats div { padding: 6px 4px; }
+  .go-stats b { font-size: 18px; }
+  .go-rewards { grid-column: 2; grid-row: 3 / span 2; margin: 0; padding: 10px 12px; }
+  .go-rewards ul { margin: 6px 0; }
+  .go-rewards li { font-size: 14px; }
+  .go-total b { font-size: 26px; }
+  .go-actions { grid-column: 1; gap: 8px; }
+  .go-actions .btn.big { padding: 10px 14px; font-size: 15px; }
+  .go-row .btn { min-width: 0; padding: 9px 8px; font-size: 12px; }
+  .panel-small { padding: 14px 18px; }
+
+  /* Avisos abajo al centro, sin tapar el botón de pausa ni las armas. */
+  #toasts { left: 50%; right: auto; bottom: 10px; transform: translateX(-50%); max-width: min(360px, 46vw); }
+  .toast { font-size: 14px; padding: 8px 12px; }
 }

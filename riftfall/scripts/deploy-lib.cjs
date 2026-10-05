@@ -58,6 +58,9 @@ async function deployAll(ethers, opts) {
   const communityHolder = o.communityHolder ?? treasury;
   const unit = (n) => ethers.parseEther(n.toString());
   const log = o.log ?? (() => {});
+  // directOwner: el owner queda asignado desde el constructor (sin transferOwnership + acceptOwnership).
+  // Útil cuando quien despliega es una clave descartable que paga el gas por el creador.
+  const initialOwner = o.directOwner ? owner : deployer.address;
 
   const { chainId } = await ethers.provider.getNetwork();
   const Token = await ethers.getContractFactory('RiftToken', deployer);
@@ -68,7 +71,7 @@ async function deployAll(ethers, opts) {
   const Vault = await ethers.getContractFactory('RewardVault', deployer);
   const vault = await Vault.deploy(
     token.target,
-    deployer.address,
+    initialOwner,
     signer,
     unit(o.dailyEmission),
     unit(o.maxClaimPerPlayerPerDay)
@@ -81,7 +84,7 @@ async function deployAll(ethers, opts) {
     token.target,
     vault.target,
     treasury,
-    deployer.address,
+    initialOwner,
     unit(o.forgeBaseCost),
     shipClassArgs(ethers.parseEther, chainId)
   );
@@ -89,12 +92,12 @@ async function deployAll(ethers, opts) {
   log('RiftShips', ships.target);
 
   const Market = await ethers.getContractFactory('RiftMarket', deployer);
-  const market = await Market.deploy(ships.target, token.target, treasury, deployer.address, o.marketFeeBps);
+  const market = await Market.deploy(ships.target, token.target, treasury, initialOwner, o.marketFeeBps);
   await market.waitForDeployment();
   log('RiftMarket', market.target);
 
   const Arena = await ethers.getContractFactory('RiftArena', deployer);
-  const arena = await Arena.deploy(token.target, vault.target, treasury, operator, deployer.address);
+  const arena = await Arena.deploy(token.target, vault.target, treasury, operator, initialOwner);
   await arena.waitForDeployment();
   log('RiftArena', arena.target);
 
@@ -118,7 +121,7 @@ async function deployAll(ethers, opts) {
     await (await token.transfer(to, pct(p))).wait();
   }
 
-  if (owner.toLowerCase() !== deployer.address.toLowerCase()) {
+  if (initialOwner.toLowerCase() !== owner.toLowerCase()) {
     // Ownable2Step: el nuevo owner (idealmente una multisig Safe) debe llamar acceptOwnership().
     for (const c of [vault, ships, market, arena]) await (await c.transferOwnership(owner)).wait();
   }

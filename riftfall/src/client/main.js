@@ -193,9 +193,27 @@ async function refreshProfile() {
   updateMenu();
 }
 
+/** La primera vez que se conecta una wallet con saldo del token, se ofrece mostrarlo en la wallet. */
+function offerWatchToken(address) {
+  const key = `riftfall.watched.${app.config.chain.chainId}.${address.toLowerCase()}`;
+  try {
+    if (localStorage.getItem(key) || !(app.balances?.rift > 0n)) return;
+    localStorage.setItem(key, '1');
+  } catch {
+    return;
+  }
+  app.wallet.watchToken().catch(() => {});
+}
+
 async function connectWallet() {
   if (!app.config?.chain) {
     toast(t('toast.noChain'), 'err');
+    return false;
+  }
+  // En el celular, fuera del navegador de una wallet, abrimos el juego dentro de MetaMask.
+  if (!window.ethereum && matchMedia('(pointer: coarse)').matches) {
+    toast(t('toast.openMetaMask'));
+    setTimeout(() => (location.href = `https://metamask.app.link/dapp/${location.host}${location.pathname}`), 600);
     return false;
   }
   try {
@@ -204,6 +222,7 @@ async function connectWallet() {
       app.balances = await app.wallet.balances();
       toast(t('toast.walletConnected', { a: shortAddr(address) }), 'ok');
       updateMenu();
+      offerWatchToken(address);
       return true;
     }
     const { message } = await api.nonce(address);
@@ -222,6 +241,8 @@ async function connectWallet() {
 // --------------------------------------------------------------------- partida
 
 let practiceNoticeShown = false;
+/** Redes de prueba: monedas y tokens sin valor real. */
+const TESTNETS = [97, 84532, 31337];
 
 async function startRun(mode = 'normal') {
   audio.unlock();
@@ -747,7 +768,7 @@ async function boot() {
       brandText($('#menu'), app.config.chain.tokenSymbol);
       app.wallet = createWallet(app.config.chain);
       app.wallet.onChange(() => location.reload());
-      setNet(t('net.shop'), 'warn');
+      setNet(TESTNETS.includes(app.config.chain.chainId) ? t('net.shopTest') : t('net.shop'), 'warn');
     } else {
       setNet(t('net.practice'), 'warn');
     }

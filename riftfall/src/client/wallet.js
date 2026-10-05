@@ -117,6 +117,15 @@ export function createWallet(chainCfg) {
 
     signMessage: (msg) => signer.signMessage(msg),
 
+    /** Pide a la wallet que muestre el token del juego en su lista de activos. */
+    async watchToken() {
+      if (!window.ethereum) return false;
+      return window.ethereum.request({
+        method: 'wallet_watchAsset',
+        params: { type: 'ERC20', options: { address: c.RiftToken, symbol: chainCfg.tokenSymbol ?? 'RIFT', decimals: 18 } }
+      });
+    },
+
     async balances() {
       if (!address) return null;
       const { token } = R();

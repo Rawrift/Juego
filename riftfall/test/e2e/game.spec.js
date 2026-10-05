@@ -90,7 +90,7 @@ async function staticSite(port) {
   return site;
 }
 
-test('modo práctica sin servidor: inglés, Núcleos, talentos, misiones locales y compartir', async ({ browser }) => {
+test('modo práctica sin servidor: inglés, Núcleos, habilidades, misiones locales y compartir', async ({ browser }) => {
   const site = await staticSite(4177);
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, locale: 'en-US' });
   const errors = [];
@@ -150,7 +150,7 @@ test('modo práctica sin servidor: inglés, Núcleos, talentos, misiones locales
     await page.reload();
     await expect(page.locator('#talentDot')).toBeVisible();
     await page.click('.nav-grid [data-open="profile"]');
-    await expect(page.locator('#sheetTitle')).toHaveText('Talents');
+    await expect(page.locator('#sheetTitle')).toHaveText('Skills');
     await expect(page.locator('.talent')).toHaveCount(6);
     const hull = page.locator('.talent', { hasText: 'Reinforced Hull' });
     await hull.locator('button').click();
@@ -170,8 +170,48 @@ test('modo práctica sin servidor: inglés, Núcleos, talentos, misiones locales
     pt.on('pageerror', (e) => errors.push(e.message));
     await pt.goto('http://127.0.0.1:4177/?lang=pt');
     await expect(pt.locator('#playBtn')).toHaveText('JOGAR');
-    await expect(pt.locator('.nav-grid [data-open="profile"]')).toContainText('Talentos');
+    await expect(pt.locator('.nav-grid [data-open="profile"]')).toContainText('Habilidades');
     await expect(pt.locator('#missionList')).toContainText('Jogue 3 partidas');
+  } finally {
+    site.close();
+    await ctx.close();
+  }
+  expect(errors).toEqual([]);
+});
+
+test('celular en horizontal: menú, mejoras y fin de partida entran en pantalla', async ({ browser }) => {
+  const site = await staticSite(4181);
+  const ctx = await browser.newContext({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true, locale: 'es-ES' });
+  const errors = [];
+  try {
+    const page = await ctx.newPage();
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto('http://127.0.0.1:4181/');
+    const inView = async (sel) => {
+      const b = await page.locator(sel).boundingBox();
+      return b && b.y >= 0 && b.y + b.height <= 390;
+    };
+    expect(await inView('#playBtn')).toBe(true);
+    await expect(page.locator('.nav-grid [data-open="profile"]')).toContainText('Habilidades');
+    await page.tap('#playBtn');
+    await expect(page.locator('#hud')).toBeVisible();
+    await page.evaluate(() => {
+      window.__RIFTFALL__.fastForward(30);
+      window.__RIFTFALL__.game.sim.pendingLevels = 1;
+    });
+    await expect(page.locator('#levelup')).toBeVisible();
+    await expect(page.locator('#choices .choice')).toHaveCount(3);
+    expect(await inView('#choices .choice:nth-child(3)')).toBe(true);
+    await page.screenshot({ path: 'test-results/riftfall-landscape-levelup.png' });
+    await page.locator('#choices .choice').first().tap();
+    await page.evaluate(() => {
+      window.__RIFTFALL__.setPaused(true);
+      document.getElementById('quitBtn').click();
+    });
+    await expect(page.locator('#gameover')).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(800);
+    for (const sel of ['#againBtn', '#shareBtn', '#goTalentsBtn', '#menuBtn']) expect(await inView(sel), sel).toBe(true);
+    await page.screenshot({ path: 'test-results/riftfall-landscape-over.png' });
   } finally {
     site.close();
     await ctx.close();

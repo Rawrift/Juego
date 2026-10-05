@@ -194,6 +194,7 @@ export function createPanels(app) {
           out.push(el('div', { class: 'notice info' }, t('h.noShop')));
           return out;
         }
+        if ([97, 84532, 31337].includes(app.config.chain.chainId)) out.push(el('div', { class: 'notice info' }, t('h.testnet')));
         const notice = needWalletNotice(t('h.connect'));
         if (notice) out.push(notice);
         if (app.config?.chain) {
@@ -459,6 +460,11 @@ export function createPanels(app) {
           );
         }
         if (app.config?.chain) {
+          if (app.wallet?.connected) {
+            const b = el('button', { class: 'btn ghost small' }, t('e.watch', { sym: tokenSymbol() }));
+            b.addEventListener('click', () => app.wallet.watchToken().catch((err) => toast(explainError(err), 'err')));
+            out.push(b);
+          }
           out.push(el('h3', {}, t('e.contracts')));
           const ex = app.config.chain.explorerUrl;
           out.push(

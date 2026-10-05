@@ -11,6 +11,8 @@
 //   RIFT_TEAM        beneficiario del vesting del equipo
 //   RIFT_LIQUIDITY   quien recibe el 15% para crear el pool RIFT/ETH
 //   RIFT_COMMUNITY   quien gestiona el 10% de comunidad/airdrops
+//   RIFT_DIRECT_OWNER=1  el owner queda asignado desde el constructor (sin acceptOwnership)
+//   RIFT_TOKEN_NAME / RIFT_TOKEN_SYMBOL  nombre y símbolo del token (por defecto Riftfall / RIFT)
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -34,6 +36,9 @@ async function main() {
     teamBeneficiary: env.RIFT_TEAM,
     liquidityHolder: env.RIFT_LIQUIDITY,
     communityHolder: env.RIFT_COMMUNITY,
+    directOwner: env.RIFT_DIRECT_OWNER === '1',
+    tokenName: env.RIFT_TOKEN_NAME,
+    tokenSymbol: env.RIFT_TOKEN_SYMBOL,
     log: (name, addr) => console.log(`  ${name.padEnd(12)} ${addr}`)
   };
   if (!isLocal && !env.RIFT_SIGNER) {
@@ -47,6 +52,7 @@ async function main() {
     chainId: Number(chainId),
     network: network.name,
     deployedAt: new Date().toISOString(),
+    token: { name: await d.token.name(), symbol: await d.token.symbol() },
     contracts: {
       RiftToken: d.token.target,
       RewardVault: d.vault.target,
@@ -58,10 +64,11 @@ async function main() {
     roles: d.config
   };
 
-  if (isLocal) {
+  const testerFunds = ethers.parseEther('250000');
+  if (isLocal && (await d.token.balanceOf(deployer.address)) >= testerFunds) {
     // Fondos de prueba: la cuenta #3 de Hardhat recibe RIFT para probar mercado y forja.
     const tester = others[2];
-    await (await d.token.transfer(tester.address, ethers.parseEther('250000'))).wait();
+    await (await d.token.transfer(tester.address, testerFunds)).wait();
     out.localTester = tester.address;
   }
 
@@ -70,7 +77,7 @@ async function main() {
   const file = path.join(dir, `${out.chainId}.json`);
   fs.writeFileSync(file, JSON.stringify(out, null, 2));
   console.log(`\nDirecciones guardadas en ${path.relative(process.cwd(), file)}`);
-  if (opts.owner) console.log('Recuerda: el owner debe llamar acceptOwnership() en Vault, Ships, Market y Arena.');
+  if (opts.owner && !opts.directOwner) console.log('Recuerda: el owner debe llamar acceptOwnership() en Vault, Ships, Market y Arena.');
 }
 
 main().catch((err) => {
