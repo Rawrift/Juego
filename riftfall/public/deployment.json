@@ -1,0 +1,23 @@
+{
+  "chainId": 97,
+  "network": "bscTestnet",
+  "deployedAt": "2026-10-05T16:33:52.694Z",
+  "token": {
+    "name": "Riftfall",
+    "symbol": "RIFT"
+  },
+  "contracts": {
+    "RiftToken": "0x55370eb683f41fADe8DDFeE96c6351CC802b5d10",
+    "RewardVault": "0x7A0aa316BD6FBB9aEfD444c97c677180e0457aBB",
+    "RiftShips": "0x17b3196F4146F4Ad50c27cBBc2B2Cb544e62CA2A",
+    "RiftMarket": "0x71A383B0DE7bFdf0e7586753D5f614AaB4EB56D7",
+    "RiftArena": "0xD7b0D131e7CD8eB0308D9B7AA34E46729785939A",
+    "TeamVesting": "0xF53382973a7D50298541218Db9595f84cF181CfF"
+  },
+  "roles": {
+    "owner": "0x09aF2acF700d6Be84009655fB814a5311DAEc7Dd",
+    "treasury": "0x09aF2acF700d6Be84009655fB814a5311DAEc7Dd",
+    "signer": "0x09aF2acF700d6Be84009655fB814a5311DAEc7Dd",
+    "operator": "0x09aF2acF700d6Be84009655fB814a5311DAEc7Dd"
+  }
+}

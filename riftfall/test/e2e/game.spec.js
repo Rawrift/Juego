@@ -78,6 +78,11 @@ async function staticSite(port) {
   const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.woff': 'font/woff' };
   const site = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://x');
+    // Sin token desplegado: estas pruebas cubren el modo práctica puro.
+    if (url.pathname === '/deployment.json') {
+      res.writeHead(404, { 'content-type': 'text/plain' });
+      return res.end('not found');
+    }
     const file = path.join(DIST, url.pathname === '/' ? 'index.html' : url.pathname);
     if (!file.startsWith(DIST) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
       res.writeHead(404, { 'content-type': 'text/plain' });
