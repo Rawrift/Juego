@@ -1071,6 +1071,7 @@ async function boot() {
   if (PORTAL) {
     // Portales: sin servidor, sin wallet ni pagos; solo el juego, en modo práctica.
     await initPortal();
+    portal.onMute((m) => audio.setForcedMute(m));
     // El progreso puede venir de la cuenta del portal (otro dispositivo).
     app.progress = loadProgress();
     readRiftChoice();
@@ -1131,6 +1132,7 @@ boot();
 if (import.meta.env.DEV || import.meta.env.MODE === 'e2e' || import.meta.env.VITE_E2E_HOOK === '1') window.__RIFTFALL__ = {
   game,
   app,
+  audio,
   renderer,
   gov,
   startRun,

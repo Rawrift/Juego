@@ -8,6 +8,9 @@ export function createAudio() {
   let musicBus = null;
   let noiseBuf = null;
   let muted = false;
+  // Silencio pedido desde afuera (el portal): manda sobre el botón del juego sin pisar su preferencia.
+  let forced = false;
+  const silent = () => muted || forced;
   try {
     muted = localStorage.getItem('riftfall.muted') === '1';
   } catch {
@@ -24,7 +27,7 @@ export function createAudio() {
     if (!Ctx) return false;
     ac = new Ctx();
     master = ac.createGain();
-    master.gain.value = muted ? 0 : 0.8;
+    master.gain.value = silent() ? 0 : 0.8;
     const comp = ac.createDynamicsCompressor();
     comp.threshold.value = -14;
     comp.ratio.value = 4;
@@ -252,11 +255,11 @@ export function createAudio() {
       if (ac.state === 'suspended') ac.resume();
     },
     play(name, arg) {
-      if (!ac || muted) return;
+      if (!ac || silent()) return;
       SFX[name]?.(arg);
     },
     event(ev) {
-      if (!ac || muted) return;
+      if (!ac || silent()) return;
       switch (ev.t) {
         case 'shot': return ev.w === 'missile' ? SFX.missile() : SFX.shot();
         case 'hit': return SFX.hit();
@@ -306,8 +309,15 @@ export function createAudio() {
       } catch {
         /* sin almacenamiento */
       }
-      if (master) master.gain.value = muted ? 0 : 0.8;
+      if (master) master.gain.value = silent() ? 0 : 0.8;
       return muted;
+    },
+    setForcedMute(v) {
+      forced = !!v;
+      if (master) master.gain.value = silent() ? 0 : 0.8;
+    },
+    get silent() {
+      return silent();
     },
     get muted() {
       return muted;

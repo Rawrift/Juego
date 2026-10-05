@@ -497,7 +497,9 @@ test('versión para portales (CrazyGames): sin cripto, revivir y x2 Núcleos con
           game: {
             loadingStart: () => __cg.push('loadingStart'), loadingStop: () => __cg.push('loadingStop'),
             gameplayStart: () => __cg.push('gameplayStart'), gameplayStop: () => __cg.push('gameplayStop'),
-            happytime: () => __cg.push('happytime')
+            happytime: () => __cg.push('happytime'),
+            settings: { muteAudio: false },
+            addSettingsChangeListener: (fn) => (window.__cgSettings = fn)
           },
           ad: { requestAd: (type, cb) => { __cg.push('ad:' + type); setTimeout(() => { cb.adStarted(); setTimeout(cb.adFinished, 50); }, 50); }, hasAdblock: async () => false },
           // Cuenta del portal con progreso de otro dispositivo.
@@ -526,6 +528,12 @@ test('versión para portales (CrazyGames): sin cripto, revivir y x2 Núcleos con
     await expect.poll(calls).toContain('loadingStop');
     // El progreso guardado en la cuenta del portal se carga al arrancar.
     await expect(page.locator('#menuCores')).toHaveText('777');
+    // El botón de silencio del portal manda sobre el sonido del juego.
+    expect(await page.evaluate(() => window.__RIFTFALL__.audio.silent)).toBe(false);
+    await page.evaluate(() => window.__cgSettings({ muteAudio: true }));
+    expect(await page.evaluate(() => window.__RIFTFALL__.audio.silent)).toBe(true);
+    await page.evaluate(() => window.__cgSettings({ muteAudio: false }));
+    expect(await page.evaluate(() => window.__RIFTFALL__.audio.silent)).toBe(false);
 
     await page.click('#playBtn');
     await expect(page.locator('#hud')).toBeVisible();

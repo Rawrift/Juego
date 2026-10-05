@@ -69,6 +69,12 @@ export const portal = {
   gameplayStart: () => call(() => sdk?.game.gameplayStart()),
   gameplayStop: () => call(() => sdk?.game.gameplayStop()),
   happytime: () => call(() => sdk?.game.happytime()),
+  /** Avisa cuándo el portal pide silenciar el juego (su ajuste manda sobre el del juego). */
+  onMute(fn) {
+    if (!sdk?.game) return;
+    call(() => fn(!!sdk.game.settings?.muteAudio));
+    call(() => sdk.game.addSettingsChangeListener((settings) => fn(!!settings?.muteAudio)));
+  },
   /**
    * Muestra un anuncio ('midgame' | 'rewarded'). `onStart` y `onEnd` pausan y reanudan el
    * sonido. Resuelve true solo si el anuncio se vio completo (la recompensa se da solo así).
