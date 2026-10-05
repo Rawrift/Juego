@@ -561,3 +561,45 @@ test('versión para portales (CrazyGames): sin cripto, revivir y x2 Núcleos con
     site.close();
   }
 });
+
+test('Taller: comprar una caja con Núcleos, equipar la pieza y jugar con ella', async ({ browser }) => {
+  const site = await staticSite(4180);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: 'es-ES' });
+  try {
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.addInitScript(() => {
+      if (!sessionStorage.getItem('seeded')) {
+        sessionStorage.setItem('seeded', '1');
+        localStorage.setItem('riftfall.progress', JSON.stringify({ cores: 130 }));
+      }
+    });
+    await page.goto('http://127.0.0.1:4180/');
+    await page.click('[data-open="workshop"]');
+    await expect(page.locator('#sheetTitle')).toHaveText('Taller');
+    await expect(page.locator('.ws-part:not(.locked):not(.original)')).toHaveCount(0);
+    await page.click('text=Abrir caja');
+    await expect(page.locator('.toast').last()).toContainText('Nueva pieza');
+    const owned = page.locator('.ws-part:not(.locked):not(.original)');
+    await expect(owned).toHaveCount(1);
+    // La caja costó 120 Núcleos y ya no alcanza para otra.
+    await expect(page.locator('.ws-crate')).toContainText('10 ✦');
+    await expect(page.locator('.ws-crate button')).toBeDisabled();
+    await owned.click();
+    await expect(page.locator('.ws-part.on:not(.original)')).toHaveCount(1);
+    const progress = await page.evaluate(() => JSON.parse(localStorage.getItem('riftfall.progress')));
+    const [slot, id] = Object.entries(progress.loadout)[0];
+    expect(progress.parts[id]).toBe(1);
+
+    await page.click('#sheetClose');
+    await page.click('#playBtn');
+    await expect(page.locator('#hud')).toBeVisible();
+    const parts = await page.evaluate(() => window.__RIFTFALL__.game.sim.parts);
+    expect(parts).toEqual({ [slot]: { id, lv: 1 } });
+    expect(errors).toEqual([]);
+  } finally {
+    await ctx.close();
+    site.close();
+  }
+});

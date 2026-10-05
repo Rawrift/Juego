@@ -19,7 +19,26 @@ import { createReplayPool } from './replay-pool.mjs';
 import { initChain } from './chain.mjs';
 import { MISSIONS, dayKey, previousDayKey, streakBonus, freshDaily, applyRunToDaily, missionView } from './economy.mjs';
 import { dailyNumber, dailySeed, DAILY_RULES } from '../src/shared/daily.js';
-import { SHIPS, SHIP_BY_CLASS, TICK_RATE, MAX_INPUT_NUMBERS, TALENTS, TALENT_MAX, talentCost, sanitizeTalents, coresFromSummary, RIFT_MAX } from '../src/sim/index.js';
+import {
+  SHIPS,
+  SHIP_BY_CLASS,
+  TICK_RATE,
+  MAX_INPUT_NUMBERS,
+  TALENTS,
+  TALENT_MAX,
+  talentCost,
+  sanitizeTalents,
+  coresFromSummary,
+  RIFT_MAX,
+  PART_SLOTS,
+  CRATE_COST,
+  sanitizeInventory,
+  equippedParts,
+  openCrates,
+  cratesFromSummary,
+  createRng,
+  seedFromString
+} from '../src/sim/index.js';
 import { chainConfigFromDeployment } from '../src/shared/networks.js';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -113,6 +132,8 @@ export async function createApp(options = {}) {
       cores: 0,
       talents: {},
       riftMax: 0,
+      parts: {},
+      loadout: {},
       runs: 0,
       bestScore: 0,
       bestTime: 0,
@@ -191,6 +212,8 @@ export async function createApp(options = {}) {
       cores: p.cores ?? 0,
       talents: sanitizeTalents(p.talents),
       riftMax: p.riftMax ?? 0,
+      parts: sanitizeInventory(p.parts),
+      loadout: Object.fromEntries(Object.entries(equippedParts(p.loadout, p.parts)).map(([k, v]) => [k, v.id])),
       runs: p.runs,
       bestScore: p.bestScore,
       bestTime: p.bestTime,
@@ -366,6 +389,8 @@ export async function createApp(options = {}) {
       let seed = crypto.randomBytes(4).readUInt32LE(0);
       // En la Arena no hay talentos ni niveles del Rift: todos compiten en igualdad.
       let talents = mode === 'arena' ? {} : sanitizeTalents(p.talents);
+      // Piezas equipadas (solo en partidas normales: la Arena y el desafío son parejos).
+      let parts = mode === 'normal' ? equippedParts(p.loadout, p.parts) : {};
       let rift = mode === 'arena' ? 0 : Number(body.rift ?? 0);
       let daily = null;
       if (mode === 'daily') {
@@ -374,15 +399,16 @@ export async function createApp(options = {}) {
         seed = dailySeed(daily);
         ship = { ship: DAILY_RULES.ship, shipLevel: DAILY_RULES.shipLevel, tokenId: null };
         talents = {};
+        parts = {};
         rift = DAILY_RULES.rift;
       } else {
         if (!Number.isInteger(rift) || rift < 0 || rift > RIFT_MAX) throw bad('Nivel del Rift inválido');
         if (rift > (p.riftMax ?? 0)) throw bad('Ese nivel del Rift todavía está bloqueado');
       }
-      D.runs[id] = { id, playerId: p.id, mode, seed, ...ship, talents, rift, daily, tournamentId, startedAt: Date.now(), status: 'active' };
+      D.runs[id] = { id, playerId: p.id, mode, seed, ...ship, talents, parts, rift, daily, tournamentId, startedAt: Date.now(), status: 'active' };
       D.stats.totalRuns++;
       db.save();
-      return { runId: id, seed, ship: ship.ship, shipLevel: ship.shipLevel, talents, rift, mode, daily, tournamentId };
+      return { runId: id, seed, ship: ship.ship, shipLevel: ship.shipLevel, talents, parts, rift, mode, daily, tournamentId };
     },
 
     'POST /api/run/finish': async ({ ip, req, body }) => {
@@ -395,7 +421,7 @@ export async function createApp(options = {}) {
       if (!Array.isArray(inputs) || inputs.length > MAX_INPUT_NUMBERS) throw bad('Entradas inválidas');
       run.status = 'verifying';
 
-      const result = await pool.run({ seed: run.seed, ship: run.ship, shipLevel: run.shipLevel, talents: run.talents, rift: run.rift ?? 0, inputs, choices });
+      const result = await pool.run({ seed: run.seed, ship: run.ship, shipLevel: run.shipLevel, talents: run.talents, parts: run.parts ?? {}, rift: run.rift ?? 0, inputs, choices });
       if (!result.ok) {
         run.status = 'rejected';
         run.reason = result.error;
@@ -441,7 +467,16 @@ export async function createApp(options = {}) {
         }
       }
       const total = rewards.run + rewards.streak + rewards.missions.reduce((a, m) => a + m.reward, 0);
-      const cores = coresFromSummary(sum);
+      let cores = coresFromSummary(sum);
+      // Cajas de piezas: una por Guardián y otra por ganar. Se abren con una semilla de la partida.
+      let crates = [];
+      if (run.mode === 'normal') {
+        const inv = sanitizeInventory(p.parts);
+        const rng = createRng(seedFromString(`${run.id}:${run.seed}`));
+        crates = openCrates(inv, cratesFromSummary(sum), () => rng.next());
+        p.parts = inv;
+        cores += crates.reduce((a, c) => a + c.refund, 0);
+      }
       p.cores = (p.cores ?? 0) + cores;
       p.shards += total;
       p.lifetimeShards += total;
@@ -474,7 +509,7 @@ export async function createApp(options = {}) {
       }
       pruneReplays();
       db.save();
-      return { summary: sum, rewards, totalShards: total, cores, riftUnlocked, profile: profileView(p) };
+      return { summary: sum, rewards, totalShards: total, cores, crates, riftUnlocked, profile: profileView(p) };
     },
 
     'GET /api/leaderboard': async ({ url }) => {
@@ -496,6 +531,7 @@ export async function createApp(options = {}) {
         ship: run.ship,
         shipLevel: run.shipLevel,
         talents: run.talents ?? {},
+        parts: run.parts ?? {},
         rift: run.rift ?? 0,
         inputs: run.inputs,
         choices: run.choices,
@@ -519,6 +555,36 @@ export async function createApp(options = {}) {
       p.talents = talents;
       db.save();
       return { profile: profileView(p) };
+    },
+
+    'POST /api/parts/equip': async ({ ip, req, body }) => {
+      rateLimit(ip, 'parts', 120);
+      const p = auth(req);
+      const slot = String(body.slot ?? '');
+      if (!PART_SLOTS.includes(slot)) throw bad('Hueco desconocido');
+      const loadout = { ...(p.loadout ?? {}) };
+      if (body.id === null || body.id === undefined || body.id === '') delete loadout[slot];
+      else {
+        const id = String(body.id);
+        if (!id.startsWith(`${slot}:`) || !sanitizeInventory(p.parts)[id]) throw bad('No tienes esa pieza');
+        loadout[slot] = id;
+      }
+      p.loadout = loadout;
+      db.save();
+      return { profile: profileView(p) };
+    },
+
+    'POST /api/parts/crate': async ({ ip, req }) => {
+      rateLimit(ip, 'crate', 30);
+      const p = auth(req);
+      if ((p.cores ?? 0) < CRATE_COST) throw bad('No tienes Núcleos suficientes');
+      p.cores -= CRATE_COST;
+      const inv = sanitizeInventory(p.parts);
+      const got = openCrates(inv, 1, () => crypto.randomInt(0, 2 ** 32) / 2 ** 32);
+      p.parts = inv;
+      p.cores += got.reduce((a, c) => a + c.refund, 0);
+      db.save();
+      return { got, profile: profileView(p) };
     },
 
     'POST /api/claim': async ({ ip, req, body }) => {

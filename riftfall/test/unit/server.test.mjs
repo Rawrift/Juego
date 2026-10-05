@@ -209,3 +209,40 @@ test('Desafío del Día: misma semilla y reglas para todos, ranking propio y rep
     await app.close();
   }
 });
+
+test('piezas: cajas por jefes, compra con Núcleos, equipar solo lo propio y aplicar en el replay', async () => {
+  const { app, call } = await boot({ minRealtimeRatio: 0 });
+  try {
+    const g = (await call('POST', '/api/auth/guest')).json;
+    const token = g.token;
+    assert.deepEqual([g.profile.parts, g.profile.loadout], [{}, {}]);
+    assert.equal((await call('POST', '/api/parts/crate', {}, token)).status, 400, 'sin Núcleos no hay caja');
+    assert.equal((await call('POST', '/api/parts/equip', { slot: 'wings', id: 'wings:phantom' }, token)).status, 400, 'no se equipa lo que no se tiene');
+
+    app.db.data.players[g.profile.id].cores = 1000;
+    const crate = (await call('POST', '/api/parts/crate', {}, token)).json;
+    assert.equal(crate.got.length, 1);
+    const id = crate.got[0].id;
+    assert.equal(crate.profile.parts[id], 1);
+    assert.equal(crate.profile.cores, 1000 - 120);
+    const slot = id.split(':')[0];
+    assert.equal((await call('POST', '/api/parts/equip', { slot: slot === 'hull' ? 'wings' : 'hull', id }, token)).status, 400, 'hueco equivocado');
+    const eq = (await call('POST', '/api/parts/equip', { slot, id }, token)).json;
+    assert.equal(eq.profile.loadout[slot], id);
+
+    // La partida usa la pieza equipada y el servidor la re-simula con ella.
+    const s = (await call('POST', '/api/run/start', {}, token)).json;
+    assert.deepEqual(s.parts, { [slot]: { id, lv: 1 } });
+    const run = playLocal(s.seed, 'spark', 1, 60 * 60, null, 0, s.parts);
+    const fin = await call('POST', '/api/run/finish', { runId: s.runId, inputs: run.inputs, choices: run.choices }, token);
+    assert.equal(fin.status, 200, JSON.stringify(fin.json));
+    assert.deepEqual(fin.json.summary, run.summary);
+    assert.equal(fin.json.crates.length, run.summary.bossesKilled + (run.summary.victory ? 1 : 0));
+    assert.deepEqual((await call('GET', `/api/replay?id=${s.runId}`)).json.parts, s.parts);
+
+    // En la Arena y el desafío no se aplican.
+    assert.deepEqual((await call('POST', '/api/run/start', { mode: 'daily' }, token)).json.parts, {});
+  } finally {
+    await app.close();
+  }
+});

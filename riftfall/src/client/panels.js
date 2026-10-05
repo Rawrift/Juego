@@ -1,7 +1,19 @@
 // Paneles laterales: Hangar, Mercado, Arena, Ranking, Canje, Economía y Piloto (talentos).
 
 import { formatEther, parseEther } from 'ethers';
-import { SHIPS, SHIP_BY_CLASS, shipYield, TALENT_ORDER, TALENT_MAX, TALENTS, talentCost } from '../sim/index.js';
+import {
+  SHIPS,
+  SHIP_BY_CLASS,
+  shipYield,
+  TALENT_ORDER,
+  TALENT_MAX,
+  TALENTS,
+  talentCost,
+  PART_SLOTS,
+  PART_DESIGNS,
+  PART_MAX,
+  CRATE_COST
+} from '../sim/index.js';
 import { drawShipPreview, iconCopy } from './sprites.js';
 import { FOUNDER, tierRank, bnbWeiForUsd } from '../shared/founder.js';
 import { loadFounder, founderRank, buyFounder, verifyPayment, bnbPrice, currentSkin, setSkin, SKIN_TIER } from './founder.js';
@@ -132,7 +144,98 @@ export function createPanels(app) {
     legend: ['f.perk.prev', 'f.perk.skinPrisma', 'f.perk.leviathan']
   };
 
+  /** Vista previa animada de la nave del jugador con sus piezas. */
+  function workshopPreview() {
+    const c = el('canvas', { width: 360, height: 360, class: 'ws-preview' });
+    const t0 = performance.now();
+    const loop = (now) => {
+      if (!c.isConnected) return;
+      const key = app.ship.key;
+      drawShipPreview(c, key, SHIPS[key].color, (now - t0) / 1000, app.skin?.() ?? 'original', app.pilot().loadout);
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+    return c;
+  }
+
   const VIEWS = {
+    workshop: {
+      kicker: 'pt.kicker',
+      title: 'pt.title',
+      async render() {
+        const pl = app.pilot();
+        const inv = pl.parts;
+        const load = pl.loadout;
+        const out = [el('p', {}, t('pt.intro'))];
+
+        // Beneficios activos
+        const bonus = PART_SLOTS.filter((sl) => load[sl]).map((sl) => el('li', {}, `${tx.partName(load[sl])} · ${tx.partPerk(load[sl], inv[load[sl]])}`));
+        out.push(
+          el('div', { class: 'ws-top' }, [
+            workshopPreview(),
+            el('div', { class: 'ws-bonus' }, [el('h3', {}, t('pt.bonus')), bonus.length ? el('ul', {}, bonus) : el('p', { class: 'hint' }, t('pt.none'))])
+          ])
+        );
+
+        // Huecos: cada uno con los 5 diseños
+        for (const slot of PART_SLOTS) {
+          const row = el('div', { class: 'ws-parts' });
+          const original = el('button', { class: `ws-part original${!load[slot] ? ' on' : ''}` }, [el('b', {}, t('pt.empty'))]);
+          original.addEventListener('click', async () => {
+            await app.equipPart(slot, null);
+            open('workshop');
+          });
+          row.append(original);
+          for (const d of PART_DESIGNS) {
+            const id = `${slot}:${d}`;
+            const lv = inv[id] ?? 0;
+            const on = load[slot] === id;
+            const b = el('button', { class: `ws-part${on ? ' on' : ''}${lv ? '' : ' locked'}`, style: `--accent:${SHIPS[d].color}`, disabled: !lv }, [
+              el('b', {}, lv ? SHIPS[d].name : '?'),
+              el('span', {}, lv ? tx.partPerk(id, lv) : t('pt.locked')),
+              lv ? el('div', { class: 'pips' }, Array.from({ length: PART_MAX }, (_, k) => el('i', { class: k < lv ? 'on' : '' }))) : null
+            ]);
+            b.addEventListener('click', async () => {
+              try {
+                await app.equipPart(slot, on ? null : id);
+                app.audio?.play?.('click');
+              } catch (err) {
+                toast(explainError(err), 'err');
+              }
+              open('workshop');
+            });
+            row.append(b);
+          }
+          out.push(el('h3', {}, t(`pt.slot.${slot}`)), row);
+        }
+
+        // Caja de piezas
+        const buy = el('button', { class: 'btn gold', disabled: pl.cores < CRATE_COST }, `📦 ${t('pt.crate')}`);
+        buy.addEventListener('click', async () => {
+          buy.disabled = true;
+          try {
+            const got = await app.buyCrate();
+            app.audio?.play?.('levelup');
+            for (const c of got) {
+              const msg = c.refund ? t('pt.maxed', { part: tx.partName(c.id) }) : c.lv === 1 ? t('pt.new', { part: tx.partName(c.id) }) : t('pt.up', { part: tx.partName(c.id), n: c.lv });
+              toast(`📦 ${msg}`, 'ok');
+            }
+          } catch (err) {
+            toast(err.message === 'poor' ? t('pt.poor') : explainError(err), 'err');
+          }
+          open('workshop');
+        });
+        out.push(
+          el('div', { class: 'ws-crate' }, [
+            el('div', {}, [el('b', {}, t('pt.crateCost', { c: CRATE_COST })), el('span', {}, `${t('tal.cores')}: ${fmtNum(pl.cores)} ✦`)]),
+            buy
+          ])
+        );
+        out.push(el('p', { class: 'hint' }, t('pt.note')));
+        return out;
+      }
+    },
+
     founder: {
       kicker: 'f.kicker',
       title: 'f.title',

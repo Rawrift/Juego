@@ -16,6 +16,11 @@ import {
   MAX_TICKS,
   FINAL_TICK,
   reviveSim,
+  sanitizeParts,
+  equippedParts,
+  openCrates,
+  cratesFromSummary,
+  ALL_PARTS,
   riftMods,
   enemyHpScale,
   RIFT_MAX,
@@ -311,4 +316,53 @@ test('revivir (portales): vuelve con medio casco, invulnerable y con espacio alr
   late.tick = MAX_TICKS;
   late.phase = 'dead';
   assert.equal(reviveSim(late), false);
+});
+
+test('piezas de nave: beneficios por nivel, inventario saneado, cajas y fusión de repetidas', () => {
+  // Una pieza equipada cambia las estadísticas según su nivel.
+  const base = createSim({ seed: 3 });
+  const wings = createSim({ seed: 3, parts: { wings: { id: 'wings:vanguard', lv: 4 }, hull: { id: 'hull:vanguard', lv: 5 } } });
+  assert.ok(Math.abs(wings.player.stats.might - base.player.stats.might - 0.12) < 1e-9, '+3% daño por nivel');
+  assert.ok(Math.abs(wings.player.stats.maxHp / base.player.stats.maxHp - 1.2) < 1e-9, '+4% casco por nivel');
+  // Piezas mal formadas o en el hueco equivocado se ignoran.
+  assert.deepEqual(sanitizeParts({ wings: { id: 'hull:spark', lv: 2 }, engines: { id: 'engines:nope', lv: 1 }, cockpit: { id: 'cockpit:phantom', lv: 9 } }), {
+    cockpit: { id: 'cockpit:phantom', lv: 5 }
+  });
+  // Solo se equipa lo que se tiene.
+  assert.deepEqual(equippedParts({ wings: 'wings:phantom', hull: 'hull:tempest' }, { 'wings:phantom': 2 }), { wings: { id: 'wings:phantom', lv: 2 } });
+  assert.equal(ALL_PARTS.length, 20);
+
+  // Cajas: una pieza nueva entra en nivel 1, una repetida sube de nivel y al máximo devuelve Núcleos.
+  const inv = { 'wings:spark': 5 };
+  const seq = [ALL_PARTS.indexOf('wings:spark'), ALL_PARTS.indexOf('engines:tempest'), ALL_PARTS.indexOf('engines:tempest')].map((i) => (i + 0.5) / ALL_PARTS.length);
+  let k = 0;
+  const got = openCrates(inv, 3, () => seq[k++]);
+  assert.deepEqual(got, [
+    { id: 'wings:spark', lv: 5, refund: 40 },
+    { id: 'engines:tempest', lv: 1, refund: 0 },
+    { id: 'engines:tempest', lv: 2, refund: 0 }
+  ]);
+  assert.equal(inv['engines:tempest'], 2);
+  assert.equal(cratesFromSummary({ bossesKilled: 2, victory: false }), 2);
+  assert.equal(cratesFromSummary({ bossesKilled: 3, victory: true }), 4);
+
+  // El replay exige las mismas piezas.
+  const parts = { engines: { id: 'engines:phantom', lv: 3 } };
+  const s = createSim({ seed: 41, parts });
+  const rec = new InputRecorder();
+  while (s.phase !== 'dead' && s.phase !== 'victory' && s.tick < 60 * 40) {
+    if (s.phase === 'choice') {
+      const c = botChoice(s);
+      rec.choice(c);
+      chooseUpgrade(s, c);
+      continue;
+    }
+    const d = botInput(s);
+    rec.push(d);
+    stepSim(s, d);
+    s.events.length = 0;
+  }
+  const { inputs, choices } = rec.finish();
+  assert.equal(replayRun({ seed: 41, ship: 'spark', shipLevel: 1, parts, inputs, choices }).hash, stateHash(s));
+  assert.notEqual(replayRun({ seed: 41, ship: 'spark', shipLevel: 1, inputs, choices }).hash, stateHash(s));
 });

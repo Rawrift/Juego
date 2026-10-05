@@ -755,7 +755,7 @@ export function createRenderer(canvas) {
         const c = p.fx * k;
         const sn = p.fy * k;
         ctx.setTransform(c, sn, -sn, c, R.k * px + R.ox, R.k * py + R.oy);
-        drawShipFast(ctx, sim.shipKey, shipColor, R.time, p.moving ? 1 : 0.35, R.skin);
+        drawShipFast(ctx, sim.shipKey, shipColor, R.time, p.moving ? 1 : 0.35, R.skin, sim.parts);
         ctx.setTransform(R.k, 0, 0, R.k, R.ox, R.oy);
       }
       if (p.invuln > 0) {

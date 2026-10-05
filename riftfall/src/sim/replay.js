@@ -41,7 +41,7 @@ function isInt(v) {
  * Re-simula una partida completa. Devuelve el resumen calculado por el propio servidor;
  * nunca se confía en los números que reporte el cliente.
  */
-export function replayRun({ seed, ship, shipLevel, talents, rift = 0, inputs, choices }) {
+export function replayRun({ seed, ship, shipLevel, talents, rift = 0, parts = null, inputs, choices }) {
   if (!Array.isArray(inputs) || inputs.length % 2 !== 0 || inputs.length > MAX_INPUT_NUMBERS) {
     return { ok: false, error: 'inputs inválidos' };
   }
@@ -58,7 +58,7 @@ export function replayRun({ seed, ship, shipLevel, talents, rift = 0, inputs, ch
   if (total > MAX_TICKS) return { ok: false, error: 'partida demasiado larga' };
   for (const c of choices) if (!isInt(c) || c < 0 || c > 2) return { ok: false, error: 'choice fuera de rango' };
 
-  const s = createSim({ seed, ship, shipLevel, talents, rift });
+  const s = createSim({ seed, ship, shipLevel, talents, rift, parts });
   let ci = 0;
   for (let i = 0; i < inputs.length; i += 2) {
     const dir = inputs[i];

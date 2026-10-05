@@ -1136,17 +1136,52 @@ export const SKINS = {
   prisma: { pal: { main: '#b98bff', dark: '#3a1d8a', light: '#e8fbff', accent: '#4de8ff', glass: '#ffe1fb' }, flame: '#ff6ae0' }
 };
 
-/** Arte de la nave con la pintura aplicada y color de fuego resultante. */
-function skinned(key, color, skin) {
+/** Id de pieza de un hueco: acepta { slot: 'wings:phantom' } o { slot: { id, lv } }. */
+const partId = (parts, slot) => {
+  const v = parts?.[slot];
+  return typeof v === 'string' ? v : v?.id;
+};
+
+/** Firma corta de las piezas (para la caché de imágenes). */
+export function partsKey(parts) {
+  return ['hull', 'wings', 'engines', 'cockpit'].map((s) => partId(parts, s)?.split(':')[1] ?? '-').join('.');
+}
+
+/**
+ * Arte de una nave armada con piezas de otros diseños (estilo Axie): fuselaje, alas (con aletas,
+ * cañones y luces), motores y cabina. Los motores se corren para quedar pegados a la cola.
+ */
+function composeArt(key, parts) {
   const base = SHIP_ART[key] ?? SHIP_ART.spark;
+  if (!parts) return base;
+  const src = (slot) => SHIP_ART[partId(parts, slot)?.split(':')[1]] ?? null;
+  const h = src('hull');
+  const w = src('wings');
+  const e = src('engines');
+  const c = src('cockpit');
+  const art = { ...base };
+  if (h) Object.assign(art, { hull: h.hull, nose: h.nose, stripe: h.stripe, panel: h.panel, plates: h.plates });
+  if (w) Object.assign(art, { wings: w.wings, fins: w.fins, cannons: w.cannons, lights: w.lights, coils: w.coils });
+  if (c) art.cockpit = c.cockpit;
+  if (e) {
+    const rear = (a) => Math.min(...a.hull.pts.map((p) => p[0]));
+    const dx = rear(art) - rear(e);
+    art.engines = e.engines.map(([x, y, sz]) => [x + dx, y, sz]);
+  }
+  return art;
+}
+
+/** Arte de la nave con piezas y pintura aplicadas, y color de fuego resultante. */
+function skinned(key, color, skin, parts) {
+  const base = composeArt(key, parts);
   const sk = SKINS[skin];
   return sk ? [{ ...base, pal: sk.pal }, sk.flame] : [base, color];
 }
 
 /** Dibuja la nave en el contexto ya trasladado y rotado (todo con trazos; para el menú). */
-export function drawShipShape(g, key, color, t = 0, thrust = 1, skin = 'original') {
+export function drawShipShape(g, key, color, t = 0, thrust = 1, skin = 'original', parts = null) {
   let art;
-  [art, color] = skinned(key, color, skin);
+  [art, color] = skinned(key, color, skin, parts);
   g.save();
   shipFlames(g, art, color, t, thrust); // el fuego va detrás de todo
   shipBody(g, art, color);
@@ -1161,10 +1196,10 @@ const SHIP_HALF = 48;
  * Igual que drawShipShape pero con el cuerpo pre-dibujado en una imagen (una sola llamada en vez
  * de decenas de trazos, degradados y un desenfoque por cuadro). Es la que usa el juego.
  */
-export function drawShipFast(g, key, color, t = 0, thrust = 1, skin = 'original') {
+export function drawShipFast(g, key, color, t = 0, thrust = 1, skin = 'original', parts = null) {
   let art;
-  [art, color] = skinned(key, color, skin);
-  const body = cached(`ship|${key}|${color}|${skin}`, () => {
+  [art, color] = skinned(key, color, skin, parts);
+  const body = cached(`ship|${key}|${color}|${skin}|${partsKey(parts)}`, () => {
     const c = makeCanvas(SHIP_HALF * 2 * SHIP_RES, SHIP_HALF * 2 * SHIP_RES);
     const cg = c.getContext('2d');
     cg.scale(SHIP_RES, SHIP_RES);
@@ -1180,7 +1215,7 @@ export function drawShipFast(g, key, color, t = 0, thrust = 1, skin = 'original'
   g.restore();
 }
 
-export function drawShipPreview(canvas, key, color, t = 0, skin = 'original') {
+export function drawShipPreview(canvas, key, color, t = 0, skin = 'original', parts = null) {
   if (SKINS[skin]) color = SKINS[skin].flame;
   const g = canvas.getContext('2d');
   const w = canvas.width;
@@ -1196,7 +1231,7 @@ export function drawShipPreview(canvas, key, color, t = 0, skin = 'original') {
   g.rotate(-Math.PI / 2 + Math.sin(t * 1.3) * 0.08);
   const k = (w / 80) * 1.1;
   g.scale(k, k);
-  drawShipShape(g, key, color, t, 0.8, skin);
+  drawShipShape(g, key, color, t, 0.8, skin, parts);
   g.restore();
 }
 

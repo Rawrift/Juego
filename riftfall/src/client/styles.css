@@ -786,7 +786,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 /* ------------------------------------------------------------------ versión para portales */
 .portal .crypto-only { display: none !important; }
-.portal .nav-grid { grid-template-columns: 1fr; }
 .portal .ship-pick { grid-template-columns: 96px 1fr; }
 #revive { z-index: 30; }
 .revive-card {
@@ -801,3 +800,36 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .revive-row .btn { padding: 14px 10px; font-size: 14px; }
 .revive-timer { height: 4px; border-radius: 4px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
 .revive-timer i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, var(--cyan), var(--magenta)); }
+
+/* ------------------------------------------------------------------ Taller de piezas */
+.nav-progress { grid-template-columns: 1fr 1fr; }
+.nav-progress button { flex-direction: row; justify-content: center; gap: 10px; padding: 12px 8px; font-size: 12px; }
+.nav-progress button i { font-size: 20px; }
+.workshop-nav i { color: #9ff6ff !important; }
+.ws-top { display: grid; grid-template-columns: 180px 1fr; gap: 14px; align-items: center; }
+.ws-preview { width: 180px; height: 180px; border-radius: 16px; background: radial-gradient(circle, rgba(77, 232, 255, 0.12), rgba(12, 15, 34, 0.6) 70%); }
+.ws-bonus ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; color: #c9d6f5; font-size: 15px; }
+.ws-parts { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.ws-part {
+  display: grid; gap: 3px; align-content: start; justify-items: start; text-align: left; padding: 8px 9px; min-height: 64px;
+  border-radius: 12px; border: 1px solid var(--line); background: rgba(12, 15, 34, 0.85);
+}
+.ws-part b { font-family: var(--display); font-size: 11px; letter-spacing: 0.08em; color: var(--accent, var(--text)); }
+.ws-part span { font-size: 12px; color: #c9d6f5; line-height: 1.2; }
+.ws-part .pips { display: flex; gap: 2px; }
+.ws-part .pips i { width: 7px; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.12); }
+.ws-part .pips i.on { background: var(--accent, var(--cyan)); }
+.ws-part.on { border-color: var(--accent, var(--cyan)); box-shadow: 0 0 0 1px var(--accent, var(--cyan)), 0 6px 22px -10px var(--accent, var(--cyan)); }
+.ws-part.locked { opacity: 0.4; }
+.ws-part.original b { color: var(--muted); }
+.ws-crate {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-radius: 14px;
+  background: rgba(255, 210, 61, 0.07); border: 1px solid rgba(255, 210, 61, 0.4);
+}
+.ws-crate b { display: block; font-family: var(--display); letter-spacing: 0.08em; color: var(--gold); }
+.ws-crate span { color: var(--muted); font-size: 14px; }
+@media (max-width: 640px) {
+  .ws-top { grid-template-columns: 120px 1fr; }
+  .ws-preview { width: 120px; height: 120px; }
+  .ws-parts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

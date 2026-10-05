@@ -1,7 +1,7 @@
 // Idiomas del juego: español, inglés y portugués (Brasil).
 // El idioma se elige con ?lang=xx, se recuerda en localStorage y, si no hay elección, se toma del celular.
 
-import { SHIPS, WEAPONS, PASSIVES, TALENTS } from '../sim/index.js';
+import { SHIPS, WEAPONS, PASSIVES, TALENTS, partPerk } from '../sim/index.js';
 
 export const LANGS = { es: 'Español', en: 'English', pt: 'Português' };
 const LOCALES = { es: 'es', en: 'en', pt: 'pt-BR' };
@@ -67,6 +67,37 @@ const UI = {
     'menu.tagline': 'Sobrevive a la grieta. Derrota a los Guardianes. Mejora las habilidades de tu piloto y gana <b>Shards</b>.',
     'menu.selectedShip': 'NAVE SELECCIONADA',
     'menu.change': 'Cambiar',
+    'nav.workshop': 'Taller',
+    'pt.kicker': 'TU NAVE, A TU MANERA',
+    'pt.title': 'Taller',
+    'pt.intro': 'Arma tu nave con piezas de cualquier diseño: cambian cómo se ve y dan beneficios. Las piezas repetidas suben de nivel. Salen de las cajas que sueltan los Guardianes y al ganar.',
+    'pt.slot.hull': 'Fuselaje',
+    'pt.slot.wings': 'Alas',
+    'pt.slot.engines': 'Motores',
+    'pt.slot.cockpit': 'Cabina',
+    'pt.name': '{slot} {ship}',
+    'pt.new': 'Nueva pieza: {part}',
+    'pt.up': '{part} sube a Nv {n}',
+    'pt.maxed': '{part} ya está al máximo',
+    'pt.crate': 'Abrir caja',
+    'pt.crateCost': 'Caja de piezas · {c} ✦',
+    'pt.poor': 'Te faltan Núcleos para la caja.',
+    'pt.empty': 'Original',
+    'pt.locked': 'Sin descubrir',
+    'pt.equip': 'Equipada',
+    'pt.bonus': 'Beneficios de tus piezas',
+    'pt.none': 'Todavía no tienes piezas equipadas.',
+    'pt.note': 'Las piezas no se usan en la Arena ni en el Desafío del Día: ahí todos compiten parejo.',
+    'pt.stat.speed': '+{v}% velocidad',
+    'pt.stat.maxHp': '+{v}% casco',
+    'pt.stat.crit': '+{v}% crítico',
+    'pt.stat.area': '+{v}% área',
+    'pt.stat.armor': '+{v} blindaje',
+    'pt.stat.magnet': '+{v}% imán',
+    'pt.stat.might': '+{v}% daño',
+    'pt.stat.cooldown': '-{v}% recarga',
+    'pt.stat.regen': '+{v} reparación/s',
+    'pt.stat.xpGain': '+{v}% experiencia',
     'rv.title': '¿SEGUIR VOLANDO?',
     'rv.text': 'Mira un anuncio y vuelve con la mitad del casco.',
     'rv.watch': 'Ver anuncio y revivir',
@@ -448,6 +479,37 @@ const UI = {
     'menu.tagline': 'Survive the rift. Defeat the Guardians. Upgrade your pilot’s skills and earn <b>Shards</b>.',
     'menu.selectedShip': 'SELECTED SHIP',
     'menu.change': 'Change',
+    'nav.workshop': 'Workshop',
+    'pt.kicker': 'YOUR SHIP, YOUR WAY',
+    'pt.title': 'Workshop',
+    'pt.intro': 'Build your ship with parts from any design: they change its look and give bonuses. Duplicate parts level up. They come from crates dropped by Guardians and from victories.',
+    'pt.slot.hull': 'Hull',
+    'pt.slot.wings': 'Wings',
+    'pt.slot.engines': 'Engines',
+    'pt.slot.cockpit': 'Cockpit',
+    'pt.name': '{ship} {slot}',
+    'pt.new': 'New part: {part}',
+    'pt.up': '{part} levels up to {n}',
+    'pt.maxed': '{part} is already maxed',
+    'pt.crate': 'Open crate',
+    'pt.crateCost': 'Parts crate · {c} ✦',
+    'pt.poor': 'Not enough Cores for a crate.',
+    'pt.empty': 'Original',
+    'pt.locked': 'Undiscovered',
+    'pt.equip': 'Equipped',
+    'pt.bonus': 'Bonuses from your parts',
+    'pt.none': 'No parts equipped yet.',
+    'pt.note': 'Parts are not used in the Arena or the Daily Challenge: everyone competes on equal terms there.',
+    'pt.stat.speed': '+{v}% speed',
+    'pt.stat.maxHp': '+{v}% hull',
+    'pt.stat.crit': '+{v}% crit',
+    'pt.stat.area': '+{v}% area',
+    'pt.stat.armor': '+{v} armor',
+    'pt.stat.magnet': '+{v}% magnet',
+    'pt.stat.might': '+{v}% damage',
+    'pt.stat.cooldown': '-{v}% cooldown',
+    'pt.stat.regen': '+{v} repair/s',
+    'pt.stat.xpGain': '+{v}% experience',
     'rv.title': 'KEEP FLYING?',
     'rv.text': 'Watch an ad and come back with half your hull.',
     'rv.watch': 'Watch ad & revive',
@@ -829,6 +891,37 @@ const UI = {
     'menu.tagline': 'Sobreviva à fenda. Derrote os Guardiões. Melhore as habilidades do seu piloto e ganhe <b>Shards</b>.',
     'menu.selectedShip': 'NAVE SELECIONADA',
     'menu.change': 'Trocar',
+    'nav.workshop': 'Oficina',
+    'pt.kicker': 'SUA NAVE, DO SEU JEITO',
+    'pt.title': 'Oficina',
+    'pt.intro': 'Monte sua nave com peças de qualquer design: elas mudam o visual e dão bônus. Peças repetidas sobem de nível. Saem das caixas que os Guardiões soltam e ao vencer.',
+    'pt.slot.hull': 'Fuselagem',
+    'pt.slot.wings': 'Asas',
+    'pt.slot.engines': 'Motores',
+    'pt.slot.cockpit': 'Cabine',
+    'pt.name': '{slot} {ship}',
+    'pt.new': 'Peça nova: {part}',
+    'pt.up': '{part} sobe para Nv {n}',
+    'pt.maxed': '{part} já está no máximo',
+    'pt.crate': 'Abrir caixa',
+    'pt.crateCost': 'Caixa de peças · {c} ✦',
+    'pt.poor': 'Faltam Núcleos para a caixa.',
+    'pt.empty': 'Original',
+    'pt.locked': 'Não descoberta',
+    'pt.equip': 'Equipada',
+    'pt.bonus': 'Bônus das suas peças',
+    'pt.none': 'Você ainda não tem peças equipadas.',
+    'pt.note': 'As peças não valem na Arena nem no Desafio do Dia: lá todos competem de igual para igual.',
+    'pt.stat.speed': '+{v}% velocidade',
+    'pt.stat.maxHp': '+{v}% casco',
+    'pt.stat.crit': '+{v}% crítico',
+    'pt.stat.area': '+{v}% área',
+    'pt.stat.armor': '+{v} blindagem',
+    'pt.stat.magnet': '+{v}% ímã',
+    'pt.stat.might': '+{v}% dano',
+    'pt.stat.cooldown': '-{v}% recarga',
+    'pt.stat.regen': '+{v} reparo/s',
+    'pt.stat.xpGain': '+{v}% experiência',
     'rv.title': 'CONTINUAR VOANDO?',
     'rv.text': 'Assista a um anúncio e volte com metade do casco.',
     'rv.watch': 'Ver anúncio e reviver',
@@ -1305,7 +1398,20 @@ export const tx = {
   passiveDesc: (id) => C?.passive[id]?.[1] ?? PASSIVES[id].desc,
   talentName: (id) => C?.talent[id]?.[0] ?? TALENTS[id].name,
   talentDesc: (id) => C?.talent[id]?.[1] ?? TALENTS[id].desc,
-  missionName: (id, fallback = '') => C?.mission[id] ?? fallback
+  missionName: (id, fallback = '') => C?.mission[id] ?? fallback,
+  /** "Alas PHANTOM" */
+  partName: (id) => {
+    const p = partPerk(id);
+    return p ? t('pt.name', { slot: t(`pt.slot.${p.slot}`), ship: SHIPS[p.design].name }) : id;
+  },
+  /** "+4% velocidad" para una pieza de nivel lv */
+  partPerk: (id, lv) => {
+    const p = partPerk(id);
+    if (!p) return '';
+    const v = p.per * lv;
+    const pct = ['armor', 'regen'].includes(p.stat) ? +v.toFixed(1) : Math.round(v * 100);
+    return t(`pt.stat.${p.stat}`, { v: pct });
+  }
 };
 
 /** Traduce los textos fijos del HTML marcados con data-i18n, data-i18n-html, data-i18n-title y data-i18n-aria. */

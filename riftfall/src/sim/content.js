@@ -230,6 +230,111 @@ export const TALENTS = {
 
 export const TALENT_ORDER = ['hull', 'power', 'reflex', 'engines', 'magnet', 'memory'];
 export const TALENT_MAX = 5;
+
+/**
+ * Piezas de nave (colección estilo Axie): cada nave se arma con 4 piezas (fuselaje, alas, motores
+ * y cabina) que pueden venir del diseño de cualquiera de las 5 naves. Cambian cómo se ve y dan un
+ * beneficio chico por nivel. Salen de cajas (jefes, victorias o compradas con Núcleos); una pieza
+ * repetida sube de nivel (fusión). En la Arena y en el Desafío del Día no se aplican.
+ * Id de pieza: `${slot}:${diseño}`, p. ej. 'wings:phantom'.
+ */
+export const PART_SLOTS = ['hull', 'wings', 'engines', 'cockpit'];
+export const PART_DESIGNS = ['spark', 'vanguard', 'phantom', 'tempest', 'leviathan'];
+export const PART_MAX = 5;
+/** Núcleos que cuesta una caja en el Taller. */
+export const CRATE_COST = 120;
+/** Núcleos que devuelve una pieza repetida que ya está al máximo. */
+export const CRATE_REFUND = 40;
+
+// Beneficio por nivel de cada pieza: [estadística, cantidad por nivel].
+const PART_PERKS = {
+  hull: { spark: ['speed', 0.03], vanguard: ['maxHp', 0.04], phantom: ['crit', 0.02], tempest: ['area', 0.03], leviathan: ['armor', 0.6] },
+  wings: { spark: ['magnet', 0.04], vanguard: ['might', 0.03], phantom: ['speed', 0.02], tempest: ['cooldown', 0.02], leviathan: ['maxHp', 0.03] },
+  engines: { spark: ['speed', 0.02], vanguard: ['regen', 0.15], phantom: ['speed', 0.03], tempest: ['xpGain', 0.03], leviathan: ['might', 0.02] },
+  cockpit: { spark: ['xpGain', 0.03], vanguard: ['magnet', 0.05], phantom: ['crit', 0.02], tempest: ['area', 0.03], leviathan: ['maxHp', 0.04] }
+};
+
+export function partPerk(id) {
+  const [slot, design] = String(id).split(':');
+  const perk = PART_PERKS[slot]?.[design];
+  return perk ? { slot, design, stat: perk[0], per: perk[1] } : null;
+}
+
+/** Aplica el beneficio de una pieza de nivel `lv` a las estadísticas. */
+export function applyPart(st, id, lv) {
+  const p = partPerk(id);
+  if (!p || lv <= 0) return;
+  const v = p.per * lv;
+  if (p.stat === 'cooldown') st.cooldown *= 1 - v;
+  else if (p.stat === 'armor' || p.stat === 'regen' || p.stat === 'crit') st[p.stat] += v;
+  else if (p.stat === 'might') st.might += v;
+  else st[p.stat] *= 1 + v;
+}
+
+export const ALL_PARTS = PART_SLOTS.flatMap((slot) => PART_DESIGNS.map((d) => `${slot}:${d}`));
+
+/** Inventario saneado: { 'wings:phantom': nivel 1..5, ... }. */
+export function sanitizeInventory(inv) {
+  const out = {};
+  if (!inv || typeof inv !== 'object') return out;
+  for (const id of ALL_PARTS) {
+    const lv = Number(inv[id]);
+    if (Number.isInteger(lv) && lv > 0) out[id] = Math.min(PART_MAX, lv);
+  }
+  return out;
+}
+
+/**
+ * Piezas equipadas con su nivel, a partir del equipamiento elegido y del inventario. Solo valen
+ * piezas que el jugador tiene. Devuelve { hull: { id, lv }, ... } (los huecos vacíos no figuran).
+ */
+export function equippedParts(loadout, inventory) {
+  const inv = sanitizeInventory(inventory);
+  const out = {};
+  if (!loadout || typeof loadout !== 'object') return out;
+  for (const slot of PART_SLOTS) {
+    const id = loadout[slot];
+    if (typeof id === 'string' && id.startsWith(`${slot}:`) && inv[id]) out[slot] = { id, lv: inv[id] };
+  }
+  return out;
+}
+
+/** Normaliza piezas equipadas que llegan a la simulación (servidor o cliente). */
+export function sanitizeParts(parts) {
+  const out = {};
+  if (!parts || typeof parts !== 'object') return out;
+  for (const slot of PART_SLOTS) {
+    const p = parts[slot];
+    if (!p || typeof p.id !== 'string' || !p.id.startsWith(`${slot}:`) || !partPerk(p.id)) continue;
+    const lv = Number(p.lv);
+    if (Number.isInteger(lv) && lv > 0) out[slot] = { id: p.id, lv: Math.min(PART_MAX, lv) };
+  }
+  return out;
+}
+
+/**
+ * Abre cajas de piezas con un generador `rand()` en [0, 1). Modifica el inventario y devuelve lo
+ * obtenido: [{ id, lv, refund }]. El servidor usa un generador con semilla para que sea verificable.
+ */
+export function openCrates(inventory, count, rand) {
+  const got = [];
+  for (let i = 0; i < count; i++) {
+    const id = ALL_PARTS[Math.floor(rand() * ALL_PARTS.length) % ALL_PARTS.length];
+    const lv = inventory[id] ?? 0;
+    if (lv >= PART_MAX) {
+      got.push({ id, lv, refund: CRATE_REFUND });
+      continue;
+    }
+    inventory[id] = lv + 1;
+    got.push({ id, lv: lv + 1, refund: 0 });
+  }
+  return got;
+}
+
+/** Cajas que gana una partida: una por Guardián derrotado y otra por ganar. */
+export function cratesFromSummary(sum) {
+  return Math.min(3, sum.bossesKilled ?? 0) + (sum.victory ? 1 : 0);
+}
 /** Costo en Núcleos de subir un talento al nivel `level` (1..5). */
 export const TALENT_COST = [40, 90, 160, 250, 360];
 

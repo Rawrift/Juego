@@ -1,7 +1,20 @@
 // Progreso del piloto en modo práctica (sin servidor): Núcleos, talentos, misiones diarias, racha
 // y estadísticas, guardados en este dispositivo. Usa las mismas reglas que el servidor.
 
-import { TALENTS, TALENT_MAX, talentCost, sanitizeTalents, coresFromSummary, RIFT_MAX } from '../sim/index.js';
+import {
+  TALENTS,
+  TALENT_MAX,
+  talentCost,
+  sanitizeTalents,
+  coresFromSummary,
+  RIFT_MAX,
+  PART_SLOTS,
+  CRATE_COST,
+  sanitizeInventory,
+  equippedParts,
+  openCrates,
+  cratesFromSummary
+} from '../sim/index.js';
 import { MISSIONS, freshDaily, applyRunToDaily, missionView, streakBonus } from '../shared/missions.js';
 
 const KEY = 'riftfall.progress';
@@ -18,6 +31,8 @@ function blank() {
     lifetimeCores: 0,
     talents: {},
     riftMax: 0,
+    parts: {},
+    loadout: {},
     runs: 0,
     bestScore: 0,
     bestTime: 0,
@@ -41,6 +56,8 @@ export function loadProgress() {
   p.talents = sanitizeTalents(p.talents);
   p.cores = Math.max(0, Math.floor(Number(p.cores) || 0));
   p.riftMax = Math.max(0, Math.min(RIFT_MAX, Math.floor(Number(p.riftMax) || 0)));
+  p.parts = sanitizeInventory(p.parts);
+  p.loadout = Object.fromEntries(Object.entries(equippedParts(p.loadout, p.parts)).map(([k, v]) => [k, v.id]));
   rollDay(p);
   return p;
 }
@@ -75,6 +92,9 @@ export function recordLocalRun(p, sum, { daily = false } = {}) {
     out.streak = streakBonus(p.streak);
   }
   for (const m of applyRunToDaily(p.daily, sum)) out.missions.push({ id: m.id, name: m.name, reward: m.reward });
+  // Cajas de piezas: una por Guardián y otra por ganar (en el desafío no hay).
+  out.crates = daily ? [] : openCrates(p.parts, cratesFromSummary(sum), Math.random);
+  out.cores += out.crates.reduce((a, c) => a + c.refund, 0);
   const total = out.cores + out.streak + out.missions.reduce((a, m) => a + m.reward, 0);
   out.total = total;
   p.cores += total;
@@ -123,4 +143,26 @@ export function recordChallenge(p, n, sum) {
   if (newBest) ch.best = { score: sum.score, timeSec: sum.timeSec, kills: sum.kills, victory: sum.victory };
   saveProgress(p);
   return { best: ch.best, newBest, tries: ch.tries };
+}
+
+/** Equipa (o quita, con id = null) una pieza en un hueco. */
+export function equipLocalPart(p, slot, id) {
+  if (!PART_SLOTS.includes(slot)) throw new Error('slot');
+  if (id && (!id.startsWith(`${slot}:`) || !p.parts[id])) throw new Error('missing');
+  if (id) p.loadout = { ...p.loadout, [slot]: id };
+  else {
+    const { [slot]: _gone, ...rest } = p.loadout;
+    p.loadout = rest;
+  }
+  saveProgress(p);
+}
+
+/** Compra y abre una caja de piezas con Núcleos. Devuelve lo obtenido. */
+export function buyLocalCrate(p) {
+  if (p.cores < CRATE_COST) throw new Error('poor');
+  p.cores -= CRATE_COST;
+  const got = openCrates(p.parts, 1, Math.random);
+  p.cores += got.reduce((a, c) => a + c.refund, 0);
+  saveProgress(p);
+  return got;
 }

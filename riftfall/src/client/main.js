@@ -22,7 +22,8 @@ import {
   shipYield,
   riftMods,
   RIFT_MAX,
-  reviveSim
+  reviveSim,
+  equippedParts
 } from '../sim/index.js';
 import { createRenderer, QUALITY_LEVELS } from './renderer.js';
 import { createAudio } from './audio.js';
@@ -37,7 +38,17 @@ import { PORTAL, initPortal, portal } from './portal.js';
 import { chainConfigFromDeployment } from '../shared/networks.js';
 import { $, el, toast, fmtTime, fmtNum, shortAddr, fmtRift, brandText } from './dom.js';
 import { t, tx, lang, LANGS, setLang, applyStatic } from './i18n.js';
-import { loadProgress, saveProgress, recordLocalRun, upgradeLocalTalent, localMissions, canUpgradeAny, recordChallenge } from './progress.js';
+import {
+  loadProgress,
+  saveProgress,
+  recordLocalRun,
+  upgradeLocalTalent,
+  localMissions,
+  canUpgradeAny,
+  recordChallenge,
+  equipLocalPart,
+  buyLocalCrate
+} from './progress.js';
 import { dailyNumber, dailySeed, DAILY_RULES, msToNextDaily } from '../shared/daily.js';
 import { shareResult } from './share.js';
 
@@ -66,7 +77,10 @@ const app = {
   updateMenu,
   pilot,
   upgradeTalent,
-  applyCosmetics
+  applyCosmetics,
+  equipPart,
+  buyCrate,
+  skin: () => renderer.R.skin
 };
 const panels = createPanels(app);
 
@@ -112,10 +126,30 @@ function loadShipChoice() {
 function pilot() {
   if (app.online && app.profile) {
     const p = app.profile;
-    return { online: true, cores: p.cores ?? 0, talents: p.talents ?? {}, missions: p.missions ?? [], streak: p.streak ?? 0, riftMax: p.riftMax ?? 0, stats: p };
+    return {
+      online: true,
+      cores: p.cores ?? 0,
+      talents: p.talents ?? {},
+      missions: p.missions ?? [],
+      streak: p.streak ?? 0,
+      riftMax: p.riftMax ?? 0,
+      parts: p.parts ?? {},
+      loadout: p.loadout ?? {},
+      stats: p
+    };
   }
   const p = app.progress;
-  return { online: false, cores: p.cores, talents: p.talents, missions: localMissions(p), streak: p.streak, riftMax: p.riftMax ?? 0, stats: p };
+  return {
+    online: false,
+    cores: p.cores,
+    talents: p.talents,
+    missions: localMissions(p),
+    streak: p.streak,
+    riftMax: p.riftMax ?? 0,
+    parts: p.parts ?? {},
+    loadout: p.loadout ?? {},
+    stats: p
+  };
 }
 
 // --------------------------------------------------------------------- Pase Fundador
@@ -227,6 +261,25 @@ async function upgradeTalent(id) {
   const lv = upgradeLocalTalent(app.progress, id);
   updateMenu();
   return lv;
+}
+
+/** Equipa o quita una pieza (con servidor o en este dispositivo). */
+async function equipPart(slot, id) {
+  if (app.online && app.profile) app.profile = (await api.equipPart(slot, id)).profile;
+  else equipLocalPart(app.progress, slot, id);
+  updateMenu();
+}
+
+/** Compra una caja de piezas con Núcleos. Devuelve lo obtenido. */
+async function buyCrate() {
+  let got;
+  if (app.online && app.profile) {
+    const res = await api.buyCrate();
+    app.profile = res.profile;
+    got = res.got;
+  } else got = buyLocalCrate(app.progress);
+  updateMenu();
+  return got;
 }
 
 function selectShip(choice) {
@@ -390,7 +443,16 @@ async function startRun(mode = 'normal') {
       const n = dailyNumber();
       run = { runId: null, seed: dailySeed(n), ship: DAILY_RULES.ship, shipLevel: DAILY_RULES.shipLevel, talents: {}, rift: DAILY_RULES.rift, mode: 'daily', daily: n };
     } else {
-      run = { runId: null, seed: (Math.random() * 2 ** 32) >>> 0, ship: own.key, shipLevel: own.level, talents: app.progress.talents, rift: riftLevel(), mode: 'normal' };
+      run = {
+        runId: null,
+        seed: (Math.random() * 2 ** 32) >>> 0,
+        ship: own.key,
+        shipLevel: own.level,
+        talents: app.progress.talents,
+        parts: equippedParts(app.progress.loadout, app.progress.parts),
+        rift: riftLevel(),
+        mode: 'normal'
+      };
     }
     if (!practiceNoticeShown && !PORTAL) {
       practiceNoticeShown = true;
@@ -398,7 +460,7 @@ async function startRun(mode = 'normal') {
     }
   }
   game.run = run;
-  game.sim = createSim({ seed: run.seed, ship: run.ship, shipLevel: run.shipLevel, talents: run.talents, rift: run.rift ?? 0 });
+  game.sim = createSim({ seed: run.seed, ship: run.ship, shipLevel: run.shipLevel, talents: run.talents, parts: run.parts, rift: run.rift ?? 0 });
   game.rec = new InputRecorder();
   game.acc = 0;
   game.mode = 'play';
@@ -567,6 +629,15 @@ async function endRun() {
 
 let lastResult = null;
 
+/** Filas del fin de partida con las piezas que salieron de las cajas. */
+function crateRows(crates = []) {
+  return crates.map((c) => [
+    `📦 ${c.refund ? t('pt.maxed', { part: tx.partName(c.id) }) : c.lv === 1 ? t('pt.new', { part: tx.partName(c.id) }) : t('pt.up', { part: tx.partName(c.id), n: c.lv })}`,
+    c.refund ? `+${c.refund} ✦` : '',
+    ''
+  ]);
+}
+
 async function showGameOver(local, victory) {
   const card = $('.gameover-card');
   card.classList.toggle('victory', victory);
@@ -639,6 +710,7 @@ async function showGameOver(local, victory) {
     const rows = [...challengeRow(), [t('go.rowCores'), res.cores, '✦']];
     if (res.streak) rows.push([t('go.rowStreak'), res.streak, '✦']);
     for (const m of res.missions) rows.push([t('go.rowMission', { name: tx.missionName(m.id, m.name) }), m.reward, '✦']);
+    rows.push(...crateRows(res.crates));
     if (res.newBest && app.progress.runs > 1) rows.push([t('go.newBest'), fmtNum(local.score), '']);
     if (res.riftUnlocked) rows.push([`🔓 ${t('go.riftUnlocked', { n: res.riftUnlocked })}`, '', '']);
     showRows(rows);
@@ -662,6 +734,7 @@ async function showGameOver(local, victory) {
       for (const m of res.rewards.missions) rows.push([t('go.rowMission', { name: tx.missionName(m.id, m.name) }), m.reward]);
     }
     if (res.cores) rows.push([t('go.rowCores'), res.cores, '✦']);
+    rows.push(...crateRows(res.crates));
     if (res.riftUnlocked) rows.push([`🔓 ${t('go.riftUnlocked', { n: res.riftUnlocked })}`, '', '']);
     showRows(rows);
     countUp($('#goTotal'), res.totalShards);
@@ -918,7 +991,7 @@ function frame(now) {
   if (game.mode !== 'play') {
     previewT += dt;
     if (!$('#menu').classList.contains('hidden')) {
-      drawShipPreview($('#shipPreview'), app.ship.key, SHIPS[app.ship.key].color, previewT, renderer.R.skin);
+      drawShipPreview($('#shipPreview'), app.ship.key, SHIPS[app.ship.key].color, previewT, renderer.R.skin, pilot().loadout);
     }
   }
   requestAnimationFrame(frame);
