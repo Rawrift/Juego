@@ -5,7 +5,7 @@ import { t } from './i18n.js';
 
 export function setupPwa() {
   // En los builds de prueba no se registra: el service worker interceptaría las respuestas simuladas.
-  if ('serviceWorker' in navigator && import.meta.env.PROD && import.meta.env.MODE !== 'e2e') {
+  if ('serviceWorker' in navigator && import.meta.env.PROD && import.meta.env.MODE === 'production') {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }
   const btn = $('#installBtn');

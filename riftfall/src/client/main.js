@@ -21,7 +21,8 @@ import {
   PASSIVES,
   shipYield,
   riftMods,
-  RIFT_MAX
+  RIFT_MAX,
+  reviveSim
 } from '../sim/index.js';
 import { createRenderer, QUALITY_LEVELS } from './renderer.js';
 import { createAudio } from './audio.js';
@@ -32,10 +33,11 @@ import { iconCopy, drawShipPreview } from './sprites.js';
 import { createPanels } from './panels.js';
 import { founderRank, currentSkin, founderBusy } from './founder.js';
 import { setupPwa } from './pwa.js';
+import { PORTAL, initPortal, portal } from './portal.js';
 import { chainConfigFromDeployment } from '../shared/networks.js';
 import { $, el, toast, fmtTime, fmtNum, shortAddr, fmtRift, brandText } from './dom.js';
 import { t, tx, lang, LANGS, setLang, applyStatic } from './i18n.js';
-import { loadProgress, recordLocalRun, upgradeLocalTalent, localMissions, canUpgradeAny, recordChallenge } from './progress.js';
+import { loadProgress, saveProgress, recordLocalRun, upgradeLocalTalent, localMissions, canUpgradeAny, recordChallenge } from './progress.js';
 import { dailyNumber, dailySeed, DAILY_RULES, msToNextDaily } from '../shared/daily.js';
 import { shareResult } from './share.js';
 
@@ -353,13 +355,21 @@ let practiceNoticeShown = false;
 /** Redes de prueba: monedas y tokens sin valor real. */
 const TESTNETS = [97, 84532, 31337];
 
+/** Pausa el sonido mientras se ve un anuncio del portal. */
+const adAudio = { onStart: () => audio.suspend(true), onEnd: () => audio.suspend(false) };
+let runsThisSession = 0;
+
 async function startRun(mode = 'normal') {
   audio.unlock();
   audio.startMusic();
   panels.close();
+  // Portales: un anuncio en la pausa natural entre partidas (el portal limita la frecuencia).
+  if (PORTAL && runsThisSession > 0) await portal.ad('midgame', adAudio);
+  runsThisSession++;
   let run = null;
   game.offline = false;
   try {
+    if (PORTAL) throw new Error('sin servidor en portales');
     run = await api.startRun({
       mode,
       rift: mode === 'normal' ? riftLevel() : 0,
@@ -382,7 +392,7 @@ async function startRun(mode = 'normal') {
     } else {
       run = { runId: null, seed: (Math.random() * 2 ** 32) >>> 0, ship: own.key, shipLevel: own.level, talents: app.progress.talents, rift: riftLevel(), mode: 'normal' };
     }
-    if (!practiceNoticeShown) {
+    if (!practiceNoticeShown && !PORTAL) {
       practiceNoticeShown = true;
       toast(t('toast.practice'));
     }
@@ -405,6 +415,8 @@ async function startRun(mode = 'normal') {
   hudRift.textContent = run.mode === 'daily' ? t('dc.hud', { n: run.daily }) : t('hud.rift', { n: game.sim.rift });
   hudRift.classList.toggle('hidden', game.sim.rift === 0 && run.mode !== 'daily');
   input.setEnabled(true);
+  game.reviveOffered = false;
+  portal.gameplayStart();
   if (run.mode === 'daily') announce(t('ann.daily', { n: run.daily }), t('ann.dailySub'), 'good');
   else announce(run.mode === 'arena' ? t('ann.arena') : t('ann.survive'), run.mode === 'arena' ? t('ann.arenaSub') : t('ann.surviveSub'), 'good');
   showTutorial();
@@ -500,9 +512,52 @@ function openChoice() {
   $('#levelup').classList.remove('hidden');
 }
 
+/** Portales: al caer, se ofrece revivir una vez por partida a cambio de un anuncio. */
+function offerRevive() {
+  game.mode = 'revive';
+  game.reviveOffered = true;
+  input.setEnabled(false);
+  portal.gameplayStop();
+  const box = $('#revive');
+  const bar = $('#reviveBar');
+  box.classList.remove('hidden');
+  bar.style.transition = 'none';
+  bar.style.width = '100%';
+  void bar.offsetWidth;
+  bar.style.transition = 'width 8s linear';
+  bar.style.width = '0%';
+  let decided = false;
+  const decline = () => {
+    if (decided) return;
+    decided = true;
+    clearTimeout(timer);
+    box.classList.add('hidden');
+    endRun();
+  };
+  const timer = setTimeout(decline, 8000);
+  $('#reviveNo').onclick = decline;
+  $('#reviveAd').onclick = async () => {
+    if (decided) return;
+    decided = true;
+    clearTimeout(timer);
+    const ok = await portal.ad('rewarded', adAudio);
+    box.classList.add('hidden');
+    if (!ok || !reviveSim(game.sim)) {
+      endRun();
+      return;
+    }
+    game.mode = 'play';
+    game.acc = 0;
+    input.setEnabled(true);
+    portal.gameplayStart();
+  };
+}
+
 async function endRun() {
   game.mode = 'over';
   input.setEnabled(false);
+  portal.gameplayStop();
+  if (game.sim.phase === 'victory') portal.happytime();
   const s = game.sim;
   const local = summarize(s);
   const victory = s.phase === 'victory';
@@ -563,6 +618,24 @@ async function showGameOver(local, victory) {
     verify.textContent = t('go.practice');
     $('#goTotalLabel').textContent = t('go.coresEarned');
     const res = recordLocalRun(app.progress, local, { daily: !!daily });
+    // Portales: duplicar los Núcleos de la partida viendo un anuncio (opcional, una vez).
+    const dbl = $('#doubleBtn');
+    dbl.classList.toggle('hidden', !(PORTAL && portal.active && res.cores > 0));
+    dbl.disabled = false;
+    dbl.onclick = async () => {
+      dbl.disabled = true;
+      if (!(await portal.ad('rewarded', adAudio))) {
+        dbl.disabled = false;
+        return;
+      }
+      app.progress.cores += res.cores;
+      app.progress.lifetimeCores = (app.progress.lifetimeCores ?? 0) + res.cores;
+      saveProgress(app.progress);
+      dbl.classList.add('hidden');
+      toast(t('rv.doubled', { n: res.cores }), 'ok');
+      countUp($('#goTotal'), res.total + res.cores);
+      afterRewards();
+    };
     const rows = [...challengeRow(), [t('go.rowCores'), res.cores, '✦']];
     if (res.streak) rows.push([t('go.rowStreak'), res.streak, '✦']);
     for (const m of res.missions) rows.push([t('go.rowMission', { name: tx.missionName(m.id, m.name) }), m.reward, '✦']);
@@ -615,6 +688,7 @@ function countUp(node, target) {
 
 function backToMenu() {
   game.mode = 'demo';
+  $('#revive').classList.add('hidden');
   $('#gameover').classList.add('hidden');
   $('#hud').classList.add('hidden');
   $('#pause').classList.add('hidden');
@@ -628,6 +702,8 @@ function backToMenu() {
 function setPaused(v) {
   if (game.mode !== 'play') return;
   game.paused = v;
+  if (v) portal.gameplayStop();
+  else portal.gameplayStart();
   $('#pause').classList.toggle('hidden', !v);
   if (v) {
     const box = $('#pauseLoadout');
@@ -725,6 +801,7 @@ function onSimEvent(ev, s, live) {
       else announce(t('ann.swarm'), t('ann.swarmSub'), 'danger');
       break;
     case 'bossDead':
+      portal.happytime();
       announce(t('ann.bossDead'), t('ann.bossDeadSub'), 'good');
       break;
     case 'evolve':
@@ -813,7 +890,8 @@ function frame(now) {
     s.events.length = 0;
     if (s.phase === 'choice' && !game.choiceOpen) openChoice();
     if (s.phase === 'choice' && game.autopilot && game.choiceOpen) pickChoice(botChoice(s));
-    if (s.phase === 'dead' || s.phase === 'victory') endRun();
+    if (s.phase === 'dead' && PORTAL && portal.active && !game.reviveOffered && s.tick < MAX_TICKS) offerRevive();
+    else if (s.phase === 'dead' || s.phase === 'victory') endRun();
     audio.setIntensity(s.boss && !s.boss.dead ? 1 : 0.5 + Math.min(0.45, s.tick / FINAL_TICK));
     updateHud(s);
   } else if (game.mode === 'demo') {
@@ -914,6 +992,18 @@ langSel.addEventListener('change', () => setLang(langSel.value));
 // --------------------------------------------------------------------- arranque
 
 async function boot() {
+  if (PORTAL) {
+    // Portales: sin servidor, sin wallet ni pagos; solo el juego, en modo práctica.
+    await initPortal();
+    portal.loadingStart();
+    $('.tagline').innerHTML = t('menu.taglinePortal');
+    newDemo();
+    requestAnimationFrame(frame);
+    updateMenu();
+    setNet(t('net.practice'), 'warn');
+    portal.loadingStop();
+    return;
+  }
   setupPwa();
   newDemo();
   requestAnimationFrame(frame);
@@ -959,7 +1049,7 @@ boot();
 // Gancho para pruebas automatizadas y capturas (piloto automático y avance rápido).
 // Solo existe en desarrollo y en el build de tests (`npm run build:e2e`): en producción
 // no se expone, para no regalar un bot de farmeo a un clic de la consola.
-if (import.meta.env.DEV || import.meta.env.MODE === 'e2e') window.__RIFTFALL__ = {
+if (import.meta.env.DEV || import.meta.env.MODE === 'e2e' || import.meta.env.VITE_E2E_HOOK === '1') window.__RIFTFALL__ = {
   game,
   app,
   renderer,

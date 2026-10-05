@@ -783,3 +783,21 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .daily-challenge { padding: 10px 12px; gap: 6px; }
   .daily-challenge p { font-size: 13px; }
 }
+
+/* ------------------------------------------------------------------ versión para portales */
+.portal .crypto-only { display: none !important; }
+.portal .nav-grid { grid-template-columns: 1fr; }
+.portal .ship-pick { grid-template-columns: 96px 1fr; }
+#revive { z-index: 30; }
+.revive-card {
+  width: min(440px, 92vw); padding: 26px 24px; border-radius: 20px; text-align: center;
+  background: rgba(10, 12, 30, 0.94); border: 1px solid rgba(77, 232, 255, 0.4);
+  box-shadow: 0 20px 80px -20px rgba(77, 232, 255, 0.6);
+  display: grid; gap: 14px;
+}
+.revive-card h2 { margin: 0; font-family: var(--display); letter-spacing: 0.12em; color: var(--cyan); }
+.revive-card p { margin: 0; color: #c9d6f5; }
+.revive-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.revive-row .btn { padding: 14px 10px; font-size: 14px; }
+.revive-timer { height: 4px; border-radius: 4px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.revive-timer i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, var(--cyan), var(--magenta)); }

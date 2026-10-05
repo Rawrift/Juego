@@ -15,6 +15,7 @@ import {
   dsin,
   MAX_TICKS,
   FINAL_TICK,
+  reviveSim,
   riftMods,
   enemyHpScale,
   RIFT_MAX,
@@ -285,4 +286,29 @@ test('meteoritos: avisan antes de caer y dañan a la nave y a los enemigos', () 
   stepSim(s, 0);
   assert.ok(s.player.hp < hp0, 'el impacto daña a la nave');
   assert.ok(s.events.some((e) => e.t === 'meteor'));
+});
+
+test('revivir (portales): vuelve con medio casco, invulnerable y con espacio alrededor', () => {
+  const s = createSim({ seed: 12 });
+  for (let i = 0; i < 600; i++) stepSim(s, 0);
+  assert.equal(reviveSim(s), false, 'solo se revive después de caer');
+  s.player.hp = 0;
+  s.phase = 'dead';
+  const near = s.enemies.find((e) => !e.boss);
+  if (near) {
+    near.x = s.player.x + 10;
+    near.y = s.player.y;
+  }
+  assert.equal(reviveSim(s), true);
+  assert.equal(s.phase, 'running');
+  assert.equal(s.player.hp, s.player.stats.maxHp * 0.5);
+  assert.ok(s.player.invuln > 100);
+  if (near) assert.ok(Math.hypot(near.x - s.player.x, near.y - s.player.y) >= 319);
+  stepSim(s, 0);
+  assert.equal(s.phase, 'running');
+  // Después del colapso del Rift no hay vuelta atrás.
+  const late = createSim({ seed: 12 });
+  late.tick = MAX_TICKS;
+  late.phase = 'dead';
+  assert.equal(reviveSim(late), false);
 });

@@ -293,6 +293,12 @@ export function createAudio() {
     setIntensity(v) {
       music.intensity = v;
     },
+    /** Pausa todo el sonido (por ejemplo, mientras se ve un anuncio). */
+    suspend(v) {
+      if (!ac) return;
+      if (v) ac.suspend();
+      else ac.resume();
+    },
     toggleMute() {
       muted = !muted;
       try {

@@ -6,12 +6,14 @@ import { SHIPS } from '../sim/index.js';
 import { drawShipPreview } from './sprites.js';
 import { t } from './i18n.js';
 import { fmtTime, fmtNum, toast } from './dom.js';
+import { PORTAL } from './portal.js';
 
 const W = 1080;
 const H = 1350;
 
 export function shareUrl() {
-  return `${location.origin}/`;
+  // En los portales no se enlaza a otra versión jugable del juego (regla del portal).
+  return PORTAL ? '' : `${location.origin}/`;
 }
 
 export function shareText({ summary, daily }) {
@@ -128,7 +130,7 @@ export async function buildCard({ summary, shipKey, title }) {
   g.fillText(t('sh.cta'), W / 2, 1250);
   g.font = '800 40px Orbitron, sans-serif';
   g.fillStyle = '#4de8ff';
-  g.fillText(location.host, W / 2, 1305);
+  if (!PORTAL) g.fillText(location.host, W / 2, 1305);
   return c;
 }
 
@@ -146,7 +148,7 @@ function roundRect(g, x, y, w, h, r) {
 export async function shareResult(result) {
   const text = shareText(result);
   const url = shareUrl();
-  const full = `${text}\n${url}`;
+  const full = url ? `${text}\n${url}` : text;
   try {
     const card = await buildCard(result);
     const blob = await new Promise((r) => card.toBlob(r, 'image/png'));
@@ -156,7 +158,7 @@ export async function shareResult(result) {
       return 'files';
     }
     if (navigator.share) {
-      await navigator.share({ text, url });
+      await navigator.share(url ? { text, url } : { text });
       return 'text';
     }
   } catch (err) {

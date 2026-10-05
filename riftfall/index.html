@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#05060f" />
   <meta name="description" content="RIFTFALL — arcade survival game in your browser. Survive the Rift, defeat the Guardians and upgrade your pilot." />
   <title>RIFTFALL</title>
-  <link rel="manifest" href="/manifest.webmanifest" />
-  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -45,16 +45,29 @@
     <div id="joystick" class="hidden"><i></i></div>
   </div>
 
+  <!-- ===================================================== REVIVIR (portales) -->
+  <div id="revive" class="overlay hidden">
+    <div class="revive-card">
+      <h2 data-i18n="rv.title">¿SEGUIR VOLANDO?</h2>
+      <p data-i18n="rv.text">Mira un anuncio y vuelve con la mitad del casco.</p>
+      <div class="revive-row">
+        <button id="reviveAd" class="btn primary">▶ <span data-i18n="rv.watch">Ver anuncio y revivir</span></button>
+        <button id="reviveNo" class="btn ghost" data-i18n="rv.no">No, gracias</button>
+      </div>
+      <div class="revive-timer"><i id="reviveBar"></i></div>
+    </div>
+  </div>
+
   <!-- ===================================================== MENÚ PRINCIPAL -->
   <div id="menu" class="screen">
     <header class="topbar">
       <div class="brand-mini"><span class="logo-glyph"></span>RIFTFALL</div>
       <div class="chips">
-        <div class="chip founder-chip hidden" id="founderChip" data-open="founder">★ <b data-i18n="f.badge">FUNDADOR</b></div>
+        <div class="crypto-only chip founder-chip hidden" id="founderChip" data-open="founder">★ <b data-i18n="f.badge">FUNDADOR</b></div>
         <div class="chip core-chip" id="coreChip" data-open="profile" title="Núcleos" data-i18n-title="menu.coresTitle"><i class="core-ico">✦</i><b id="menuCores">0</b></div>
-        <div class="chip shard-chip hidden" id="shardChip" title="Shards" data-i18n-title="menu.shardsTitle"><i class="gem gold"></i><b id="menuShards">0</b></div>
-        <div class="chip rift-chip hidden" id="riftChip" title="Saldo de $RIFT" data-i18n-title="menu.riftTitle"><i class="gem cyan"></i><b id="menuRift">0</b></div>
-        <button id="walletBtn" class="btn ghost small" data-i18n="menu.connect">Conectar wallet</button>
+        <div class="crypto-only chip shard-chip hidden" id="shardChip" title="Shards" data-i18n-title="menu.shardsTitle"><i class="gem gold"></i><b id="menuShards">0</b></div>
+        <div class="crypto-only chip rift-chip hidden" id="riftChip" title="Saldo de $RIFT" data-i18n-title="menu.riftTitle"><i class="gem cyan"></i><b id="menuRift">0</b></div>
+        <button id="walletBtn" class="crypto-only btn ghost small" data-i18n="menu.connect">Conectar wallet</button>
         <button id="installBtn" class="btn ghost small hidden" data-i18n="pwa.install">Instalar</button>
         <select id="langSel" class="lang-sel" aria-label="Idioma" data-i18n-aria="menu.lang"></select>
         <button id="muteBtn" class="icon-btn" aria-label="Sonido" data-i18n-aria="menu.sound">♪</button>
@@ -63,7 +76,7 @@
 
     <main class="menu-main">
       <div class="title-block">
-        <div class="eyebrow" data-i18n="menu.season">TEMPORADA 1 · PROOF OF PLAY</div>
+        <div class="eyebrow crypto-only" data-i18n="menu.season">TEMPORADA 1 · PROOF OF PLAY</div>
         <h1 class="logo">RIFT<span>FALL</span></h1>
         <p class="tagline" data-i18n-html="menu.tagline"></p>
         <div class="ship-pick" id="shipPick">
@@ -72,9 +85,9 @@
             <small data-i18n="menu.selectedShip">NAVE SELECCIONADA</small>
             <b id="shipName">SPARK</b>
             <span id="shipDesc"></span>
-            <em id="shipYield"></em>
+            <em id="shipYield" class="crypto-only"></em>
           </div>
-          <button class="btn ghost small" data-open="hangar" data-i18n="menu.change">Cambiar</button>
+          <button class="btn ghost small crypto-only" data-open="hangar" data-i18n="menu.change">Cambiar</button>
         </div>
         <div class="rift-pick" id="riftPick">
           <button class="rift-arrow" id="riftPrev" aria-label="Nivel anterior" data-i18n-aria="menu.riftPrev">‹</button>
@@ -87,7 +100,7 @@
         </div>
         <div class="cta-row">
           <button id="playBtn" class="btn primary big" data-i18n="menu.play">JUGAR</button>
-          <button class="btn secondary big" data-open="arena" data-i18n="menu.arena">ARENA</button>
+          <button class="crypto-only btn secondary big" data-open="arena" data-i18n="menu.arena">ARENA</button>
         </div>
         <p class="hint" id="controlsHint"></p>
       </div>
@@ -102,23 +115,23 @@
           <header><h3 data-i18n="menu.daily">Misiones diarias</h3><span class="streak" id="streakTag"></span></header>
           <ul id="missionList" class="missions"></ul>
         </section>
-        <button class="founder-banner" data-open="founder" id="founderBanner">
+        <button class="crypto-only founder-banner" data-open="founder" id="founderBanner">
           <b data-i18n="f.banner">★ PASE FUNDADOR</b>
           <span data-i18n="f.bannerSub">Apoya RIFTFALL antes del lanzamiento · desde US$3</span>
         </button>
         <nav class="nav-grid">
-          <button data-open="hangar"><i>⬢</i><span data-i18n="nav.hangar">Hangar</span></button>
-          <button data-open="market"><i>⇄</i><span data-i18n="nav.market">Mercado</span></button>
-          <button data-open="ranking"><i>♛</i><span data-i18n="nav.ranking">Ranking</span></button>
-          <button data-open="vault"><i>◈</i><span data-i18n="nav.vault">Canjear</span></button>
-          <button data-open="economy"><i>∑</i><span data-i18n="nav.economy">Economía</span></button>
+          <button class="crypto-only" data-open="hangar"><i>⬢</i><span data-i18n="nav.hangar">Hangar</span></button>
+          <button class="crypto-only" data-open="market"><i>⇄</i><span data-i18n="nav.market">Mercado</span></button>
+          <button class="crypto-only" data-open="ranking"><i>♛</i><span data-i18n="nav.ranking">Ranking</span></button>
+          <button class="crypto-only" data-open="vault"><i>◈</i><span data-i18n="nav.vault">Canjear</span></button>
+          <button class="crypto-only" data-open="economy"><i>∑</i><span data-i18n="nav.economy">Economía</span></button>
           <button data-open="profile" class="talents-nav"><i>✦</i><span data-i18n="nav.talents">Habilidades</span><em id="talentDot" class="dot hidden"></em></button>
         </nav>
       </aside>
     </main>
     <footer class="menu-foot">
       <span id="netStatus" data-i18n="net.connecting">Conectando…</span>
-      <span data-i18n="menu.footer">Cada partida se re-simula antes de pagar recompensas.</span>
+      <span class="crypto-only" data-i18n="menu.footer">Cada partida se re-simula antes de pagar recompensas.</span>
     </footer>
   </div>
 
@@ -167,6 +180,7 @@
       <div class="go-actions">
         <button id="againBtn" class="btn primary big" data-i18n="go.again">JUGAR OTRA VEZ</button>
         <div class="go-row">
+          <button id="doubleBtn" class="btn gold hidden">▶ <span data-i18n="rv.double">x2 Núcleos</span></button>
           <button id="shareBtn" class="btn secondary" data-i18n="go.share">Compartir</button>
           <button id="goTalentsBtn" class="btn gold"><span data-i18n="go.talents">Habilidades</span></button>
           <button id="menuBtn" class="btn ghost" data-i18n="go.menu">Menú</button>

@@ -1,0 +1,69 @@
+// Versión para portales de juegos web (CrazyGames): sin funciones cripto y con los anuncios del
+// portal (entre partidas y recompensados, siempre opcionales). Se compila con `npm run build:portal`.
+
+export const PORTAL = import.meta.env.MODE === 'portal';
+const SDK_URL = 'https://sdk.crazygames.com/crazygames-sdk-v3.js';
+
+let sdk = null;
+
+/** Carga e inicia el SDK del portal. Sin SDK (o bloqueado) el juego funciona igual, sin anuncios. */
+export async function initPortal() {
+  if (!PORTAL) return;
+  document.documentElement.classList.add('portal');
+  await new Promise((resolve) => {
+    const s = document.createElement('script');
+    s.src = SDK_URL;
+    s.onload = resolve;
+    s.onerror = resolve;
+    document.head.append(s);
+  });
+  try {
+    await window.CrazyGames?.SDK?.init();
+    sdk = window.CrazyGames?.SDK ?? null;
+  } catch {
+    sdk = null;
+  }
+}
+
+const call = (fn) => {
+  try {
+    fn();
+  } catch {
+    /* el portal nunca debe romper el juego */
+  }
+};
+
+export const portal = {
+  get active() {
+    return !!sdk;
+  },
+  loadingStart: () => call(() => sdk?.game.loadingStart()),
+  loadingStop: () => call(() => sdk?.game.loadingStop()),
+  gameplayStart: () => call(() => sdk?.game.gameplayStart()),
+  gameplayStop: () => call(() => sdk?.game.gameplayStop()),
+  happytime: () => call(() => sdk?.game.happytime()),
+  /**
+   * Muestra un anuncio ('midgame' | 'rewarded'). `onStart` y `onEnd` pausan y reanudan el
+   * sonido. Resuelve true solo si el anuncio se vio completo (la recompensa se da solo así).
+   */
+  ad(type, { onStart = () => {}, onEnd = () => {} } = {}) {
+    if (!sdk) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      let started = false;
+      const done = (ok) => {
+        if (started) onEnd();
+        resolve(ok);
+      };
+      call(() =>
+        sdk.ad.requestAd(type, {
+          adStarted: () => {
+            started = true;
+            onStart();
+          },
+          adFinished: () => done(true),
+          adError: () => done(false)
+        })
+      );
+    });
+  }
+};

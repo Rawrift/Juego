@@ -11,3 +11,5 @@ playwright-report/
 server/data/
 .env
 deployments/31337.json
+dist-portal/
+dist-portal-e2e/

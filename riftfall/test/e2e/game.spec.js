@@ -462,3 +462,102 @@ test('Desafío del Día sin servidor: misma semilla, reglas fijas, mejor marca y
     site.close();
   }
 });
+
+test('versión para portales (CrazyGames): sin cripto, revivir y x2 Núcleos con anuncios, anuncio entre partidas', async ({ browser }) => {
+  const { execSync } = await import('node:child_process');
+  // Copia de prueba del build del portal con el gancho de pruebas (el build real no lo tiene).
+  execSync('npx vite build --mode portal --outDir dist-portal-e2e', { stdio: 'ignore', env: { ...process.env, VITE_E2E_HOOK: '1' } });
+  const DIST = path.resolve('dist-portal-e2e');
+  const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.woff': 'font/woff', '.png': 'image/png' };
+  // El portal publica el juego dentro de una subcarpeta.
+  const site = http.createServer((req, res) => {
+    const url = new URL(req.url, 'http://x');
+    const rel = url.pathname.replace(/^\/juegos\/riftfall\//, '/');
+    const file = path.join(DIST, rel === '/' ? 'index.html' : rel);
+    if (!url.pathname.startsWith('/juegos/riftfall/') || !file.startsWith(DIST) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+      res.writeHead(404, { 'content-type': 'text/plain' });
+      return res.end('not found');
+    }
+    res.writeHead(200, { 'content-type': TYPES[path.extname(file)] ?? 'application/octet-stream' });
+    fs.createReadStream(file).pipe(res);
+  });
+  await new Promise((r) => site.listen(4179, '127.0.0.1', r));
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: 'en-US' });
+  // SDK simulado: anota las llamadas y "muestra" cada anuncio completo.
+  await ctx.route('https://sdk.crazygames.com/**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'text/javascript',
+      body: `window.__cg = [];
+        window.CrazyGames = { SDK: {
+          init: async () => {},
+          environment: 'crazygames',
+          game: {
+            loadingStart: () => __cg.push('loadingStart'), loadingStop: () => __cg.push('loadingStop'),
+            gameplayStart: () => __cg.push('gameplayStart'), gameplayStop: () => __cg.push('gameplayStop'),
+            happytime: () => __cg.push('happytime')
+          },
+          ad: { requestAd: (type, cb) => { __cg.push('ad:' + type); setTimeout(() => { cb.adStarted(); setTimeout(cb.adFinished, 50); }, 50); }, hasAdblock: async () => false }
+        } };`
+    })
+  );
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  const calls = () => page.evaluate(() => window.__cg);
+  try {
+    await page.goto('http://127.0.0.1:4179/juegos/riftfall/');
+    await expect(page.locator('#playBtn')).toHaveText('PLAY');
+    // Nada de wallet, pagos, mercado ni Arena.
+    for (const sel of ['#walletBtn', '#founderBanner', '[data-open="arena"]', '[data-open="market"]', '[data-open="vault"]']) {
+      await expect(page.locator(sel)).toBeHidden();
+    }
+    await expect(page.locator('.tagline')).toContainText('Rift Heart');
+    await expect.poll(calls).toContain('loadingStop');
+
+    await page.click('#playBtn');
+    await expect(page.locator('#hud')).toBeVisible();
+    await expect.poll(calls).toContain('gameplayStart');
+    await page.evaluate(() => window.__RIFTFALL__.fastForward(20));
+
+    // Cae: se ofrece revivir; con el anuncio completo, vuelve a la partida con medio casco.
+    await page.evaluate(() => {
+      const p = window.__RIFTFALL__.game.sim.player;
+      p.invuln = 0;
+      p.hp = -1;
+    });
+    await expect(page.locator('#revive')).toBeVisible();
+    await page.click('#reviveAd');
+    await expect(page.locator('#revive')).toBeHidden();
+    const after = await page.evaluate(() => {
+      const s = window.__RIFTFALL__.game.sim;
+      return { phase: s.phase, hp: s.player.hp / s.player.stats.maxHp, mode: window.__RIFTFALL__.game.mode };
+    });
+    expect(after).toEqual({ phase: 'running', hp: 0.5, mode: 'play' });
+    expect(await calls()).toContain('ad:rewarded');
+
+    // Segunda caída: ya no se ofrece; fin de partida con la opción de duplicar Núcleos.
+    await page.evaluate(() => {
+      const p = window.__RIFTFALL__.game.sim.player;
+      p.invuln = 0;
+      p.hp = -1;
+    });
+    await expect(page.locator('#gameover')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('#revive')).toBeHidden();
+    const before = await page.evaluate(() => JSON.parse(localStorage.getItem('riftfall.progress')).cores);
+    await expect(page.locator('#doubleBtn')).toBeVisible();
+    await page.click('#doubleBtn');
+    await expect(page.locator('#doubleBtn')).toBeHidden();
+    const doubled = await page.evaluate(() => JSON.parse(localStorage.getItem('riftfall.progress')).cores);
+    expect(doubled).toBeGreaterThan(before);
+
+    // Compartir no enlaza a otra web; la próxima partida pasa por un anuncio entre partidas.
+    await page.click('#againBtn');
+    await expect(page.locator('#hud')).toBeVisible();
+    expect((await calls()).filter((c) => c === 'ad:midgame')).toHaveLength(1);
+    expect(errors).toEqual([]);
+  } finally {
+    await ctx.close();
+    site.close();
+  }
+});

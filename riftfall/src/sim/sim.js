@@ -1164,6 +1164,35 @@ function openChoice(s) {
   s.events.push({ t: chest ? 'chest' : 'levelup', level: p.level });
 }
 
+/**
+ * Revive la nave después de caer (solo en la versión para portales, a cambio de un anuncio; las
+ * partidas verificadas por el servidor no lo permiten). Vuelve con la mitad del casco, un rato
+ * invulnerable, sin balas enemigas cerca y con los enemigos cercanos empujados hacia afuera.
+ */
+export function reviveSim(s) {
+  if (s.phase !== 'dead' || s.tick >= MAX_TICKS) return false;
+  const p = s.player;
+  p.hp = p.stats.maxHp * 0.5;
+  p.invuln = 180;
+  s.ebullets.length = 0;
+  s.hazards.length = 0;
+  for (const e of s.enemies) {
+    if (e.boss) continue;
+    const dx = e.x - p.x;
+    const dy = e.y - p.y;
+    const d = Math.sqrt(dx * dx + dy * dy) + 0.0001;
+    if (d > 320) continue;
+    e.x = p.x + (dx / d) * 320;
+    e.y = p.y + (dy / d) * 320;
+    e.px = e.x;
+    e.py = e.y;
+  }
+  s.revives = (s.revives ?? 0) + 1;
+  s.phase = 'running';
+  s.events.push({ t: 'revive', x: p.x, y: p.y });
+  return true;
+}
+
 /** Aplica la opción elegida (0..2) cuando la fase es 'choice'. */
 export function chooseUpgrade(s, index) {
   if (s.phase !== 'choice' || !s.choice) return false;
