@@ -141,6 +141,23 @@ export function createWallet(chainCfg) {
       return { eth, rift, ethText: formatEther(eth), riftText: formatEther(rift) };
     },
 
+    /** ¿La wallet conectada es la dueña del contrato de naves? */
+    async isShipsOwner() {
+      if (!address) return false;
+      return (await R().ships.owner()).toLowerCase() === address.toLowerCase();
+    },
+
+    /** Ventas de naves en moneda nativa que esperan ser cobradas por la tesorería. */
+    pendingSales: () => reader().getBalance(c.RiftShips),
+
+    async withdrawSales() {
+      return (await W().ships.withdraw()).wait();
+    },
+
+    async setClass(classId, priceWei, priceRift, active) {
+      return (await W().ships.setClass(classId, priceWei, priceRift, active)).wait();
+    },
+
     async catalog() {
       const { ships } = R();
       const n = Number(await ships.classCount());

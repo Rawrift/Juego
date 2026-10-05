@@ -647,3 +647,23 @@ button { font: inherit; color: inherit; cursor: pointer; }
   #toasts { left: 50%; right: auto; bottom: 10px; transform: translateX(-50%); max-width: min(360px, 46vw); }
   .toast { font-size: 14px; padding: 8px 12px; }
 }
+
+/* ------------------------------------------------------------------ panel del dueño */
+.owner-grid { display: grid; gap: 8px; }
+.owner-row {
+  display: grid; grid-template-columns: minmax(90px, 1fr) minmax(70px, 0.8fr) minmax(90px, 1fr) auto; gap: 8px; align-items: end;
+  padding: 10px 12px; border-radius: 12px; background: rgba(255, 201, 77, 0.06); border: 1px solid rgba(255, 201, 77, 0.25);
+}
+.owner-row b { font-family: var(--display); font-size: 13px; letter-spacing: 0.06em; align-self: center; }
+.owner-row label { display: grid; gap: 2px; }
+.owner-row small { font-family: var(--display); font-size: 10px; letter-spacing: 0.15em; color: var(--muted); }
+.owner-row input {
+  width: 100%; padding: 8px; border-radius: 8px; border: 1px solid var(--line-strong);
+  background: rgba(5, 6, 15, 0.8); color: var(--text); font: inherit; font-size: 16px;
+  user-select: text; -webkit-user-select: text; touch-action: manipulation;
+}
+@media (max-width: 520px) {
+  .owner-row { grid-template-columns: 1fr 1fr; }
+  .owner-row b { grid-column: 1 / -1; }
+  .owner-row .btn { grid-column: 1 / -1; }
+}

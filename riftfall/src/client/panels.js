@@ -238,6 +238,9 @@ export function createPanels(app) {
             });
             out.push(el('div', { class: 'ship-grid' }, cards));
             out.push(el('p', { class: 'hint' }, t('h.split')));
+            if (app.wallet.connected && (await app.wallet.isShipsOwner().catch(() => false))) {
+              out.push(...(await ownerPanel(catalog)));
+            }
           }
         }
         return out;
@@ -586,6 +589,47 @@ export function createPanels(app) {
       }
     }
   };
+
+  /** Panel del dueño: precios de cada nave y cobro de ventas. Solo lo ve la wallet dueña del contrato. */
+  async function ownerPanel(catalog) {
+    const out = [el('h3', {}, t('o.title')), el('p', { class: 'hint' }, t('o.intro', { sym: nativeSymbol() }))];
+    const pending = await app.wallet.pendingSales().catch(() => 0n);
+    if (pending > 0n) {
+      const w = el('button', { class: 'btn gold small' }, t('o.withdraw', { v: trimAmount(formatEther(pending)), sym: nativeSymbol() }));
+      w.addEventListener('click', () => act(w, t('o.saving'), () => app.wallet.withdrawSales(), t('o.withdrawn')));
+      out.push(w);
+    }
+    const parse = (v) => {
+      const n = String(v).trim().replace(',', '.');
+      if (!/^\d+(\.\d+)?$/.test(n)) throw new Error(t('o.invalid'));
+      return parseEther(n);
+    };
+    const rows = catalog.map((k) => {
+      const native = el('input', { type: 'text', inputmode: 'decimal', value: formatEther(k.priceWei), 'aria-label': t('o.native', { sym: nativeSymbol() }) });
+      const rift = el('input', { type: 'text', inputmode: 'decimal', value: formatEther(k.priceRift), 'aria-label': t('o.rift') });
+      const save = el('button', { class: 'btn ghost small' }, t('o.save'));
+      save.addEventListener('click', () => {
+        let priceWei;
+        let priceRift;
+        try {
+          priceWei = parse(native.value);
+          priceRift = parse(rift.value);
+        } catch (err) {
+          toast(err.message, 'err');
+          return;
+        }
+        act(save, t('o.saving'), () => app.wallet.setClass(k.classId, priceWei, priceRift, k.active), t('o.saved', { name: k.name }));
+      });
+      return el('div', { class: 'owner-row', 'data-class': String(k.classId) }, [
+        el('b', {}, k.name),
+        el('label', {}, [el('small', {}, nativeSymbol()), native]),
+        el('label', {}, [el('small', {}, 'RIFT'), rift]),
+        save
+      ]);
+    });
+    out.push(el('div', { class: 'owner-grid', id: 'ownerPanel' }, rows));
+    return out;
+  }
 
   function serverNotice(text) {
     return el('div', { class: 'notice info' }, text);

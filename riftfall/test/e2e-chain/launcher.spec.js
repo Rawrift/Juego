@@ -142,6 +142,17 @@ test('Lanzador: crea token y contratos desde la wallet, reanuda tras un rechazo 
     await game.click('.nav-grid [data-open="hangar"]');
     await game.locator('.ship-card', { hasText: 'VANGUARD' }).locator('button', { hasText: 'ETH' }).click();
     await expect(game.locator('.toast.ok', { hasText: 'VANGUARD es tuya' })).toBeVisible({ timeout: 30_000 });
+
+    // Panel del dueño: el creador habilita la LEVIATHAN en RIFT y la compra con RIFT.
+    const owner = game.locator('#ownerPanel');
+    await expect(owner).toBeVisible({ timeout: 20_000 });
+    const lev = owner.locator('.owner-row[data-class="3"]');
+    await lev.locator('input').nth(1).fill('50000');
+    await lev.locator('button', { hasText: 'Guardar' }).click();
+    await expect(game.locator('.toast.ok', { hasText: 'Precio de LEVIATHAN actualizado' })).toBeVisible({ timeout: 30_000 });
+    expect((await new Contract(dep.contracts.RiftShips, generated.contracts.RiftShips.abi, provider).getClass(3)).priceRift).toBe(parseEther('50000'));
+    await game.locator('.ship-card', { hasText: 'LEVIATHAN' }).last().locator('button', { hasText: 'LAMER' }).click();
+    await expect(game.locator('.toast.ok', { hasText: 'LEVIATHAN es tuya' })).toBeVisible({ timeout: 30_000 });
     const owned = game.locator('.ship-card', { hasText: '#2 · NV 1' });
     await expect(owned).toBeVisible({ timeout: 20_000 });
     await owned.locator('button', { hasText: 'Usar' }).click();

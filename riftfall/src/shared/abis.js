@@ -32,6 +32,9 @@ export const SHIPS_ABI = [
   'function levelOf(uint256 tokenId) view returns (uint8)',
   'function isApprovedForAll(address owner, address operator) view returns (bool)',
   'function setApprovalForAll(address operator, bool approved)',
+  'function owner() view returns (address)',
+  'function setClass(uint256 classId, uint256 priceWei, uint256 priceRift, bool active)',
+  'function withdraw()',
   'event ShipMinted(address indexed to, uint256 indexed tokenId, uint256 indexed classId, bool paidInRift)'
 ];
 
