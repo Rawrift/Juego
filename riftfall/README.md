@@ -52,7 +52,7 @@ riftfall/
 ├── server/               API Node (sin frameworks): sesiones, replay en workers, vales, misiones, ranking, Arena
 ├── scripts/              despliegue, stack local, equilibrado con bot y simulador económico
 ├── test/                 contratos, simulación, servidor, integración on-chain y E2E en navegador
-└── docs/                 ECONOMIA.md (diseño) y PROYECCION.md (modelo a 24 meses)
+└── docs/                 ECONOMIA.md (diseño), PROYECCION.md (modelo a 24 meses) y ANALISIS-MERCADO.md (qué hace exitoso a un juego cripto)
 ```
 
 ### Proof of Play (anti-trampas)
