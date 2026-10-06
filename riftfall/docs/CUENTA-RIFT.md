@@ -65,17 +65,27 @@
   arrancar el servidor, no en el primer pedido.
 - **Base D1 gratis:** 5 GB, 5 millones de lecturas y 100.000 escrituras por día.
 
-## Poner en marcha Cloudflare (una sola vez)
+## Dónde está publicado
 
-Lo hace el dueño de la cuenta (no se comparten contraseñas ni claves):
+- **Sitio:** https://riftgames.pages.dev (RIFTFALL en `/`, Rift Cargo en `/cargo/`).
+- **Cloudflare:** proyecto Pages `riftgames` y base D1 `rift` (región este de EE. UU.), en la cuenta del dueño.
+- **Dirección vieja:** riftfall-chi.vercel.app y riftfall.duckdns.org mandan a la nueva con todo lo que el
+  jugador tenía guardado en ese navegador (`src/rift/move.js`). Los rankings de Vercel se copiaron a D1.
 
-1. Crear la cuenta gratis en dash.cloudflare.com.
-2. **Storage & Databases → D1 → Create**, nombre `rift`. Pasar el **Database ID** (no es secreto) para
-   ponerlo en `wrangler.toml`.
-3. **Workers & Pages → Create → Pages → Connect to Git**: repo `Rawrift/Juego`, rama
-   `claude/riftfall-crypto-game`, comando `npm run build`, salida `dist`, carpeta raíz `riftfall`,
-   variable `NODE_VERSION=22`.
-4. Cada push a la rama publica solo. Con `wrangler.toml` en el repo, la base queda enlazada como `DB`.
+## Publicar una versión nueva
 
-Después, `src/rift/move.js` (`CANONICAL`) apunta a la dirección nueva y la vieja (Vercel/duckdns) manda
-a los jugadores ahí con todo lo que tenían guardado.
+El proyecto se publica subiendo la carpeta compilada (no está conectado a GitHub). Desde `riftfall/`:
+
+```bash
+npx wrangler login --device        # el dueño abre el link y toca "Autorizar" (no comparte contraseñas)
+npm run build
+npx wrangler pages deploy --project-name riftgames --branch main
+npx wrangler logout                # al terminar, se cierra el acceso
+```
+
+`wrangler.toml` enlaza la base D1 como `DB`. Para consultar la base:
+`npx wrangler d1 execute rift --remote --command "SELECT COUNT(*) FROM players"`.
+
+Si más adelante se prefiere que cada push publique solo, hay que crear en el panel de Cloudflare un
+proyecto Pages conectado al repositorio (Workers & Pages → Create → Pages → Connect to Git) con la carpeta
+raíz `riftfall`, el comando `npm run build` y la salida `dist`.
