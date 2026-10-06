@@ -794,7 +794,7 @@ async function showGameOver(local, victory) {
     const res = recordLocalRun(app.progress, local, { daily: !!daily || !!duel });
     // Portales: duplicar los Núcleos de la partida viendo un anuncio (opcional, una vez).
     const dbl = $('#doubleBtn');
-    dbl.classList.toggle('hidden', !(PORTAL && portal.active && res.cores > 0));
+    dbl.classList.toggle('hidden', !(PORTAL && portal.ads && res.cores > 0));
     dbl.disabled = false;
     dbl.onclick = async () => {
       dbl.disabled = true;
@@ -1066,7 +1066,7 @@ function frame(now) {
     s.events.length = 0;
     if (s.phase === 'choice' && !game.choiceOpen) openChoice();
     if (s.phase === 'choice' && game.autopilot && game.choiceOpen) pickChoice(botChoice(s));
-    if (s.phase === 'dead' && PORTAL && portal.active && !game.reviveOffered && s.tick < MAX_TICKS) offerRevive();
+    if (s.phase === 'dead' && PORTAL && portal.ads && !game.reviveOffered && s.tick < MAX_TICKS) offerRevive();
     else if (s.phase === 'dead' || s.phase === 'victory') endRun();
     audio.setIntensity(s.boss && !s.boss.dead ? 1 : 0.5 + Math.min(0.45, s.tick / FINAL_TICK));
     updateHud(s);
@@ -1250,6 +1250,7 @@ if (import.meta.env.DEV || import.meta.env.MODE === 'e2e' || import.meta.env.VIT
   app,
   audio,
   renderer,
+  drawShipPreview,
   gov,
   startRun,
   pickChoice,

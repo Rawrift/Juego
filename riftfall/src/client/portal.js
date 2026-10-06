@@ -2,6 +2,8 @@
 // portal (entre partidas y recompensados, siempre opcionales). Se compila con `npm run build:portal`.
 
 export const PORTAL = import.meta.env.MODE === 'portal';
+// En el Basic Launch de CrazyGames no se permiten anuncios: se activan con VITE_PORTAL_ADS=1 para el Full Launch.
+const ADS = import.meta.env.VITE_PORTAL_ADS === '1';
 const SDK_URL = 'https://sdk.crazygames.com/crazygames-sdk-v3.js';
 
 let sdk = null;
@@ -64,6 +66,10 @@ export const portal = {
   get active() {
     return !!sdk;
   },
+  /** Hay anuncios: revivir, x2 Núcleos y el anuncio entre partidas. */
+  get ads() {
+    return !!sdk && ADS;
+  },
   loadingStart: () => call(() => sdk?.game.loadingStart()),
   loadingStop: () => call(() => sdk?.game.loadingStop()),
   gameplayStart: () => call(() => sdk?.game.gameplayStart()),
@@ -80,7 +86,7 @@ export const portal = {
    * sonido. Resuelve true solo si el anuncio se vio completo (la recompensa se da solo así).
    */
   ad(type, { onStart = () => {}, onEnd = () => {} } = {}) {
-    if (!sdk) return Promise.resolve(false);
+    if (!sdk || !ADS) return Promise.resolve(false);
     return new Promise((resolve) => {
       let started = false;
       const done = (ok) => {

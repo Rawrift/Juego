@@ -471,7 +471,7 @@ test('versión para portales (CrazyGames): sin cripto, revivir y x2 Núcleos con
   const { execSync } = await import('node:child_process');
   // Copia de prueba del build del portal con el gancho de pruebas (el build real no lo tiene).
   // Se sube como un único index.html (CrazyGames no acepta ZIP).
-  execSync('npx vite build --mode portal --outDir dist-portal-e2e', { stdio: 'ignore', env: { ...process.env, VITE_E2E_HOOK: '1' } });
+  execSync('npx vite build --mode portal --outDir dist-portal-e2e', { stdio: 'ignore', env: { ...process.env, VITE_E2E_HOOK: '1', VITE_PORTAL_ADS: '1' } });
   execSync('node scripts/inline-portal.mjs dist-portal-e2e dist-portal-e2e/single', { stdio: 'ignore' });
   const DIST = path.resolve('dist-portal-e2e/single');
   const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.woff': 'font/woff', '.png': 'image/png' };
@@ -849,6 +849,58 @@ test('wallet: MetaMask se conecta sin recargar la página, sigue conectada al re
     // Un cambio de cuenta de verdad sí recarga.
     await page.evaluate(() => window.__mmEmit('accountsChanged', ['0x2222222222222222222222222222222222222222']));
     await expect.poll(loads).toBe(3);
+    expect(errors).toEqual([]);
+  } finally {
+    await ctx.close();
+    site.close();
+  }
+});
+
+test('portal en Basic Launch: sin anuncios (ni revivir, ni x2, ni entre partidas)', async ({ browser }) => {
+  const { execSync } = await import('node:child_process');
+  execSync('npx vite build --mode portal --outDir dist-portal-e2e-basic', { stdio: 'ignore', env: { ...process.env, VITE_E2E_HOOK: '1', VITE_PORTAL_ADS: '' } });
+  execSync('node scripts/inline-portal.mjs dist-portal-e2e-basic dist-portal-e2e-basic/single', { stdio: 'ignore' });
+  const html = fs.readFileSync('dist-portal-e2e-basic/single/index.html');
+  const site = http.createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end(html);
+  });
+  await new Promise((r) => site.listen(4183, '127.0.0.1', r));
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: 'en-US' });
+  await ctx.route('https://sdk.crazygames.com/**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'text/javascript',
+      body: `window.__cg = [];
+        window.CrazyGames = { SDK: {
+          init: async () => {},
+          game: { loadingStart() {}, loadingStop() {}, gameplayStart() { __cg.push('gameplayStart'); }, gameplayStop() {}, happytime() {}, settings: { muteAudio: false }, addSettingsChangeListener() {} },
+          ad: { requestAd: (type, cb) => { __cg.push('ad:' + type); cb.adError({ code: 'other' }); } },
+          data: { getItem: () => null, setItem() {}, removeItem() {}, clear() {} }
+        } };`
+    })
+  );
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  try {
+    await page.goto('http://127.0.0.1:4183/');
+    // Jugador nuevo: entra directo a la partida.
+    await expect(page.locator('#hud')).toBeVisible();
+    await page.evaluate(() => window.__RIFTFALL__.fastForward(10));
+    await page.evaluate(() => {
+      const p = window.__RIFTFALL__.game.sim.player;
+      p.invuln = 0;
+      p.hp = -1;
+    });
+    await expect(page.locator('#gameover')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('#revive')).toBeHidden();
+    await expect(page.locator('#doubleBtn')).toBeHidden();
+    await page.click('#againBtn');
+    await expect(page.locator('#hud')).toBeVisible();
+    const calls = await page.evaluate(() => window.__cg);
+    expect(calls.filter((c) => c.startsWith('ad:'))).toEqual([]);
+    expect(calls.filter((c) => c === 'gameplayStart').length).toBeGreaterThanOrEqual(2);
     expect(errors).toEqual([]);
   } finally {
     await ctx.close();

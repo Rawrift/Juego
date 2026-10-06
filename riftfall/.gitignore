@@ -13,4 +13,5 @@ server/data/
 deployments/31337.json
 dist-portal/
 dist-portal-e2e/
+dist-portal-e2e-basic/
 dist-crazygames/

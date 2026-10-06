@@ -29,7 +29,8 @@
     "deploy:base-testnet": "hardhat run scripts/deploy.cjs --network baseSepolia",
     "deploy:base": "hardhat run scripts/deploy.cjs --network base",
     "build:portal": "vite build --mode portal --outDir dist-portal",
-    "build:crazygames": "npm run build:portal && node scripts/inline-portal.mjs"
+    "build:crazygames": "npm run build:portal && node scripts/inline-portal.mjs",
+    "build:crazygames:full": "VITE_PORTAL_ADS=1 npm run build:crazygames"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^6.1.2",
