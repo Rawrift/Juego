@@ -2,6 +2,7 @@
 // vuelve a jugar cada partida antes de anotarla. En los portales no existe (no hay servidor propio).
 
 import { PORTAL } from './portal.js';
+import { authHeaders } from '../rift/account.js';
 
 const PID_KEY = 'riftfall.pid';
 export const WORLD = !PORTAL;
@@ -28,6 +29,9 @@ export async function myPublicId() {
   return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('').slice(0, 12);
 }
 
+/** Lo que dice la partida de sí misma (el servidor lo controla y lo audita volviéndola a jugar). */
+const pickSummary = (s) => (s ? { score: s.score, timeSec: s.timeSec, kills: s.kills, victory: !!s.victory } : null);
+
 /** Nombre que usa el servidor si no elegiste uno. */
 export function defaultName() {
   return `Piloto ${String(playerId() ?? '????').slice(0, 4).toUpperCase()}`;
@@ -41,13 +45,14 @@ export async function fetchWorldDaily(n) {
 }
 
 /** Manda la partida (sus entradas) para que el servidor la verifique y la anote. */
-export async function submitWorldDaily({ n, name, rec }) {
+export async function submitWorldDaily({ n, name, rec, summary = null }) {
   const pid = playerId();
   if (!pid) throw new Error('sin almacenamiento');
+  // Con Cuenta Rift la partida queda en tu cuenta (en cualquier dispositivo).
   const res = await fetch('/api/daily', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ n, pid, name, inputs: rec.inputs, choices: rec.choices })
+    headers: { 'content-type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ n, pid, name, inputs: rec.inputs, choices: rec.choices, summary: pickSummary(summary) })
   });
   const data = await res.json().catch(() => null);
   if (!res.ok || !data?.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
@@ -65,13 +70,14 @@ export async function fetchRunBoard() {
 }
 
 /** Manda una partida normal (con su nave, talentos, piezas y Rift) para que el servidor la re-juegue. */
-export async function submitRunBoard({ name, run, rec }) {
+export async function submitRunBoard({ name, run, rec, summary = null }) {
   const pid = playerId();
   if (!pid) throw new Error('sin almacenamiento');
   const res = await fetch('/api/ranking', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...authHeaders() },
     body: JSON.stringify({
+      summary: pickSummary(summary),
       pid,
       name,
       seed: run.seed,

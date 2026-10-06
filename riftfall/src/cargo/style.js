@@ -234,7 +234,8 @@ export async function buyStyle(item, method, onStage = () => {}) {
 
 // ---------- Llevar la partida al navegador de MetaMask (celular) ----------
 
-const CARRY = ['riftcargo.save', 'riftcargo.style', 'riftcargo.lang', 'riftfall.founder'];
+// La sesión de la Cuenta Rift también: en MetaMask entrás a la misma cuenta.
+const CARRY = ['riftcargo.save', 'riftcargo.style', 'riftcargo.lang', 'riftfall.founder', 'rift.session'];
 
 /** Link que abre Rift Cargo dentro de la app de MetaMask con la partida y los estéticos. */
 export async function metamaskLink() {
@@ -280,6 +281,7 @@ export function applyCargoTransfer(data) {
   const f = parse(data['riftfall.founder']);
   if (f && tierRank(f.tier) > tierRank(parse(read('riftfall.founder'))?.tier)) write('riftfall.founder', data['riftfall.founder']);
   if (data['riftcargo.lang'] && read('riftcargo.lang') == null) write('riftcargo.lang', data['riftcargo.lang']);
+  if (/^[A-Za-z0-9_-]{20,100}$/.test(data['rift.session'] ?? '')) write('rift.session', data['rift.session']);
 }
 
 /** Si la página se abrió con datos en el link, los aplica y limpia la dirección. */

@@ -69,6 +69,8 @@ export function saveProgress(p) {
   } catch {
     /* modo privado */
   }
+  // Avisa que cambió (la Cuenta Rift lo sube a la nube unos segundos después).
+  if (typeof dispatchEvent === 'function') dispatchEvent(new Event('riftfall:progress'));
 }
 
 const isBlank = (p) => !p || (!(p.runs > 0) && !(p.lifetimeCores > 0) && !(p.cores > 0));

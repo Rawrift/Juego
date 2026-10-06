@@ -48,9 +48,14 @@ import {
   canUpgradeAny,
   recordChallenge,
   equipLocalPart,
-  buyLocalCrate
+  buyLocalCrate,
+  mergeProgress
 } from './progress.js';
-import { receiveTransfer, metamaskLink } from './transfer.js';
+import { receiveTransfer, metamaskLink, applyTransfer } from './transfer.js';
+import { moveIfOldHost, receiveMove } from '../rift/move.js';
+import { applyCargoTransfer } from '../cargo/style.js';
+import { start as startAccount, createSync, onAccount, account as rgAccount, setName as setAccountName, syncPurchases } from '../rift/account.js';
+import { createAccountUI } from '../rift/account-ui.js';
 import { dailyNumber, dailySeed, DAILY_RULES, msToNextDaily } from '../shared/daily.js';
 import { DUEL_RULES, decodeDuel, duelUrl, cleanName } from '../shared/duel.js';
 import { WORLD, fetchWorldDaily, submitWorldDaily, myPublicId, defaultName, fetchRunBoard, submitRunBoard } from './world.js';
@@ -236,6 +241,8 @@ function renamePilot() {
   } catch {
     /* sin almacenamiento */
   }
+  // El nombre es de la Cuenta Rift: se ve igual en los dos juegos y en todos los dispositivos.
+  setAccountName(cleanName(v)).catch(() => {});
   renderWorld();
   renderRunBoard();
 }
@@ -295,7 +302,7 @@ function submitRunToWorld(local, rec) {
   if (sent && local.score <= sent.best && !nameChanged) return;
   const row = el('li', { class: 'world-row' }, [el('span', {}, t('rk.checking')), el('b', {}, '')]);
   $('#goRewardList').append(row);
-  submitRunBoard({ name: pilotName(), run: game.run, rec })
+  submitRunBoard({ name: pilotName(), run: game.run, rec, summary: local })
     .then((res) => {
       try {
         localStorage.setItem(RANK_SENT, JSON.stringify({ day: dailyNumber(), best: Math.max(res.score, sent?.best ?? 0), name: pilotName() }));
@@ -314,11 +321,11 @@ function submitRunToWorld(local, rec) {
 }
 
 /** Fin de un desafío: la partida va al ranking mundial y la fila del resultado se actualiza sola. */
-function submitDailyToWorld(n, rec) {
+function submitDailyToWorld(n, rec, summary) {
   if (!WORLD || app.online) return;
   const row = el('li', { class: 'world-row' }, [el('span', {}, t('wd.checking')), el('b', {}, '')]);
   $('#goRewardList').append(row);
-  submitWorldDaily({ n, name: pilotName(), rec })
+  submitWorldDaily({ n, name: pilotName(), rec, summary })
     .then((res) => {
       worldBoard = res.board;
       const text = res.rank
@@ -984,7 +991,7 @@ async function showGameOver(local, victory) {
     if (res.newBest && app.progress.runs > 1) rows.push([t('go.newBest'), fmtNum(local.score), '']);
     if (res.riftUnlocked) rows.push([`🔓 ${t('go.riftUnlocked', { n: res.riftUnlocked })}`, '', '']);
     showRows(rows);
-    if (worldRec) submitDailyToWorld(daily, worldRec);
+    if (worldRec) submitDailyToWorld(daily, worldRec, local);
     if (runRec) submitRunToWorld(local, runRec);
     maybeSuggestFounder(local);
     countUp($('#goTotal'), res.total);
@@ -1388,16 +1395,20 @@ async function boot() {
     if (!app.progress.runs) startRun('normal');
     return;
   }
+  // Dirección vieja del juego: se va a la nueva llevando todo lo guardado en este navegador.
+  if (await moveIfOldHost()) return;
   setupPwa();
   setupAnalytics();
-  // Progreso que llega en el link (por ejemplo, al abrir el juego dentro de MetaMask).
-  if (await receiveTransfer()) {
+  // Progreso que llega en el link (por ejemplo, al abrir el juego dentro de MetaMask o al mudarse).
+  const moved = await receiveMove({ applyRiftfall: (d) => applyTransfer(d), applyCargo: applyCargoTransfer });
+  if ((await receiveTransfer()) || moved) {
     app.progress = loadProgress();
     app.ship = loadShipChoice();
     readRiftChoice();
     setTimeout(() => toast(t('toast.transferred'), 'ok'), 400);
   }
   readIncomingDuel();
+  setupAccount();
   // Desde Rift Cargo se puede llegar directo al Pase Fundador (/?panel=founder).
   if (!PORTAL && new URLSearchParams(location.search).get('panel') === 'founder') setTimeout(() => panels.open('founder'), 300);
   newDemo();
@@ -1452,6 +1463,54 @@ async function boot() {
     refreshRunBoard();
   }
   updateMenu();
+}
+
+// --------------------------------------------------------------------- Cuenta Rift
+
+/** La cuenta guarda el progreso en la nube y lo trae en cualquier dispositivo (también en Rift Cargo). */
+let accountUI = null;
+function setupAccount() {
+  if (PORTAL) return;
+  accountUI = createAccountUI({ game: 'riftfall', lang: () => lang, toast });
+  $('#accountBtn').addEventListener('click', () => accountUI.open());
+  const sync = createSync('riftfall', {
+    get: () => loadProgress(),
+    merge: mergeProgress,
+    apply: (p) => {
+      saveProgress(p);
+      app.progress = loadProgress();
+      updateMenu();
+    }
+  });
+  addEventListener('riftfall:progress', () => sync.schedule());
+  const flush = () => sync.flush();
+  addEventListener('pagehide', flush);
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && flush());
+  onAccount(async (a) => {
+    renderAccountBtn();
+    // El ranking marca tu fila con el id de la cuenta.
+    worldMe = await myPublicId();
+    if (a?.player?.name) try { localStorage.setItem(NAME_KEY, a.player.name); } catch { /* sin almacenamiento */ }
+    renderRunBoard();
+  });
+  renderAccountBtn();
+  startAccount().then(async (a) => {
+    if (!a) return;
+    await sync.pull();
+    // Compras en la cuenta (Pase Fundador, estéticos) ↔ las de este dispositivo.
+    if (await syncPurchases()) applyCosmetics();
+    updateMenu();
+  });
+}
+
+function renderAccountBtn() {
+  const btn = $('#accountBtn');
+  if (!btn) return;
+  const a = rgAccount();
+  // Sin servidor de cuentas (por ejemplo, un sitio sin la nube) no se muestra.
+  btn.classList.toggle('hidden', PORTAL || !a);
+  btn.classList.toggle('guest', !a || a.player.guest);
+  btn.querySelector('b').textContent = a?.player?.name || (a ? t('acct.guest') : t('acct.title'));
 }
 
 boot();

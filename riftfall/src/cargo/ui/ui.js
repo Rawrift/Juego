@@ -15,6 +15,7 @@ import { morph } from './morph.js';
 import { LIVERY_IDS, TRAIL_IDS, LIVERIES, TRAILS, STYLE_ITEMS } from '../../shared/cargo-style.js';
 import { C, LIVERY, LIVERY_LOOKS, TRAIL_COLORS, hex } from '../render/palette.js';
 import * as style from '../style.js';
+import { account as rgAccount, claimPurchase, onAccount } from '../../rift/account.js';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const shipName = (s) => s.name;
@@ -557,10 +558,24 @@ export function createUI({ state, actions, isMap }) {
       <button class="btn primary wide" data-act="closeModal">${t('away.ok')}</button>`);
   }
 
+  function acctLine() {
+    const a = rgAccount();
+    if (!a) return t('menu.acctOffline');
+    return a.player.guest ? t('menu.acctGuest') : `${a.player.name || t('menu.acctSafe')} · ${t('menu.acctSafe')}`;
+  }
+  /** Punto dorado en el avatar mientras la cuenta es de invitado (falta protegerla). */
+  function renderAcct() {
+    const a = rgAccount();
+    root.querySelector('.profile')?.classList.toggle('guest', !!a?.player?.guest);
+  }
+  onAccount(renderAcct);
+  renderAcct();
+
   function toggleMenu() {
     const m = $('#menu', root);
     if (!m.hidden) return (m.hidden = true);
     m.innerHTML = `
+      ${rgAccount() ? `<button class="mi acct" data-act="account">${icon('user')}<span><b>${t('menu.account')}</b><small>${acctLine()}</small></span></button>` : ''}
       <small>${t('menu.lang')}</small>
       <div class="seg">${['es', 'en', 'pt'].map((l) => `<button class="seg-btn ${lang === l ? 'on' : ''}" data-act="lang" data-v="${l}">${l.toUpperCase()}</button>`).join('')}</div>
       <button class="mi" data-act="style">${icon('brush')}${t('menu.style')}</button>
@@ -736,6 +751,8 @@ export function createUI({ state, actions, isMap }) {
         renderStyle();
       });
       sty.busy = null;
+      // La compra queda también en la Cuenta Rift (en todos tus dispositivos).
+      claimPurchase(rec.tx).catch(() => {});
       applyLook();
       toast(`${icon('sparkle')}<span>${t('style.bought', { name: itemName(rec.item) })}</span>`, 'ok', 4200);
       actions.sound?.('level');
@@ -967,6 +984,10 @@ export function createUI({ state, actions, isMap }) {
         sty.open = false;
         closeModal();
         break;
+      case 'account':
+        $('#menu', root).hidden = true;
+        actions.openAccount?.();
+        break;
       case 'style':
         openStyle(v != null ? Number(v) : null);
         break;
@@ -1012,6 +1033,7 @@ export function createUI({ state, actions, isMap }) {
         el.disabled = true;
         style.verifyStylePayment(input?.value ?? '')
           .then((rec) => {
+            claimPurchase(rec.tx, { sign: false }).catch(() => {});
             toast(`${icon('check')}<span>${t('style.restored', { name: itemName(rec.item) })}</span>`, 'ok', 4200);
             applyLook();
           })

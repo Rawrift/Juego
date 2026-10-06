@@ -3,15 +3,14 @@
 // puntaje que figura es el que realmente salió de esa partida (nunca el que manda el navegador).
 // Todo vive en un solo archivo para gastar una sola escritura por partida que entra al ranking.
 
-import { createHash } from 'node:crypto';
 import { replayRun, SHIPS, RIFT_MAX, sanitizeTalents, sanitizeParts } from '../src/sim/index.js';
 import { dailyNumber } from '../src/shared/daily.js';
 import { cleanName } from '../src/shared/duel.js';
+import { publicId } from '../src/shared/public-id.js';
 import { defaultName } from './world-board.mjs';
 
 export const RUN_BOARD_SIZE = 50;
 
-const publicId = (pid) => createHash('sha256').update(`riftfall-player|${pid}`).digest('hex').slice(0, 12);
 const byRank = (a, b) => b.score - a.score || b.timeSec - a.timeSec || a.at - b.at;
 const emptyBoard = (day) => ({ day, today: [], all: [], updatedAt: 0 });
 
@@ -31,8 +30,13 @@ const rankOf = (list, id) => {
   return i >= 0 ? i + 1 : null;
 };
 
-/** `load(fresh)` devuelve el tablero (o null); `save(board)` lo guarda; `now()` da la hora. */
-export function createRunBoard({ load, save, now = () => Date.now() }) {
+/**
+ * `load(fresh)` devuelve el tablero (o null); `save(board)` lo guarda; `now()` da la hora.
+ * `verify(run)` decide el puntaje de la partida: por defecto la vuelve a jugar completa; donde el
+ * servidor no tiene tiempo de procesador para eso (plan gratis de Cloudflare) se usa un control
+ * rápido y la partida queda guardada para verificarla después.
+ */
+export function createRunBoard({ load, save, now = () => Date.now(), verify = replayRun }) {
   /** El tablero con "Hoy" vacío si ya cambió el día (UTC, igual que el Desafío). */
   const current = (b) => {
     const day = dailyNumber(now());
@@ -59,7 +63,7 @@ export function createRunBoard({ load, save, now = () => Date.now() }) {
       if (!Number.isInteger(rift) || rift < 0 || rift > RIFT_MAX) return { ok: false, error: 'rift' };
       const talents = sanitizeTalents(body?.talents);
       const parts = sanitizeParts(body?.parts);
-      const res = replayRun({ seed, ship, shipLevel, talents, rift, parts, inputs: body?.inputs, choices: body?.choices });
+      const res = await verify({ seed, ship, shipLevel, talents, rift, parts, inputs: body?.inputs, choices: body?.choices, claimed: body?.summary });
       if (!res.ok) return { ok: false, error: 'replay', detail: res.error };
       const s = res.summary;
       const entry = {
@@ -71,7 +75,8 @@ export function createRunBoard({ load, save, now = () => Date.now() }) {
         victory: !!s.victory,
         ship,
         rift,
-        at: now()
+        at: now(),
+        ...(res.pending ? { pending: true } : {})
       };
       const board = current(await load(true));
       const today = place(board.today, entry);

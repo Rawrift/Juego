@@ -544,3 +544,10 @@ button:disabled { cursor: default; }
   .sw-grid { grid-template-columns: repeat(3, 1fr); }
   .ship-row .sty-btn span { display: none; }
 }
+
+/* Cuenta Rift en el menú del perfil y punto dorado mientras es de invitado. */
+.mi.acct { height: auto; padding: 8px 10px; margin-bottom: 6px; border: 1px solid var(--line-strong); background: var(--s2); }
+.mi.acct > span { display: flex; flex-direction: column; text-align: left; }
+.mi.acct small { font-size: 11.5px; font-weight: 600; color: var(--ink2); }
+.profile.guest .avatar { position: relative; }
+.profile.guest .avatar::after { content: ''; position: absolute; top: -2px; right: -2px; width: 10px; height: 10px; border-radius: 50%; background: #ffc94d; box-shadow: 0 0 10px #ffc94d; border: 2px solid var(--card-solid); }

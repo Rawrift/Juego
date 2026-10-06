@@ -7,19 +7,67 @@ import { createStation } from './render/station.js';
 import { createMap } from './render/map.js';
 import { createUI } from './ui/ui.js';
 import { createAudio } from './audio.js';
-import { t } from './i18n.js';
+import { t, lang } from './i18n.js';
 import { load, save, clear } from './save.js';
-import { receiveCargoTransfer, owned, signText, setSign } from './style.js';
+import { receiveCargoTransfer, applyCargoTransfer, owned, signText, setSign } from './style.js';
+import { moveIfOldHost, receiveMove } from '../rift/move.js';
+import { applyTransfer } from '../client/transfer.js';
+import { start as startAccount, createSync, syncPurchases, isReloading } from '../rift/account.js';
+import { createAccountUI } from '../rift/account-ui.js';
 import { setStationSign } from './render/stationScene.js';
 import { step, acceptOffer, buyCargo, buyUpgrade, buyShip, setAuto, fastForward, newGame } from './sim/sim.js';
 import { OFFLINE_MAX } from './sim/data.js';
 
 await document.fonts.load('800 100px "Plus Jakarta Sans"').catch(() => {});
 
-// Si se llegó desde el link de MetaMask, primero se trae la partida y los estéticos.
+// Dirección vieja del juego: se va a la nueva llevando todo lo guardado en este navegador.
+if (await moveIfOldHost()) await new Promise(() => {});
+// Si se llegó desde el link de MetaMask (o de la mudanza), primero se trae la partida y los estéticos.
+await receiveMove({ applyRiftfall: (d) => applyTransfer(d), applyCargo: applyCargoTransfer });
 if (new URLSearchParams(location.search).has('rf')) await receiveCargoTransfer();
 
+// Cuenta Rift: antes de cargar la partida se trae la de la nube (si la de otro dispositivo avanzó
+// más, se juega esa). Sin servidor o sin conexión, se sigue con la del dispositivo.
+const SAVE_KEY = 'riftcargo.save';
+const readSave = () => {
+  try {
+    return JSON.parse(localStorage.getItem(SAVE_KEY) ?? 'null');
+  } catch {
+    return null;
+  }
+};
+const earned = (d) => d?.state?.stats?.earned ?? -1;
+/** Queda la partida que más ganó en total; si empatan, la más nueva. */
+const mergeSaves = (a, b) => (!a ? b : !b ? a : earned(b) > earned(a) || (earned(b) === earned(a) && (b.at ?? 0) > (a.at ?? 0)) ? b : a);
+let booted = false;
+/** Al recargar para jugar la partida de la nube, no hay que guardar encima la de memoria. */
+let reloading = false;
+const cloud = createSync('cargo', {
+  get: readSave,
+  merge: mergeSaves,
+  apply(d) {
+    // Durante el juego, si gana la partida de otro dispositivo, se recarga para jugar esa.
+    const mine = readSave();
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(d));
+    } catch {
+      /* sin almacenamiento */
+    }
+    if (booted && d !== mine && earned(d) > earned(mine)) {
+      reloading = true;
+      location.reload();
+    }
+  },
+  // Si dos dispositivos juegan a la vez, manda el que está jugando ahora (sin recargar en medio).
+  resolve: (local) => local,
+  delay: 60_000
+});
+const withTimeout = (p, ms) => Promise.race([p, new Promise((r) => setTimeout(() => r(null), ms))]);
+await withTimeout(startAccount().then((a) => (a ? cloud.pull().then(() => syncPurchases()) : null)), 3500);
+
 const { state, away } = load();
+// Desde acá, si la nube trae una partida que avanzó más, hay que recargar para jugarla.
+booted = true;
 // Estéticos: solo se muestra lo que el jugador tiene (compras y Pase Fundador).
 {
   const mine = owned();
@@ -118,6 +166,7 @@ const ui = createUI({
     langChanged: () => map?.relabel(),
     restyle: () => save(state),
     persist: () => save(state),
+    openAccount: () => accountUI.open(),
     setSign(text) {
       if (!setSign(text)) return false;
       setStationSign(signText());
@@ -145,6 +194,13 @@ function updateOffset() {
 window.addEventListener('resize', updateOffset);
 updateOffset();
 
+const accountUI = createAccountUI({
+  game: 'cargo',
+  lang: () => lang,
+  toast: (msg, kind) => ui.toast(`<span>${msg.replace(/[<>&]/g, '')}</span>`, kind === 'err' ? 'err' : 'ok', 4200),
+  onChange: () => ui.renderAll(true)
+});
+
 let saveT = 0;
 stage.onFrame((dt, now, raw) => {
   step(state, raw * speed);
@@ -155,18 +211,21 @@ stage.onFrame((dt, now, raw) => {
   if (view === 'station') station.update(anim, now);
   else map.update(anim, now);
   saveT += dt;
-  if (saveT > 5) {
+  if (saveT > 5 && !reloading && !isReloading()) {
     saveT = 0;
     save(state);
+    cloud.schedule();
   }
 });
-const persist = () => save(state);
+const persist = () => reloading || isReloading() || save(state);
 // Con la pestaña escondida el navegador frena el juego: al volver se simula el tiempo que pasó.
 let hiddenAt = 0;
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') {
     hiddenAt = Date.now();
+    if (reloading || isReloading()) return;
     persist();
+    cloud.flush();
     return;
   }
   const gone = hiddenAt ? (Date.now() - hiddenAt) / 1000 : 0;
@@ -177,7 +236,11 @@ document.addEventListener('visibilitychange', () => {
     if (gone > 60) ui.showAway(sum);
   }
 });
-window.addEventListener('pagehide', persist);
+window.addEventListener('pagehide', () => {
+  if (reloading || isReloading()) return;
+  persist();
+  cloud.flush();
+});
 
 ui.renderAll(true);
 stage.start();

@@ -24,12 +24,16 @@ const KEYS = [
 ];
 
 /** Empaqueta los datos de este navegador en un texto corto para el link. */
-export async function packTransfer(storage = localStorage) {
+export async function packTransfer(storage = localStorage, { session = false } = {}) {
   const data = {};
   for (const k of KEYS) {
     const v = storage.getItem(k);
     if (v != null) data[k.slice('riftfall.'.length)] = v;
   }
+  // La sesión de la Cuenta Rift viaja solo al navegador de MetaMask (es tu mismo celular), nunca en
+  // el link para compartir: así ahí entrás a la misma cuenta sin volver a identificarte.
+  const token = session ? storage.getItem('rift.session') : null;
+  if (token) data.session = token;
   return packData(data);
 }
 
@@ -57,6 +61,7 @@ export function applyTransfer(data, storage = localStorage) {
     try { theirs = JSON.parse(data.founder); } catch { theirs = null; }
     if (theirs && tierRank(theirs.tier) >= tierRank(mine?.tier)) set('founder', data.founder);
   }
+  if (/^[A-Za-z0-9_-]{20,100}$/.test(data.session ?? '')) storage.setItem('rift.session', data.session);
   for (const k of ['name', 'skin', 'ship', 'rift', 'tutorial', 'lang', 'muted', 'gfx']) {
     if (data[k] != null && get(k) == null) set(k, data[k]);
   }
@@ -83,7 +88,7 @@ export async function receiveTransfer() {
 export async function metamaskLink() {
   let pack = '';
   try {
-    pack = await packTransfer();
+    pack = await packTransfer(localStorage, { session: true });
   } catch {
     pack = '';
   }

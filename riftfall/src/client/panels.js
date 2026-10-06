@@ -20,6 +20,7 @@ import { loadFounder, founderRank, buyFounder, verifyPayment, bnbPrice, currentS
 import { explainError } from './wallet.js';
 import { injected } from './injected.js';
 import { metamaskLink, continueLink } from './transfer.js';
+import { claimPurchase } from '../rift/account.js';
 import { WORLD, myPublicId, fetchRunBoard, fetchWorldDaily } from './world.js';
 import { dailyNumber } from '../shared/daily.js';
 import { $, el, toast, fmtTime, fmtNum, shortAddr, fmtRift, brandText } from './dom.js';
@@ -308,6 +309,8 @@ export function createPanels(app) {
                 usdt.disabled = bnb.disabled = true;
                 try {
                   const res = await buyFounder(tier.id, method, (stage) => (btn.textContent = t(`f.stage.${stage}`)));
+                  // El pase queda también en la Cuenta Rift (en todos tus dispositivos y en Rift Cargo).
+                  claimPurchase(res.tx).catch(() => {});
                   app.applyCosmetics();
                   app.audio?.play?.('levelup');
                   toast(t('f.verified', { tier: t(`f.tier.${res.tier}`) }), 'ok');
@@ -334,6 +337,7 @@ export function createPanels(app) {
           check.disabled = true;
           try {
             const res = await verifyPayment(input.value);
+            claimPurchase(res.tx, { sign: false }).catch(() => {});
             app.applyCosmetics();
             toast(t('f.verified', { tier: t(`f.tier.${res.tier}`) }), 'ok');
             open('founder');

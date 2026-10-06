@@ -43,6 +43,13 @@ En `/cargo/` del mismo sitio está **Rift Cargo**: una empresa de transporte esp
 control (pedidos, mercado, flota, drones de carga y planetas que se mueven). Detalles en
 [`docs/RIFT-CARGO.md`](docs/RIFT-CARGO.md). En desarrollo se abre en `http://localhost:5173/cargo/`.
 
+## Cuenta Rift (una cuenta para los dos juegos)
+
+Login con **huella / Face ID** (passkey) o **wallet** (firma gratis), sin contraseñas. El progreso de RIFTFALL y
+de Rift Cargo, el nombre, los rankings y las compras (Pase Fundador, estéticos) quedan en la nube y se ven igual
+en cualquier dispositivo. Corre en **Cloudflare Pages + D1** (plan gratis): `functions/` y `cloud/`. Detalles,
+límites del plan gratis y cómo ponerlo en marcha en [`docs/CUENTA-RIFT.md`](docs/CUENTA-RIFT.md).
+
 ## Ranking compartido y progreso entre navegadores
 
 - **Ranking de hoy / histórico** (`api/ranking.js` + `server/run-board.mjs`): cada partida normal que mejora tu
