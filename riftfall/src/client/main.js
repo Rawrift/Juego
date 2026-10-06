@@ -1408,7 +1408,6 @@ async function boot() {
     setTimeout(() => toast(t('toast.transferred'), 'ok'), 400);
   }
   readIncomingDuel();
-  setupAccount();
   // Desde Rift Cargo se puede llegar directo al Pase Fundador (/?panel=founder).
   if (!PORTAL && new URLSearchParams(location.search).get('panel') === 'founder') setTimeout(() => panels.open('founder'), 300);
   newDemo();
@@ -1458,7 +1457,9 @@ async function boot() {
     }
   }
   // El ranking mundial es de la web publicada (función /api/daily); con servidor propio el desafío usa el suyo.
+  // La Cuenta Rift también es de la web publicada (con servidor propio, la cuenta es la de ese servidor).
   if (!app.online) {
+    setupAccount();
     refreshWorld();
     refreshRunBoard();
   }

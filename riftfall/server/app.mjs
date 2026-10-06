@@ -15,6 +15,8 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { verifyMessage, getAddress, formatEther } from 'ethers';
 import { openDb } from './db.mjs';
+import { createApi as createRiftApi } from '../cloud/api.mjs';
+import { createD1 } from '../cloud/d1-node.mjs';
 import { createReplayPool } from './replay-pool.mjs';
 import { initChain } from './chain.mjs';
 import { MISSIONS, dayKey, previousDayKey, streakBonus, freshDaily, applyRunToDaily, missionView } from './economy.mjs';
@@ -92,6 +94,8 @@ export async function createApp(options = {}) {
 
   const db = openDb(cfg.dataDir);
   const D = db.data;
+  // Cuenta Rift (la misma que corre en Cloudflare), con SQLite en la carpeta de datos.
+  const rift = { api: createRiftApi(), env: { DB: createD1(path.join(cfg.dataDir, 'rift.sqlite')) } };
   const pool = createReplayPool(cfg.replayWorkers);
   let chain = null;
   try {
@@ -816,10 +820,23 @@ export async function createApp(options = {}) {
     fs.createReadStream(file).pipe(res);
   }
 
+  async function riftRoute(req, res) {
+    const chunks = [];
+    for await (const c of req) chunks.push(c);
+    const url = new URL(req.url, `http://${req.headers.host ?? 'localhost'}`);
+    const r = await rift.api.handle(
+      new Request(url, { method: req.method, headers: req.headers, body: ['GET', 'HEAD'].includes(req.method) ? undefined : Buffer.concat(chunks) }),
+      rift.env
+    );
+    res.writeHead(r.status, Object.fromEntries(r.headers));
+    res.end(Buffer.from(await r.arrayBuffer()));
+  }
+
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
     const ip = req.socket.remoteAddress ?? '?';
     if (!url.pathname.startsWith('/api/')) return serveStatic(req, res, url);
+    if (url.pathname.startsWith('/api/rift/')) return riftRoute(req, res);
     const handler = routes[`${req.method} ${url.pathname}`];
     res.setHeader('content-type', 'application/json; charset=utf-8');
     res.setHeader('cache-control', 'no-store');
