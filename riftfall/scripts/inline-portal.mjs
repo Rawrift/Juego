@@ -12,6 +12,8 @@ const assets = path.join(SRC, 'assets');
 
 let html = fs.readFileSync(path.join(SRC, 'index.html'), 'utf8');
 html = html.replace(/\s*<link rel="(manifest|apple-touch-icon)"[^>]*>/g, '');
+// La vista previa para compartir apunta a la web del juego: en el portal no va (sin enlaces a otros sitios).
+html = html.replace(/\s*<!-- Vista previa[^>]*-->/, '').replace(/\s*<meta (property="og:|name="twitter:)[^>]*>/g, '');
 
 const font = (file) => `url(data:font/woff2;base64,${fs.readFileSync(path.join(assets, file)).toString('base64')})`;
 

@@ -978,3 +978,58 @@ test('nave NFT elegida sin wallet conectada: el menú lo avisa, al jugar se cone
     site.close();
   }
 });
+
+test('ranking mundial del desafío: la partida se verifica en el servidor, aparece en el menú y se puede cambiar el nombre', async ({ browser }) => {
+  const { createDailyBoard } = await import('../../server/world-board.mjs');
+  const store = new Map();
+  let posts = 0;
+  const board = createDailyBoard({ load: async (n) => store.get(n) ?? null, save: async (n, b) => store.set(n, structuredClone(b)) });
+  const site = await staticSite(4185);
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'es-ES' });
+  // La función /api/daily de Vercel, con el mismo código y un almacenamiento en memoria.
+  await ctx.route('**/api/daily**', async (route) => {
+    const req = route.request();
+    if (req.method() === 'POST') {
+      posts++;
+      const res = await board.submit(JSON.parse(req.postData()));
+      return route.fulfill({ status: res.ok ? 200 : 400, contentType: 'application/json', body: JSON.stringify(res) });
+    }
+    const data = await board.get(new URL(req.url()).searchParams.get('n'));
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(data) });
+  });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('dialog', (d) => d.accept('Rodri'));
+  try {
+    await page.goto('http://127.0.0.1:4185/');
+    await expect(page.locator('#dcWorld')).toBeVisible();
+    await expect(page.locator('#wdYou')).toContainText('sé el primero');
+
+    await page.click('#dcPlay');
+    await expect(page.locator('#hud')).toBeVisible();
+    await page.evaluate(() => window.__RIFTFALL__.fastForward(25));
+    await page.evaluate(() => {
+      window.__RIFTFALL__.setPaused(true);
+      document.getElementById('quitBtn').click();
+    });
+    await expect(page.locator('#gameover')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('#goRewardList')).toContainText('Puesto #1 del mundo hoy', { timeout: 20_000 });
+    expect(posts).toBe(1);
+    // El puntaje anotado es el que calculó el servidor al re-jugar, igual al de la partida.
+    const shown = Number((await page.locator('#goStats div:last-child b').textContent()).replace(/\D/g, ''));
+    const [entry] = [...store.values()][0].entries;
+    expect(entry.score).toBe(shown);
+
+    await page.click('#menuBtn');
+    await expect(page.locator('#wdList li')).toHaveCount(1);
+    await expect(page.locator('#wdList li.me em')).toHaveText(shown.toLocaleString('es-ES'));
+    await expect(page.locator('#wdYou')).toContainText('#1');
+    await page.click('#wdRename');
+    await expect(page.locator('#wdRename')).toHaveText('✎ Rodri');
+    expect(errors).toEqual([]);
+  } finally {
+    await ctx.close();
+    site.close();
+  }
+});

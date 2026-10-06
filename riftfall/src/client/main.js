@@ -52,6 +52,7 @@ import {
 } from './progress.js';
 import { dailyNumber, dailySeed, DAILY_RULES, msToNextDaily } from '../shared/daily.js';
 import { DUEL_RULES, decodeDuel, duelUrl, cleanName } from '../shared/duel.js';
+import { WORLD, fetchWorldDaily, submitWorldDaily, myPublicId, defaultName } from './world.js';
 import { shareResult } from './share.js';
 
 applyStatic();
@@ -187,6 +188,77 @@ function updateDailyCard() {
   }
 }
 $('#dcPlay').addEventListener('click', () => startRun('daily'));
+
+// --------------------------------------------------------------------- Ranking mundial del desafío
+
+const WORLD_MAX = 50;
+let worldBoard = null;
+let worldMe = null;
+
+function renderWorld() {
+  const box = $('#dcWorld');
+  const ok = WORLD && worldBoard && worldBoard.n === dailyNumber();
+  box.classList.toggle('hidden', !ok);
+  if (!ok) return;
+  $('#wdRename').textContent = t('wd.as', { name: pilotName() || defaultName() });
+  const entries = worldBoard.entries;
+  const mine = entries.findIndex((e) => e.id === worldMe);
+  const shown = entries.slice(0, 5);
+  $('#wdList').replaceChildren(
+    ...shown.map((e, i) =>
+      el('li', { class: entries.indexOf(e) === mine ? 'me' : '' }, [el('span', {}, `#${i + 1}`), el('b', {}, e.name), el('em', {}, fmtNum(e.score))])
+    )
+  );
+  const you = $('#wdYou');
+  if (!entries.length) you.textContent = t('wd.none');
+  else if (mine >= 0) you.innerHTML = t('wd.you', { n: mine + 1 });
+  else if (entries.length >= WORLD_MAX) you.innerHTML = t('wd.out', { max: WORLD_MAX, score: fmtNum(entries[entries.length - 1].score) });
+  else you.textContent = '';
+}
+
+async function refreshWorld() {
+  if (!WORLD || app.online) return;
+  try {
+    worldMe ??= await myPublicId();
+    worldBoard = await fetchWorldDaily(dailyNumber());
+  } catch {
+    worldBoard = null;
+  }
+  renderWorld();
+}
+
+$('#wdRename').addEventListener('click', () => {
+  const v = prompt(t('wd.prompt'), pilotName());
+  if (v === null) return;
+  try {
+    localStorage.setItem(NAME_KEY, cleanName(v));
+  } catch {
+    /* sin almacenamiento */
+  }
+  renderWorld();
+});
+
+/** Fin de un desafío: la partida va al ranking mundial y la fila del resultado se actualiza sola. */
+function submitDailyToWorld(n, rec) {
+  if (!WORLD || app.online) return;
+  const row = el('li', { class: 'world-row' }, [el('span', {}, t('wd.checking')), el('b', {}, '')]);
+  $('#goRewardList').append(row);
+  submitWorldDaily({ n, name: pilotName(), rec })
+    .then((res) => {
+      worldBoard = res.board;
+      const text = res.rank
+        ? res.best > res.score
+          ? t('wd.kept', { n: res.rank })
+          : t('wd.rank', { n: res.rank })
+        : t('wd.outRow', { max: WORLD_MAX, score: fmtNum(res.cutoff) });
+      row.firstChild.textContent = text;
+      if (res.rank && res.best <= res.score) audio.play('levelup');
+      renderWorld();
+    })
+    .catch(() => {
+      row.firstChild.textContent = t('wd.err');
+    });
+}
 
 // --------------------------------------------------------------------- Duelo con amigos
 
@@ -412,6 +484,7 @@ function updateMenu() {
   updateRiftPick();
   updateDailyCard();
   updateDuelInvite();
+  renderWorld();
   const unit = pl.online ? '◆' : '✦';
   $('#missionList').replaceChildren(
     ...pl.missions.map((m) =>
@@ -824,12 +897,14 @@ async function showGameOver(local, victory) {
       afterRewards();
     };
     const rows = [...challengeRow(), [t('go.rowCores'), res.cores, '✦']];
+    const worldRec = daily && !PORTAL ? game.rec.finish() : null;
     if (res.streak) rows.push([t('go.rowStreak'), res.streak, '✦']);
     for (const m of res.missions) rows.push([t('go.rowMission', { name: tx.missionName(m.id, m.name) }), m.reward, '✦']);
     rows.push(...crateRows(res.crates));
     if (res.newBest && app.progress.runs > 1) rows.push([t('go.newBest'), fmtNum(local.score), '']);
     if (res.riftUnlocked) rows.push([`🔓 ${t('go.riftUnlocked', { n: res.riftUnlocked })}`, '', '']);
     showRows(rows);
+    if (worldRec) submitDailyToWorld(daily, worldRec);
     countUp($('#goTotal'), res.total);
     if (res.total > 0) setTimeout(() => audio.play('shard'), 400);
     afterRewards();
@@ -1250,6 +1325,8 @@ async function boot() {
       setNet(t('net.practice'), 'warn');
     }
   }
+  // El ranking mundial es de la web publicada (función /api/daily); con servidor propio el desafío usa el suyo.
+  if (!app.online) refreshWorld();
   updateMenu();
 }
 

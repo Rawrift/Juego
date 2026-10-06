@@ -6,6 +6,18 @@
   <meta name="theme-color" content="#05060f" />
   <meta name="description" content="RIFTFALL — arcade survival game in your browser. Survive the Rift, defeat the Guardians and upgrade your pilot." />
   <title>RIFTFALL</title>
+  <!-- Vista previa al compartir el link (WhatsApp, Telegram, X, Facebook…). -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="RIFTFALL" />
+  <meta property="og:title" content="RIFTFALL · ¿Cuánto aguantás?" />
+  <meta property="og:description" content="Juego arcade de naves gratis en el navegador. Esquivá hordas, elegí mejoras y vencé al jefe del Rift. Retá a tus amigos." />
+  <meta property="og:url" content="https://riftfall.duckdns.org/" />
+  <meta property="og:image" content="https://riftfall.duckdns.org/og.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="RIFTFALL · ¿Cuánto aguantás?" />
+  <meta name="twitter:image" content="https://riftfall.duckdns.org/og.jpg" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -118,6 +130,11 @@
           <header><h3><span data-i18n="dc.title">DESAFÍO DEL DÍA</span> <b id="dcNum">#1</b></h3><span id="dcNext"></span></header>
           <p id="dcInfo"></p>
           <button class="btn gold small" id="dcPlay" data-i18n="dc.play">JUGAR DESAFÍO</button>
+          <div class="dc-world web-only hidden" id="dcWorld">
+            <div class="dc-world-head"><b data-i18n="wd.title">RANKING MUNDIAL DE HOY</b><button class="link-btn" id="wdRename" type="button"></button></div>
+            <ol id="wdList"></ol>
+            <p id="wdYou"></p>
+          </div>
         </section>
         <section class="card duel-card web-only" id="duelCard">
           <header><h3 data-i18n="du.title">DUELO CON AMIGOS</h3></header>
