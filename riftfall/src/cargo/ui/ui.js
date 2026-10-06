@@ -1,0 +1,859 @@
+// Interfaz de Rift Cargo con aspecto de panel de control: barra superior, tarjetas de indicadores,
+// panel de operaciones con pestañas, seguimiento de envío, tarjeta de la nave elegida, avisos y el
+// tutorial. Lee el estado de la simulación y llama a las acciones; no guarda estado propio del juego.
+
+import { icon } from '../icons.js';
+import { t, num, money, pct, dur, lang, setLang } from '../i18n.js';
+import { BOX, CARGO_IDS, PORTS, SHIPS, SHIP_IDS, UPGRADES, UPGRADE_IDS, LEVELS } from '../sim/data.js';
+import {
+  available, freeSpace, depotCap, stockTotal, incomingTotal, value, upgradeCost, estimate, buyQuote,
+  buyPrice, priceTrend, isIdle, incomePerMin, onTimeRate, levelProgress, unlockedPorts, fleetCap, shipById
+} from '../sim/sim.js';
+import { position, dist } from '../sim/orbit.js';
+import { shipThumb } from '../render/thumbs.js';
+import { morph } from './morph.js';
+
+const $ = (sel, el = document) => el.querySelector(sel);
+const shipName = (s) => s.name;
+const cargoName = (c) => t(`cargo.${c}`);
+const portName = (p) => t(`port.${p}`);
+const cg = (c, cls = '') => `<span class="cg cg-${c} ${cls}">${icon(c)}</span>`;
+const until = (at, cls = '') => `<b class="until ${cls}" data-until="${at}"></b>`;
+
+const STATUS_PILL = {
+  parked: 'idle', queued: 'wait', docking: 'loading', docked: 'loading', waitdrones: 'wait', working: 'loading',
+  liftoff: 'route', travel: 'route', portwork: 'port', landing: 'route'
+};
+
+export function statusText(s) {
+  if (s.status === 'travel') return t('status.travel', { to: portName(s.leg.target) });
+  if (s.status === 'portwork') return t('status.portwork', { port: portName(s.port) });
+  if (s.status === 'working' && s.work?.kind === 'unload') return t('status.unloading');
+  return t(`status.${s.status}`);
+}
+
+function pill(s) {
+  const kind = STATUS_PILL[s.status] ?? 'idle';
+  const label = s.status === 'parked' && !s.job ? t('pill.idle') : kind === 'loading' ? (s.work?.kind === 'unload' ? t('status.unloading') : t('pill.loading')) : t(`pill.${kind}`);
+  return `<span class="pill pill-${kind}">${label}</span>`;
+}
+
+/** Cuándo termina el tramo actual de una nave (en tiempo de simulación) o null. */
+function shipEta(s, state) {
+  if (s.status === 'travel') return s.leg.t0 + s.leg.dur;
+  if (['portwork', 'liftoff', 'docking', 'landing'].includes(s.status)) return state.t + (s.dur - s.timer);
+  return null;
+}
+
+export function createUI({ state, actions, isMap }) {
+  const root = document.createElement('div');
+  root.className = 'ui';
+  root.innerHTML = shell();
+  document.getElementById('app').appendChild(root);
+
+  const ui = {
+    tab: 'orders',
+    expanded: new Set(),
+    trackId: null,
+    detailId: null,
+    lastRender: 0,
+    sig: '',
+    sheet: false
+  };
+
+  // ---------- Esqueleto ----------
+  function shell() {
+    return `
+    <header class="topbar card">
+      <div class="brand"><span class="brand-cube">${logoSvg()}</span><span class="brand-name">Rift Cargo</span></div>
+      <div class="views seg" role="tablist">
+        <button class="seg-btn on" data-act="view" data-v="station">${icon('station')}<span data-t="view.station"></span></button>
+        <button class="seg-btn" data-act="view" data-v="map" id="mapToggle">${icon('orbit')}<span data-t="view.map"></span></button>
+      </div>
+      <button class="hub" data-act="tab" data-v="station">
+        <span class="hub-ic">${icon('station')}</span>
+        <span class="hub-txt"><b data-t="hub.name"></b><small id="hubSub"></small></span>
+        ${icon('right', 'hub-chev')}
+      </button>
+      <div class="live">
+        <span class="live-dot"></span><span id="liveLabel" data-t="live"></span><b id="clock"></b>
+        <button class="speed" data-act="speed" id="speedBtn" aria-label="${t('speed')}">1×</button>
+      </div>
+      <div class="money">${icon('coins')}<b id="credits"></b></div>
+      <button class="bell" data-act="bell" aria-label="bell">${icon('bell')}<i id="bellDot"></i></button>
+      <button class="profile" data-act="menu">
+        <span class="avatar">${icon('user')}</span>
+        <span class="who"><b id="lvlLabel"></b><small data-t="role"></small><span class="xp"><i id="xpBar"></i></span></span>
+        ${icon('chevDown', 'who-chev')}
+      </button>
+    </header>
+
+    <section class="kpis" id="kpis"></section>
+
+    <div class="camctl card">
+      <button data-act="cam" data-v="in" title="">${icon('plus')}</button>
+      <button data-act="cam" data-v="out">${icon('minus')}</button>
+      <button data-act="cam" data-v="left">${icon('rotl')}</button>
+      <button data-act="cam" data-v="right">${icon('rotr')}</button>
+      <button data-act="cam" data-v="home">${icon('focus')}</button>
+    </div>
+
+    <aside class="ops card" id="ops">
+      <div class="sheet-grip" data-act="sheet"></div>
+      <nav class="tabs" id="tabs">
+        <button data-act="tab" data-v="orders">${icon('orders')}<span data-t="tab.orders"></span><i class="badge" id="ordersBadge"></i></button>
+        <button data-act="tab" data-v="market">${icon('cart')}<span data-t="tab.market"></span></button>
+        <button data-act="tab" data-v="fleet">${icon('rocket')}<span data-t="tab.fleet"></span></button>
+        <button data-act="tab" data-v="station">${icon('upgrade')}<span data-t="tab.station"></span><i class="badge dot" id="upBadge"></i></button>
+      </nav>
+      <div class="panel" id="panel"></div>
+    </aside>
+
+    <section class="track card" id="track"></section>
+    <section class="detail card" id="detail" hidden></section>
+    <div class="toasts" id="toasts"></div>
+    <div class="modal" id="modal" hidden></div>
+    <div class="coach" id="coach" hidden></div>
+    <div class="menu card" id="menu" hidden></div>
+    <nav class="mtabs" id="mtabs">
+      <button data-act="mtab" data-v="orders">${icon('orders')}<span data-t="tab.orders"></span><i class="badge" id="mOrdersBadge"></i></button>
+      <button data-act="mtab" data-v="market">${icon('cart')}<span data-t="tab.market"></span></button>
+      <button data-act="view" data-v="map" class="mtab-map">${icon('orbit')}<span data-t="tab.map"></span></button>
+      <button data-act="mtab" data-v="fleet">${icon('rocket')}<span data-t="tab.fleet"></span></button>
+      <button data-act="mtab" data-v="station">${icon('upgrade')}<span data-t="tab.station"></span></button>
+    </nav>`;
+  }
+
+  function applyStatic() {
+    root.querySelectorAll('[data-t]').forEach((el) => (el.textContent = t(el.dataset.t)));
+    const cam = { in: 'cam.in', out: 'cam.out', left: 'cam.left', right: 'cam.right', home: 'cam.home' };
+    root.querySelectorAll('[data-act="cam"]').forEach((b) => (b.title = t(cam[b.dataset.v])));
+  }
+  applyStatic();
+
+  // ---------- Barra superior e indicadores ----------
+  let speedIdx = 0;
+  const SPEEDS = [1, 2, 3, 0];
+
+  function renderTop() {
+    $('#credits', root).textContent = money(state.credits);
+    $('#lvlLabel', root).textContent = t('level', { n: state.level });
+    $('#xpBar', root).style.width = `${Math.round(levelProgress(state) * 100)}%`;
+    const busy = state.docks.slice(0, value(state, 'docks')).filter((x) => x != null).length;
+    $('#hubSub', root).textContent = t('hub.sub', { full: Math.round(((stockTotal(state) + incomingTotal(state)) / depotCap(state)) * 100), busy, docks: value(state, 'docks') });
+    const d = new Date();
+    $('#clock', root).textContent = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    const sp = SPEEDS[speedIdx];
+    const sb = $('#speedBtn', root);
+    if (sb.dataset.v !== String(sp)) {
+      sb.dataset.v = String(sp);
+      sb.innerHTML = sp ? `${sp}×` : icon('pause');
+    }
+    $('#liveLabel', root).textContent = sp ? t('live') : t('paused');
+    root.classList.toggle('is-paused', !sp);
+    const open = state.offers.length;
+    for (const id of ['#ordersBadge', '#mOrdersBadge']) {
+      const b = $(id, root);
+      b.textContent = open || '';
+      b.hidden = !open;
+    }
+    const canUp = UPGRADE_IDS.some((id) => {
+      const c = upgradeCost(state, id);
+      return c && state.level >= c.level && state.credits >= c.cost;
+    });
+    $('#upBadge', root).hidden = !canUp;
+  }
+
+  let lastStock = stockTotal(state);
+  let stockDelta = 0;
+  function renderKpis() {
+    const total = stockTotal(state);
+    if (total !== lastStock) {
+      stockDelta = total - lastStock;
+      lastStock = total;
+    }
+    const enRoute = state.ships.filter((s) => s.job && !['parked'].includes(s.status)).length;
+    const home = state.ships.length - state.ships.filter((s) => ['travel', 'portwork', 'liftoff'].includes(s.status)).length;
+    const kpi = (ic, label, val, chip, sub, cls = '') => `
+      <div class="kpi card ${cls}">
+        <span class="kpi-ic">${icon(ic)}</span>
+        <div><small>${label}</small><b>${val}${chip ?? ''}</b><em>${sub}</em></div>
+      </div>`;
+    const chip = (v, unit = '') => (v ? `<i class="chip ${v > 0 ? 'pos' : 'neg'}">${icon(v > 0 ? 'up' : 'down')}${v > 0 ? '+' : ''}${num(v)}${unit}</i>` : '');
+    morph($('#kpis', root),
+      kpi('box', t('kpi.stock'), `${num(total)} t`, chip(stockDelta), t('kpi.stockSub', { cap: num(depotCap(state)) })) +
+      kpi('rocket', t('kpi.fleet'), `${enRoute}<span class="of">/${state.ships.length}</span>`, '', t('kpi.fleetSub', { n: home })) +
+      kpi('clock', t('kpi.ontime'), pct(onTimeRate(state)), '', t('kpi.ontimeSub', { n: num(state.stats.delivered) }), 'hide-sm') +
+      kpi('coins', t('kpi.income'), `${money(incomePerMin(state))}<span class="of">/min</span>`, '', t('kpi.incomeSub'), 'hide-md'));
+  }
+
+  // ---------- Panel de operaciones ----------
+  const idleShips = () => state.ships.filter(isIdle);
+
+  function offerCard(o) {
+    const isOrder = o.kind === 'order';
+    const fits = idleShips().filter((s) => SHIPS[s.model].cap >= o.tons);
+    const stockOk = !isOrder || available(state, o.cargo) >= o.tons;
+    const options = stockOk
+      ? fits.map((s) => ({ s, e: estimate(state, s, o.kind, o) })).sort((a, b) => (b.e.onTime - a.e.onTime) || (a.e.deliverAt - b.e.deliverAt))
+      : [];
+    const best = options[0];
+    const title = isOrder ? t('order.wants', { port: `<b>${portName(o.to)}</b>`, tons: o.tons, cargo: cargoName(o.cargo) }) : t('freight.title', { tons: o.tons, cargo: cargoName(o.cargo) });
+    const sub = isOrder ? `${icon('station')} ${t('order.fromDepot')}` : `${icon('route')} ${t('freight.route', { from: portName(o.from), to: portName(o.to) })}`;
+    const open = ui.expanded.has(o.id);
+    let action;
+    if (!stockOk) {
+      const port = unlockedPorts(state).find((p) => PORTS[p].sells.includes(o.cargo));
+      action = `<div class="warn">${icon('alert')}${t('order.noStock', { have: available(state, o.cargo), cargo: cargoName(o.cargo) })}</div>
+        ${port ? `<button class="btn ghost sm" data-act="goMarket" data-v="${port}">${icon('cart')}${t('order.buyMore', { port: portName(port) })}</button>` : ''}`;
+    } else if (!best) {
+      action = `<div class="warn muted">${icon('rocket')}${t('order.noShip', { tons: o.tons })}</div>`;
+    } else {
+      const row = ({ s, e }, primary) => `
+        <button class="btn ${primary ? 'primary' : 'line'} send" data-act="send" data-offer="${o.id}" data-ship="${s.id}">
+          <span class="send-l">${icon('send')}${primary ? t('order.sendWith', { ship: shipName(s) }) : `${shipName(s)} · ${t(`ship.${s.model}`)}`}</span>
+          <span class="send-r">${t('order.arrives', { t: '' })}${until(e.deliverAt)} <i class="${e.onTime ? 'ok' : 'bad'}">${icon(e.onTime ? 'check' : 'alert')}</i></span>
+        </button>`;
+      action = `${row(best, true)}
+        <div class="net">${t('order.net', { v: `<b>${money(o.reward - best.e.fuel)}</b>` })} <span>· ${t('order.fuel', { v: money(best.e.fuel) })}</span></div>
+        ${options.length > 1 ? `<button class="more" data-act="expand" data-v="${o.id}">${icon(open ? 'chevUp' : 'chevDown')}${t('order.pickShip')} (${options.length})</button>` : ''}
+        ${open ? `<div class="alts">${options.slice(1).map((x) => row(x, false)).join('')}</div>` : ''}`;
+    }
+    return `
+      <article class="offer ${o.urgent ? 'urgent' : ''} ${o.tutorial ? 'tut-target' : ''}" data-offer-card="${o.id}">
+        <div class="offer-top">
+          ${cg(o.cargo, 'lg')}
+          <div class="offer-txt"><h4>${title}</h4><p>${sub}</p></div>
+          <div class="offer-pay"><b>${money(o.reward)}</b>${o.urgent ? `<span class="tag hot">${icon('zap')}${t('order.urgent')}</span>` : ''}</div>
+        </div>
+        <div class="offer-meta">
+          <span>${icon('clock')}${t('order.due', { t: '' })}${until(o.deadline)}</span>
+          <span class="exp">${t('order.expires', { t: '' })}${until(o.expires)}</span>
+        </div>
+        <div class="offer-act">${action}</div>
+      </article>`;
+  }
+
+  function renderOrders() {
+    const list = [...state.offers].sort((a, b) => (b.tutorial - a.tutorial) || (b.urgent - a.urgent) || (a.expires - b.expires));
+    return `<h3 class="ph">${t('orders.title')}</h3>
+      ${list.length ? list.map(offerCard).join('') : `<p class="empty">${icon('clock')}${t('orders.empty')}</p>`}`;
+  }
+
+  function depotBars() {
+    const cap = depotCap(state);
+    const segs = CARGO_IDS.map((c) => {
+      const w = (state.stock[c] / cap) * 100;
+      return w > 0 ? `<i class="seg-${c}" style="width:${w}%"></i>` : '';
+    }).join('');
+    const inc = incomingTotal(state);
+    const legend = CARGO_IDS.filter((c) => state.stock[c] || state.incoming[c])
+      .map((c) => `<span>${cg(c, 'xs')}${cargoName(c)} <b>${state.stock[c]} t</b>${state.incoming[c] ? `<em>+${state.incoming[c]}</em>` : ''}</span>`).join('');
+    return `<div class="depot">
+      <div class="depot-top"><b>${t('market.depot')}</b><small>${t('market.free', { free: num(freeSpace(state)), cap: num(cap) })}</small></div>
+      <div class="bar">${segs}${inc ? `<i class="seg-inc" style="width:${(inc / cap) * 100}%"></i>` : ''}</div>
+      <div class="legend">${legend || '<span class="muted">—</span>'}</div>
+    </div>`;
+  }
+
+  function renderMarket() {
+    const ports = Object.keys(PORTS).filter((p) => PORTS[p].sells.length);
+    const idle = idleShips().sort((a, b) => SHIPS[b.model].cap - SHIPS[a.model].cap);
+    const cards = ports.map((p) => {
+      const locked = PORTS[p].level > state.level;
+      const c = PORTS[p].sells[0];
+      const price = buyPrice(p, c, state.t);
+      const trend = priceTrend(p, c, state.t);
+      let act = '';
+      if (locked) act = `<div class="warn muted">${icon('lock')}${t('market.locked', { n: PORTS[p].level })}</div>`;
+      else if (freeSpace(state) < BOX) act = `<div class="warn">${icon('alert')}${t('market.noSpace')}</div>`;
+      else if (!idle.length) act = `<div class="warn muted">${icon('rocket')}${t('market.noShip')}</div>`;
+      else {
+        act = idle.slice(0, 3).map((s, i) => {
+          const q = buyQuote(state, p, s);
+          const afford = state.credits >= q.cost;
+          return `<button class="btn ${i === 0 ? 'primary' : 'line'} send" data-act="buy" data-port="${p}" data-ship="${s.id}" ${afford ? '' : 'disabled'}>
+            <span class="send-l">${icon('cart')}${t('market.buyWith', { tons: q.tons, ship: shipName(s) })}</span>
+            <span class="send-r">${money(q.cost)}</span></button>`;
+        }).join('') + `<div class="net"><span>${t('market.back', { t: '' })}${until(buyQuote(state, p, idle[0]).doneAt)}</span></div>`;
+      }
+      return `<article class="offer market ${locked ? 'locked' : ''}" data-port-card="${p}">
+        <div class="offer-top">
+          <span class="planet-dot pd-${p}"></span>
+          <div class="offer-txt"><h4>${portName(p)} <small>${t(`port.${p}.d`)}</small></h4><p>${cg(c, 'xs')}${t('market.sells', { cargo: cargoName(c) })}</p></div>
+          <div class="offer-pay"><b>${money(price)}</b><small class="trend ${trend > 0 ? 'rise' : 'fall'}">${icon(trend > 0 ? 'up' : 'down')}${t('market.price', { v: '' }).trim()}</small></div>
+        </div>
+        <div class="offer-act">${act}</div>
+      </article>`;
+    }).join('');
+    return `<h3 class="ph">${t('market.title')}</h3>${depotBars()}${cards}`;
+  }
+
+  function renderFleet() {
+    const hasAuto = value(state, 'autopilot') > 0;
+    const ships = state.ships.map((s) => {
+      const eta = shipEta(s, state);
+      const L = s.load;
+      return `<article class="ship ${ui.detailId === s.id ? 'sel' : ''}" data-act="select" data-v="${s.id}">
+        <img class="ship-img" src="${shipThumb(s.model, L?.cargo ?? 'agua')}" alt="" />
+        <div class="ship-txt">
+          <h4>${shipName(s)} <small>${t(`ship.${s.model}`)} · ${SHIPS[s.model].cap} t</small></h4>
+          <p>${statusText(s)}${eta ? ` · ${until(eta)}` : ''}</p>
+          ${L ? `<p class="load">${cg(L.cargo, 'xs')}${L.tons} t ${cargoName(L.cargo)}</p>` : ''}
+        </div>
+        ${pill(s)}
+        <label class="auto ${hasAuto ? '' : 'off'}" data-stop>
+          ${icon('bot')}<span>${t('fleet.auto')}</span>
+          <select data-act="auto" data-ship="${s.id}" ${hasAuto ? '' : 'disabled'}>
+            ${['off', 'supply', 'orders', 'freight'].map((m) => `<option value="${m}" ${s.auto === m ? 'selected' : ''}>${t(`auto.${m}`)}</option>`).join('')}
+          </select>
+        </label>
+      </article>`;
+    }).join('');
+    const full = state.ships.length >= fleetCap(state);
+    const shop = SHIP_IDS.map((m) => {
+      const def = SHIPS[m];
+      const locked = state.level < def.level;
+      return `<article class="buyship ${locked ? 'locked' : ''}">
+        <img src="${shipThumb(m, m === 'colibri' ? 'agua' : m === 'mula' ? 'mineral' : 'piezas')}" alt="" />
+        <div><h4>${t(`ship.${m}`)}</h4><p>${t(`ship.${m}.d`)}</p>
+          <p class="specs"><span>${icon('box')}${def.cap} t</span><span>${icon('gauge')}${def.speed}</span></p></div>
+        <button class="btn ${locked || full ? 'line' : 'primary'} sm" data-act="buyShip" data-v="${m}" ${locked || full || state.credits < def.price ? 'disabled' : ''}>
+          ${locked ? `${icon('lock')}${t('up.needLevel', { n: def.level })}` : money(def.price)}</button>
+      </article>`;
+    }).join('');
+    return `<h3 class="ph">${t('fleet.title')} <small>${t('fleet.hangar', { n: state.ships.length, cap: fleetCap(state) })}</small></h3>
+      ${hasAuto ? '' : `<p class="hint">${icon('bot')}${t('fleet.autoLocked')}</p>`}
+      ${ships}
+      <h3 class="ph sub">${t('fleet.buy')}</h3>${full ? `<p class="hint">${icon('alert')}${t('fleet.full')}</p>` : ''}${shop}`;
+  }
+
+  const UP_ICONS = { docks: 'dock', drones: 'drone', depot: 'layers', hangar: 'home', engines: 'gauge', shields: 'shield', autopilot: 'bot' };
+  function upValue(id, v) {
+    if (id === 'depot') return `${num(v)} t`;
+    if (id === 'engines') return `+${Math.round((v - 1) * 100)}%`;
+    if (id === 'shields' || id === 'autopilot') return v ? '✓' : '—';
+    return String(v);
+  }
+
+  function renderStation() {
+    const ups = UPGRADE_IDS.map((id) => {
+      const lv = state.up[id];
+      const cur = UPGRADES[id][lv].v;
+      const next = upgradeCost(state, id);
+      const steps = UPGRADES[id].length;
+      const dots = Array.from({ length: steps - 1 }, (_, i) => `<i class="${i < lv ? 'on' : ''}"></i>`).join('');
+      let btn;
+      if (!next) btn = `<span class="maxed">${icon('check')}${t('up.max')}</span>`;
+      else if (state.level < next.level) btn = `<button class="btn line sm" disabled>${icon('lock')}${t('up.needLevel', { n: next.level })}</button>`;
+      else btn = `<button class="btn primary sm" data-act="upgrade" data-v="${id}" ${state.credits < next.cost ? 'disabled' : ''}>${money(next.cost)}</button>`;
+      return `<article class="up">
+        <span class="up-ic">${icon(UP_ICONS[id])}</span>
+        <div class="up-txt"><h4>${t(`up.${id}`)} <b>${upValue(id, cur)}${next ? ` <span>→ ${upValue(id, next.v)}</span>` : ''}</b></h4><p>${t(`up.${id}.d`)}</p><div class="dots">${dots}</div></div>
+        ${btn}
+      </article>`;
+    }).join('');
+    const st = state.stats;
+    return `<h3 class="ph">${t('station.title')}</h3>${ups}
+      <h3 class="ph sub">${t('station.stats')}</h3>
+      <div class="stats">
+        <div><small>${t('stat.earned')}</small><b>${money(st.earned)}</b></div>
+        <div><small>${t('stat.spent')}</small><b>${money(st.spent)}</b></div>
+        <div><small>${t('stat.delivered')}</small><b>${num(st.delivered)}</b></div>
+        <div><small>${t('stat.tons')}</small><b>${num(st.tons)} t</b></div>
+      </div>`;
+  }
+
+  function signature() {
+    return JSON.stringify([
+      ui.tab, lang, [...ui.expanded], ui.detailId, state.level, state.up, Math.floor(state.credits / 50),
+      state.offers.map((o) => o.id), state.ships.map((s) => [s.id, s.status, s.step, s.auto, s.load?.tons, s.job?.id]),
+      state.stock, state.incoming, state.reserved
+    ]);
+  }
+
+  function renderPanel(force = false) {
+    const now = performance.now();
+    const sig = signature();
+    if (!force && sig === ui.sig && now - ui.lastRender < 1000) return;
+    ui.sig = sig;
+    ui.lastRender = now;
+    const panel = $('#panel', root);
+    if (panel.dataset.tab !== ui.tab) {
+      panel.dataset.tab = ui.tab;
+      panel.innerHTML = '';
+      panel.scrollTop = 0;
+    }
+    morph(panel, { orders: renderOrders, market: renderMarket, fleet: renderFleet, station: renderStation }[ui.tab]());
+    root.querySelectorAll('[data-act="tab"], [data-act="mtab"]').forEach((b) => b.classList.toggle('on', b.dataset.v === ui.tab && !(b.classList.contains('hub'))));
+    tick();
+  }
+
+  /** Actualiza las cuentas regresivas sin volver a dibujar todo. */
+  function tick() {
+    root.querySelectorAll('[data-until]').forEach((el) => {
+      const left = Number(el.dataset.until) - state.t;
+      el.textContent = dur(left);
+      el.classList.toggle('neg', left < 0);
+    });
+  }
+
+  // ---------- Seguimiento de envío ----------
+  const TRACK_NODES = {
+    order: ['track.accepted', 'track.loading', 'track.transit', 'track.delivered', 'track.return'],
+    buy: ['track.bought', 'track.transit', 'track.loading', 'track.return', 'track.unload'],
+    freight: ['track.accepted', 'track.pickup', 'track.transit', 'track.delivered', 'track.return']
+  };
+  const NODE_OF_STEP = { order: [1, 1, 2, 3, 4, 4], buy: [1, 2, 3, 4, 4, 4], freight: [1, 1, 2, 3, 4, 4] };
+  const NODE_ICONS = { order: ['check', 'box', 'rocket', 'flag', 'home'], buy: ['cart', 'rocket', 'box', 'home', 'layers'], freight: ['check', 'box', 'rocket', 'flag', 'home'] };
+
+  function activeShips() {
+    return state.ships.filter((s) => s.job).sort((a, b) => b.job.started - a.job.started);
+  }
+
+  function renderTrack() {
+    const list = activeShips();
+    let s = shipById(state, ui.trackId);
+    if (!s?.job) s = list[0];
+    ui.trackId = s?.id ?? null;
+    const el = $('#track', root);
+    el.classList.toggle('is-empty', !s);
+    if (!s) {
+      morph(el, `<div class="track-head">${icon('route')}<b>${t('track.title')}</b><span class="muted">${t('track.none')}</span></div>`);
+      return;
+    }
+    const j = s.job;
+    const node = NODE_OF_STEP[j.kind][s.step] ?? 4;
+    const nodes = TRACK_NODES[j.kind].map((k, i) => {
+      const cls = i < node ? 'done' : i === node ? 'now' : '';
+      let sub = '';
+      if (i === node) {
+        const eta = shipEta(s, state);
+        if (s.status === 'working' && s.work) sub = `${Math.min(s.work.n, s.work.dropped)}/${s.work.n}`;
+        else if (eta) sub = until(eta);
+        else sub = statusText(s);
+      }
+      return `<li class="${cls}"><span class="nd">${icon(i < node ? 'check' : NODE_ICONS[j.kind][i])}</span><b>${t(k)}</b><small>${sub}</small></li>`;
+    }).join('');
+    const dest = j.kind === 'buy' ? j.from : j.to;
+    const idLabel = t(`track.${j.kind}`, { id: j.id });
+    const pos = list.indexOf(s);
+    morph(el, `
+      <div class="track-head">${icon('route')}<b>${t('track.title')}</b><span class="muted">${idLabel} · ${shipName(s)}</span>
+        ${list.length > 1 ? `<span class="track-nav"><button data-act="trackPrev">${icon('left')}</button><i>${pos + 1}/${list.length}</i><button data-act="trackNext">${icon('right')}</button></span>` : ''}
+      </div>
+      <div class="track-body">
+        <ol class="steps">${nodes}</ol>
+        <button class="shipcard" data-act="select" data-v="${s.id}">
+          <img src="${shipThumb(s.model, j.cargo)}" alt="" />
+          <div><b>#${j.id} · ${shipName(s)}</b><small>${t('track.to', { port: portName(dest) })} · ${cg(j.cargo, 'xs')}${j.tons} t</small>${pill(s)}</div>
+          ${icon('right')}
+        </button>
+      </div>`);
+    tick();
+  }
+
+  // ---------- Tarjeta de la nave elegida ----------
+  function renderDetail() {
+    const el = $('#detail', root);
+    const s = shipById(state, ui.detailId);
+    el.hidden = !s;
+    if (!s) return;
+    const eta = shipEta(s, state);
+    const dest = s.status === 'travel' ? s.leg.target : s.job ? (s.job.kind === 'buy' ? s.job.from : s.job.to) : null;
+    const row = (k, v) => `<div class="row"><small>${k}</small><b>${v}</b></div>`;
+    morph(el, `
+      <div class="detail-head">
+        <img src="${shipThumb(s.model, s.load?.cargo ?? 'agua')}" alt="" />
+        <div><small>${t(`ship.${s.model}`).toUpperCase()} · ${SHIPS[s.model].cap} t</small><h4>${shipName(s)}</h4></div>
+        <button class="x" data-act="closeDetail">${icon('x')}</button>
+      </div>
+      <div class="detail-status">${pill(s)}<span>${statusText(s)}</span></div>
+      ${row(t('detail.cargo'), s.load ? `${cg(s.load.cargo, 'xs')}${s.load.tons} t ${cargoName(s.load.cargo)}` : t('detail.empty'))}
+      ${row(t('detail.dest'), dest ? portName(dest) : '—')}
+      ${row(t('detail.eta'), eta ? until(eta) : '—')}
+      ${row(t('detail.trips'), num(s.trips))}
+      ${row(t('detail.earned'), money(s.earned))}
+      <button class="btn line sm wide" data-act="follow" data-v="${s.id}">${icon('focus')}${t('detail.follow')}</button>`);
+    tick();
+  }
+
+  // ---------- Avisos ----------
+  function toast(html, kind = 'info', ms = 3800) {
+    const box = $('#toasts', root);
+    const el = document.createElement('div');
+    el.className = `toast ${kind}`;
+    el.innerHTML = html;
+    box.prepend(el);
+    while (box.children.length > 4) box.lastChild.remove();
+    setTimeout(() => el.classList.add('out'), ms);
+    setTimeout(() => el.remove(), ms + 400);
+  }
+  const errToast = (reason) => toast(`${icon('alert')}<span>${t(`toast.err.${reason}`)}</span>`, 'err', 2600);
+
+  function handleEvents(events) {
+    for (const e of events) {
+      if (e.type === 'delivered') {
+        const s = shipById(state, e.ship);
+        if (e.late) toast(`${icon('alert')}<span>${t('toast.late', { ship: s?.name ?? '', port: portName(e.port) })}</span><b>+${money(e.net)}</b>`, 'warn');
+        else toast(`${cg(e.cargo, 'sm')}<span>${t('toast.delivered', { ship: s?.name ?? '', tons: e.tons, cargo: cargoName(e.cargo), port: portName(e.port) })}</span><b>+${money(e.net)}</b>`, 'ok');
+        actions.sound?.('coin');
+      } else if (e.type === 'loaded') {
+        const s = shipById(state, e.ship);
+        toast(`${cg(e.cargo, 'sm')}<span>${t('toast.loaded', { ship: s?.name ?? '', tons: e.tons, cargo: cargoName(e.cargo), port: portName(e.port) })}</span>`, 'info', 2600);
+      } else if (e.type === 'level') {
+        showLevel(e.level);
+        actions.sound?.('level');
+      } else if (e.type === 'newShip') {
+        const s = shipById(state, e.ship);
+        toast(`${icon('rocket')}<span>${t('toast.newShip', { ship: `${s.name} · ${t(`ship.${s.model}`)}` })}</span>`, 'ok');
+      } else if (e.type === 'upgrade') {
+        toast(`${icon('upgrade')}<span>${t('toast.upgrade', { name: t(`up.${e.id}`) })}</span>`, 'ok');
+      } else if (e.type === 'dispatch') {
+        ui.trackId = e.ship;
+      }
+      tutorialEvent(e);
+    }
+  }
+
+  // ---------- Ventanas ----------
+  function modal(html) {
+    const m = $('#modal', root);
+    m.innerHTML = `<div class="modal-card card">${html}</div>`;
+    m.hidden = false;
+  }
+  const closeModal = () => ($('#modal', root).hidden = true);
+
+  function showLevel(n) {
+    const items = [];
+    for (const p of Object.keys(PORTS)) if (PORTS[p].level === n && p !== 'hq') items.push(`${icon('orbit')}${t('unlock.port', { port: portName(p) })}`);
+    for (const m of SHIP_IDS) if (SHIPS[m].level === n && n > 1) items.push(`${icon('rocket')}${t('unlock.ship', { ship: t(`ship.${m}`) })}`);
+    for (const id of UPGRADE_IDS) if (UPGRADES[id].some((x) => x.level === n)) items.push(`${icon(UP_ICONS[id])}${t('unlock.up', { name: t(`up.${id}`) })}`);
+    items.push(`${icon('star')}${t('unlock.more')}`);
+    modal(`<div class="lvl-badge">${icon('star')}<b>${n}</b></div>
+      <h2>${t('unlock.title', { n })}</h2><p>${t('unlock.sub')}</p>
+      <ul class="unlocks">${items.map((x) => `<li>${x}</li>`).join('')}</ul>
+      <button class="btn primary wide" data-act="closeModal">${t('unlock.ok')}</button>`);
+  }
+
+  function showAway(sum) {
+    modal(`<div class="lvl-badge away">${icon('clock')}</div>
+      <h2>${t('away.title')}</h2><p>${t('away.sub', { t: dur(sum.seconds) })}</p>
+      <div class="stats two">
+        <div><small>${t('away.earned')}</small><b>${money(sum.earned)}</b></div>
+        <div><small>${t('away.delivered')}</small><b>${num(sum.delivered)}</b></div>
+      </div>
+      ${sum.delivered ? '' : `<p class="hint">${icon('bot')}${t('away.tip')}</p>`}
+      <button class="btn primary wide" data-act="closeModal">${t('away.ok')}</button>`);
+  }
+
+  function toggleMenu() {
+    const m = $('#menu', root);
+    if (!m.hidden) return (m.hidden = true);
+    m.innerHTML = `
+      <small>${t('menu.lang')}</small>
+      <div class="seg">${['es', 'en', 'pt'].map((l) => `<button class="seg-btn ${lang === l ? 'on' : ''}" data-act="lang" data-v="${l}">${l.toUpperCase()}</button>`).join('')}</div>
+      <button class="mi" data-act="sound">${icon(actions.isMuted?.() ? 'mute' : 'sound')}${t('menu.sound')}</button>
+      <a class="mi" href="/">${icon('zap')}${t('menu.riftfall')}</a>
+      <button class="mi danger" data-act="reset">${icon('rotl')}${t('menu.reset')}</button>`;
+    m.hidden = false;
+  }
+
+  // ---------- Tutorial ----------
+  const TUT = state.flags;
+  function coach(html, anchor, buttons = []) {
+    const c = $('#coach', root);
+    c.innerHTML = `<div class="coach-body">${html}</div><div class="coach-btns">
+      <button class="link" data-act="tutSkip">${t('tut.skip')}</button>
+      ${buttons.map((b) => `<button class="btn primary sm" data-act="${b.act}">${b.label}</button>`).join('')}</div>`;
+    c.hidden = false;
+    c.dataset.anchor = anchor ?? '';
+    placeCoach();
+  }
+  function placeCoach() {
+    const c = $('#coach', root);
+    if (c.hidden) return;
+    const sel = c.dataset.anchor;
+    const a = sel ? root.querySelector(sel) ?? document.querySelector(sel) : null;
+    root.querySelectorAll('.glow-target').forEach((x) => x.classList.remove('glow-target'));
+    if (!a || !a.getClientRects().length) {
+      c.classList.add('center');
+      c.style.left = c.style.top = '';
+      return;
+    }
+    a.classList.add('glow-target');
+    c.classList.remove('center');
+    const r = a.getBoundingClientRect();
+    const cw = c.offsetWidth;
+    const ch = c.offsetHeight;
+    let x = r.left - cw - 16;
+    let y = r.top;
+    let side = 'left';
+    if (x < 8) {
+      x = Math.min(window.innerWidth - cw - 8, Math.max(8, r.left + r.width / 2 - cw / 2));
+      y = r.bottom + 12;
+      side = 'top';
+      if (y + ch > window.innerHeight - 8) {
+        y = r.top - ch - 12;
+        side = 'bottom';
+      }
+    }
+    c.dataset.side = side;
+    c.style.left = `${x}px`;
+    c.style.top = `${Math.max(8, Math.min(window.innerHeight - ch - 8, y))}px`;
+  }
+  function tutorial() {
+    const step = TUT.tut ?? 0;
+    if (step >= 99) return ($('#coach', root).hidden = true);
+    if (step === 0) {
+      ui.tab = 'orders';
+      coach(`<b>${t('tut.1')}</b><p>${t('tut.1b')}</p>`, '.tut-target .btn.primary', []);
+    } else if (step === 1) coach(`<p>${t('tut.2')}</p>`, null, [{ act: 'tutNext', label: t('tut.next') }]);
+    else if (step === 2) coach(`<p>${t('tut.3')}</p>`, isMobile() ? '.mtab-map' : '#mapToggle', []);
+    else if (step === 3) coach(`<p>${t('tut.4')}</p>`, null, [{ act: 'tutNext', label: t('tut.next') }]);
+    else if (step === 4) coach(`<p>${t('tut.5')}</p>`, isMobile() ? '[data-act="mtab"][data-v="market"]' : '#tabs [data-v="market"]', [{ act: 'tutDone', label: t('tut.ok') }]);
+  }
+  function setTut(n) {
+    TUT.tut = n;
+    tutorial();
+  }
+  function tutorialEvent(e) {
+    const step = TUT.tut ?? 0;
+    if (step === 0 && e.type === 'dispatch') setTut(1);
+  }
+  function tutorialTick() {
+    const step = TUT.tut ?? 0;
+    if (step === 1) {
+      const s = state.ships.find((x) => x.job);
+      if (s && ['liftoff', 'travel'].includes(s.status)) setTut(2);
+    }
+    if (step === 2 && isMap()) setTut(3);
+    placeCoach();
+  }
+
+  const isMobile = () => window.innerWidth < 760;
+
+  // ---------- Clicks ----------
+  root.addEventListener('click', (ev) => {
+    const el = ev.target.closest('[data-act]');
+    if (!el || el.disabled) return;
+    if (ev.target.closest('[data-stop]') && el.dataset.act === 'select') return;
+    const act = el.dataset.act;
+    const v = el.dataset.v;
+    actions.sound?.('click');
+    switch (act) {
+      case 'tab':
+        ui.tab = v === 'station' && el.classList.contains('hub') ? 'station' : v;
+        setSheet(true);
+        renderPanel(true);
+        break;
+      case 'mtab':
+        if (ui.tab === v && ui.sheet) setSheet(false);
+        else {
+          ui.tab = v;
+          setSheet(true);
+        }
+        if (isMap()) actions.setView('station');
+        renderPanel(true);
+        break;
+      case 'sheet':
+        setSheet(!ui.sheet);
+        break;
+      case 'view':
+        actions.setView(v === 'map' && isMap() && isMobile() ? 'station' : v);
+        if (isMobile()) setSheet(false);
+        break;
+      case 'send': {
+        const r = actions.accept(Number(el.dataset.offer), Number(el.dataset.ship));
+        if (!r.ok) errToast(r.reason);
+        else {
+          ui.expanded.delete(Number(el.dataset.offer));
+          ui.trackId = Number(el.dataset.ship);
+          actions.sound?.('send');
+          if (isMobile()) setSheet(false);
+          renderTrack();
+          renderKpis();
+        }
+        renderPanel(true);
+        break;
+      }
+      case 'buy': {
+        const r = actions.buy(el.dataset.port, Number(el.dataset.ship));
+        if (!r.ok) errToast(r.reason);
+        else {
+          ui.trackId = Number(el.dataset.ship);
+          actions.sound?.('send');
+          if (isMobile()) setSheet(false);
+          renderTrack();
+          renderKpis();
+        }
+        renderPanel(true);
+        break;
+      }
+      case 'goMarket':
+        ui.tab = 'market';
+        renderPanel(true);
+        setTimeout(() => root.querySelector(`[data-port-card="${v}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 50);
+        break;
+      case 'expand': {
+        const id = Number(v);
+        ui.expanded.has(id) ? ui.expanded.delete(id) : ui.expanded.add(id);
+        renderPanel(true);
+        break;
+      }
+      case 'upgrade': {
+        const r = actions.upgrade(v);
+        if (!r.ok) errToast(r.reason);
+        else actions.sound?.('level');
+        renderPanel(true);
+        break;
+      }
+      case 'buyShip': {
+        const r = actions.buyShip(v);
+        if (!r.ok) errToast(r.reason);
+        renderPanel(true);
+        break;
+      }
+      case 'select':
+        ui.detailId = Number(v);
+        actions.select(ui.detailId);
+        renderDetail();
+        renderPanel(true);
+        break;
+      case 'closeDetail':
+        ui.detailId = null;
+        actions.select(null);
+        renderDetail();
+        break;
+      case 'follow':
+        actions.follow(Number(v));
+        break;
+      case 'trackPrev':
+      case 'trackNext': {
+        const list = activeShips();
+        const i = list.findIndex((s) => s.id === ui.trackId);
+        const n = list[(i + (act === 'trackNext' ? 1 : -1) + list.length) % list.length];
+        ui.trackId = n?.id ?? null;
+        renderTrack();
+        break;
+      }
+      case 'speed':
+        speedIdx = (speedIdx + 1) % SPEEDS.length;
+        actions.setSpeed(SPEEDS[speedIdx]);
+        renderTop();
+        break;
+      case 'cam':
+        actions.cam(v);
+        break;
+      case 'menu':
+        toggleMenu();
+        break;
+      case 'bell':
+        ui.tab = 'orders';
+        setSheet(true);
+        renderPanel(true);
+        break;
+      case 'lang':
+        setLang(v);
+        applyStatic();
+        toggleMenu();
+        toggleMenu();
+        renderAll(true);
+        actions.langChanged?.();
+        break;
+      case 'sound':
+        actions.toggleSound?.();
+        toggleMenu();
+        toggleMenu();
+        break;
+      case 'reset':
+        if (confirm(t('menu.resetConfirm'))) actions.reset();
+        break;
+      case 'closeModal':
+        closeModal();
+        break;
+      case 'tutNext':
+        setTut((TUT.tut ?? 0) + 1);
+        break;
+      case 'tutDone':
+      case 'tutSkip':
+        setTut(99);
+        break;
+    }
+  });
+  root.addEventListener('change', (ev) => {
+    const el = ev.target.closest('[data-act="auto"]');
+    if (!el) return;
+    const r = actions.setAuto(Number(el.dataset.ship), el.value);
+    if (!r.ok) errToast(r.reason);
+    renderPanel(true);
+  });
+  document.addEventListener('pointerdown', (ev) => {
+    const m = $('#menu', root);
+    if (!m.hidden && !ev.target.closest('#menu') && !ev.target.closest('[data-act="menu"]')) m.hidden = true;
+  });
+  window.addEventListener('resize', () => placeCoach());
+
+  function setSheet(open) {
+    ui.sheet = open;
+    root.classList.toggle('sheet-open', open);
+  }
+
+  function renderAll(force) {
+    renderTop();
+    renderKpis();
+    renderPanel(force);
+    renderTrack();
+    renderDetail();
+  }
+
+  let acc = 0;
+  let acc2 = 0;
+  return {
+    root,
+    toast,
+    showAway,
+    tutorial,
+    setView(v) {
+      root.querySelectorAll('.views .seg-btn').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
+      root.classList.toggle('in-map', v === 'map');
+      root.querySelector('.mtab-map')?.classList.toggle('on', v === 'map');
+    },
+    goMarket(port) {
+      ui.tab = 'market';
+      setSheet(true);
+      renderPanel(true);
+      setTimeout(() => root.querySelector(`[data-port-card="${port}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 60);
+    },
+    select(id) {
+      ui.detailId = id;
+      if (id != null) ui.trackId = shipById(state, id)?.job ? id : ui.trackId;
+      renderDetail();
+      renderTrack();
+    },
+    update(dt, events, raw = dt) {
+      if (events.length) handleEvents(events);
+      dt = raw;
+      acc += dt;
+      acc2 += dt;
+      if (acc > 0.25) {
+        acc = 0;
+        tick();
+        renderTop();
+        renderPanel(false);
+        tutorialTick();
+      }
+      if (acc2 > 0.5) {
+        acc2 = 0;
+        renderKpis();
+        renderTrack();
+        renderDetail();
+      }
+    },
+    renderAll
+  };
+}
+
+function logoSvg() {
+  return `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 4 56 18 32 32 8 18z" fill="#7d9bff"/><path d="M8 18 32 32v28L8 46z" fill="#2f5fe8"/><path d="M56 18 32 32v28l24-14z" fill="#1f43b8"/><path d="M22 47 28 37l8 6" stroke="#fff" stroke-width="3.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}

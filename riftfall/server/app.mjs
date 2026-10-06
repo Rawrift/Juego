@@ -806,6 +806,8 @@ export async function createApp(options = {}) {
       res.writeHead(403).end();
       return;
     }
+    // Una carpeta con su propia página (por ejemplo /cargo/) sirve esa página.
+    if (fs.existsSync(file) && fs.statSync(file).isDirectory() && fs.existsSync(path.join(file, 'index.html'))) file = path.join(file, 'index.html');
     if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(cfg.staticDir, 'index.html');
     const ext = path.extname(file);
     const headers = { 'content-type': MIME[ext] ?? 'application/octet-stream' };

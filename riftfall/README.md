@@ -37,6 +37,12 @@ Las naves son **NFT** que se compran, se forjan y se revenden. En la **Arena** s
   - Guía completa, grants de BNB Chain y borrador de postulación: [`docs/FINANCIAMIENTO.md`](docs/FINANCIAMIENTO.md).
 - **Conseguir jugadores:** textos para cada red, calendario de 2 semanas y videos promocionales en [`docs/REDES.md`](docs/REDES.md).
 
+## Rift Cargo (segundo juego)
+
+En `/cargo/` del mismo sitio está **Rift Cargo**: una empresa de transporte espacial en 3D con estilo de panel de
+control (pedidos, mercado, flota, drones de carga y planetas que se mueven). Detalles en
+[`docs/RIFT-CARGO.md`](docs/RIFT-CARGO.md). En desarrollo se abre en `http://localhost:5173/cargo/`.
+
 ## Inicio rápido (todo en local, con blockchain)
 
 Requisitos: Node.js 22.9 o superior.

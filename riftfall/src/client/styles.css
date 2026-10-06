@@ -259,6 +259,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .nav-grid button:hover { border-color: var(--line-strong); background: rgba(20, 30, 64, 0.85); }
 .nav-grid button:active { transform: scale(0.96); }
 .menu-foot { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 13px; flex-wrap: wrap; }
+.cargo-link { color: #7fd8ff; font-weight: 700; text-decoration: none; }
+.cargo-link:hover { text-decoration: underline; }
 #netStatus.ok { color: var(--green); }
 #netStatus.warn { color: var(--gold); }
 

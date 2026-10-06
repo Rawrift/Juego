@@ -2,7 +2,7 @@
 // - Archivos con hash (/assets/…): primero la caché (nunca cambian).
 // - La página: primero la red (para recibir actualizaciones) y, sin red, la última versión guardada.
 // - API, configuración del token y redes de blockchain: siempre la red, nunca la caché.
-const CACHE = 'riftfall-v2';
+const CACHE = 'riftfall-v3';
 const SHELL = ['/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 /** Guarda la página y todos los archivos que carga (JS, CSS, fuentes) para jugar sin red. */
@@ -50,10 +50,12 @@ self.addEventListener('fetch', (e) => {
     return;
   }
   if (req.mode === 'navigate') {
+    // Cada juego guarda su propia página (RIFTFALL en "/" y Rift Cargo en "/cargo/").
+    const key = url.pathname.startsWith('/cargo') ? '/cargo/' : '/';
     e.respondWith(
       fetch(req)
-        .then((res) => store('/', res))
-        .catch(() => caches.match('/'))
+        .then((res) => store(key, res))
+        .catch(() => caches.match(key))
     );
   }
 });

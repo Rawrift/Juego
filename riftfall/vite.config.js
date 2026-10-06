@@ -28,7 +28,10 @@ export default defineConfig(({ mode }) => {
     build: {
       target: 'es2022',
       rollupOptions: {
-        input: withLauncher ? { main: 'index.html', lanzar: 'lanzar.html' } : { main: 'index.html' }
+        // Rift Cargo (cargo/index.html) es el segundo juego: se publica en /cargo/ del mismo sitio.
+        input: mode === 'portal'
+          ? { main: 'index.html' }
+          : { main: 'index.html', cargo: 'cargo/index.html', ...(withLauncher ? { lanzar: 'lanzar.html' } : {}) }
       },
       // El portal no publica los mapas de código (pesan 4 veces el juego).
       sourcemap: mode !== 'portal',
