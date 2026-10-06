@@ -122,13 +122,17 @@ test('móvil: joystick táctil y menú adaptado', async ({ browser }) => {
 });
 
 /** Sirve el build como hosting estático, sin servidor del juego (así está publicado hoy). */
-async function staticSite(port) {
+async function staticSite(port, { deployment = null } = {}) {
   const DIST = path.resolve('dist-e2e');
   const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.woff': 'font/woff' };
   const site = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://x');
-    // Sin token desplegado: estas pruebas cubren el modo práctica puro.
+    // Sin token desplegado (salvo que la prueba pase uno): modo práctica puro.
     if (url.pathname === '/deployment.json') {
+      if (deployment) {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        return res.end(JSON.stringify(deployment));
+      }
       res.writeHead(404, { 'content-type': 'text/plain' });
       return res.end('not found');
     }
@@ -746,5 +750,108 @@ test('Duelo con amigos: link con semilla y marca, mismo mapa con reglas parejas,
     expect(errors).toEqual([]);
   } finally {
     await ctx.close();
+  }
+});
+
+test('wallet: MetaMask se conecta sin recargar la página, sigue conectada al recargar y se elige entre varias wallets', async ({ browser }) => {
+  const deployment = JSON.parse(fs.readFileSync('public/deployment.json', 'utf8'));
+  const site = await staticSite(4182, { deployment });
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: 'es-ES' });
+  // Red de pruebas simulada: saldos en cero.
+  await ctx.route('https://bsc-testnet-rpc.publicnode.com/**', (r) => {
+    const body = JSON.parse(r.request().postData());
+    const one = (q) => ({ jsonrpc: '2.0', id: q.id, result: q.method === 'eth_chainId' ? '0x61' : `0x${'0'.repeat(64)}` });
+    r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(Array.isArray(body) ? body.map(one) : one(body)) });
+  });
+  await ctx.addInitScript(() => {
+    const n = Number(sessionStorage.getItem('loads') ?? 0) + 1;
+    sessionStorage.setItem('loads', String(n));
+    // Otra extensión se quedó con window.ethereum: no debe usarse si MetaMask se anuncia.
+    window.ethereum = { request: async () => { throw new Error('se usó la wallet equivocada'); }, on() {} };
+    // MetaMask, con su estado guardado entre recargas (como la extensión real).
+    const st = JSON.parse(sessionStorage.getItem('mm') ?? '{"chain":"0x38","authorized":false,"pendingOnce":true,"requests":0}');
+    const save = () => sessionStorage.setItem('mm', JSON.stringify(st));
+    const ls = {};
+    // La extensión avisa de los cambios un rato después de responder.
+    const emit = (ev, v) => setTimeout(() => (ls[ev] ?? []).forEach((f) => f(v)), 600);
+    const ACC = '0x09af2acf700d6be84009655fb814a5311daec7dd';
+    const provider = {
+      isMetaMask: true,
+      on: (ev, fn) => (ls[ev] ??= []).push(fn),
+      removeListener() {},
+      async request({ method, params }) {
+        await new Promise((r) => setTimeout(r, 30));
+        switch (method) {
+          case 'eth_requestAccounts':
+            st.requests++;
+            save();
+            if (st.pendingOnce) {
+              st.pendingOnce = false;
+              save();
+              throw Object.assign(new Error("Request of type 'wallet_requestPermissions' already pending"), { code: -32002 });
+            }
+            if (!st.authorized) {
+              st.authorized = true;
+              save();
+              emit('accountsChanged', [ACC]);
+            }
+            return [ACC];
+          case 'eth_accounts':
+            return st.authorized ? [ACC] : [];
+          case 'eth_chainId':
+            return st.chain;
+          case 'net_version':
+            return String(parseInt(st.chain, 16));
+          case 'wallet_switchEthereumChain':
+            st.chain = params[0].chainId;
+            save();
+            emit('chainChanged', st.chain);
+            return null;
+          case 'wallet_watchAsset':
+            return true;
+          default:
+            throw Object.assign(new Error(`no soportado: ${method}`), { code: 4200 });
+        }
+      }
+    };
+    window.__mmEmit = (ev, v) => (ls[ev] ?? []).forEach((f) => f(v));
+    const announce = () =>
+      window.dispatchEvent(new CustomEvent('eip6963:announceProvider', { detail: Object.freeze({ info: { uuid: 'mm', name: 'MetaMask', icon: '', rdns: 'io.metamask' }, provider }) }));
+    window.addEventListener('eip6963:requestProvider', announce);
+    announce();
+  });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  // Durante una recarga la página no responde: se reintenta.
+  const loads = () => page.evaluate(() => Number(sessionStorage.getItem('loads'))).catch(() => 0);
+  try {
+    await page.goto('http://127.0.0.1:4182/');
+    await expect(page.locator('#walletBtn')).toHaveText('Conectar wallet');
+
+    // Una ventana de MetaMask quedó abierta: se explica qué hacer.
+    await page.click('#walletBtn');
+    await expect(page.locator('#toasts')).toContainText('ventana abierta');
+    await expect(page.locator('#walletBtn')).toHaveText('Conectar wallet');
+
+    // Segundo intento: conecta, cambia a la red del juego y no recarga cuando MetaMask avisa después.
+    await page.click('#walletBtn');
+    await expect(page.locator('#walletBtn')).toHaveText('0x09aF…c7Dd');
+    await page.waitForTimeout(1500);
+    expect(await loads()).toBe(1);
+    await expect(page.locator('#walletBtn')).toHaveText('0x09aF…c7Dd');
+
+    // Al recargar sigue conectada, sin volver a abrir MetaMask.
+    await page.reload();
+    await expect(page.locator('#walletBtn')).toHaveText('0x09aF…c7Dd');
+    expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('mm')).requests)).toBe(2);
+
+    // Un cambio de cuenta de verdad sí recarga.
+    await page.evaluate(() => window.__mmEmit('accountsChanged', ['0x2222222222222222222222222222222222222222']));
+    await expect.poll(loads).toBe(3);
+    expect(errors).toEqual([]);
+  } finally {
+    await ctx.close();
+    site.close();
   }
 });

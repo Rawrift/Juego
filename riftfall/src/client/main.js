@@ -30,6 +30,7 @@ import { createAudio } from './audio.js';
 import { createInput } from './input.js';
 import { createApi } from './api.js';
 import { createWallet, explainError } from './wallet.js';
+import { injected } from './injected.js';
 import { iconCopy, drawShipPreview } from './sprites.js';
 import { createPanels } from './panels.js';
 import { founderRank, currentSkin, founderBusy } from './founder.js';
@@ -460,16 +461,21 @@ async function connectWallet() {
     return false;
   }
   // En el celular, fuera del navegador de una wallet, abrimos el juego dentro de MetaMask.
-  if (!window.ethereum && matchMedia('(pointer: coarse)').matches) {
+  if (!injected() && matchMedia('(pointer: coarse)').matches) {
     toast(t('toast.openMetaMask'));
     setTimeout(() => (location.href = `https://metamask.app.link/dapp/${location.host}${location.pathname}`), 600);
     return false;
   }
+  const wb = $('#walletBtn');
+  wb.disabled = true;
+  wb.textContent = t('menu.connecting');
   try {
     const address = await app.wallet.connect();
     if (app.config.staticMode) {
-      app.balances = await app.wallet.balances();
       toast(t('toast.walletConnected', { a: shortAddr(address) }), 'ok');
+      updateMenu();
+      // Los saldos se leen de la red: si tarda o falla, la wallet igual queda conectada.
+      app.balances = await app.wallet.balances().catch(() => null);
       updateMenu();
       offerWatchToken(address);
       return true;
@@ -484,6 +490,9 @@ async function connectWallet() {
   } catch (err) {
     toast(explainError(err), 'err');
     return false;
+  } finally {
+    wb.disabled = false;
+    updateMenu();
   }
 }
 
@@ -1214,6 +1223,16 @@ async function boot() {
       // Al pagar el Pase Fundador la wallet cambia a la red principal: eso no debe recargar la página.
       app.wallet.onChange(() => founderBusy() || location.reload());
       setNet(TESTNETS.includes(app.config.chain.chainId) ? t('net.shopTest') : t('net.shop'), 'warn');
+      // Si la wallet ya estaba conectada, sigue conectada al volver o recargar (sin abrir MetaMask).
+      app.wallet
+        .reconnect()
+        .then(async (address) => {
+          if (!address) return;
+          updateMenu();
+          app.balances = await app.wallet.balances().catch(() => null);
+          updateMenu();
+        })
+        .catch(() => {});
     } else {
       setNet(t('net.practice'), 'warn');
     }

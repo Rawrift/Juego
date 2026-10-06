@@ -4,6 +4,7 @@
 import { BrowserProvider, JsonRpcProvider, Contract, formatEther } from 'ethers';
 import { TOKEN_ABI, VAULT_ABI, SHIPS_ABI, MARKET_ABI, ARENA_ABI } from '../shared/abis.js';
 import { t } from './i18n.js';
+import { injected } from './injected.js';
 
 const ETH = { name: 'Ether', symbol: 'ETH', decimals: 18 };
 const CHAINS = {
@@ -41,6 +42,8 @@ const CHAINS = {
 export function explainError(err) {
   if (!err) return t('err.unknown');
   if (err.code === 'ACTION_REJECTED' || err.code === 4001 || err?.info?.error?.code === 4001) return t('err.rejected');
+  // Una ventana anterior de la wallet quedó abierta sin responder.
+  if (err.code === -32002 || err?.error?.code === -32002 || err?.info?.error?.code === -32002 || /already pending/i.test(String(err.message))) return t('err.pending');
   let detail = String(err.shortMessage ?? err.message ?? '');
   try {
     detail += JSON.stringify(err.info ?? err.error ?? '', (k, v) => (typeof v === 'bigint' ? v.toString() : v));
@@ -56,9 +59,11 @@ export function explainError(err) {
 
 export function createWallet(chainCfg) {
   const c = chainCfg.contracts;
+  let provider = null;
   let browser = null;
   let signer = null;
   let address = null;
+  let watching = false;
   const listeners = new Set();
   const readProvider = chainCfg.rpcUrl
     ? new JsonRpcProvider(chainCfg.rpcUrl, chainCfg.chainId, { staticNetwork: true, cacheTimeout: -1 })
@@ -89,7 +94,24 @@ export function createWallet(chainCfg) {
       if ((code === 4902 || code === -32603) && CHAINS[chainCfg.chainId]) await browser.send('wallet_addEthereumChain', [params]);
       else throw err;
     }
-    browser = new BrowserProvider(window.ethereum, 'any');
+    browser = new BrowserProvider(provider, 'any');
+  }
+
+  async function attach() {
+    signer = await browser.getSigner();
+    address = await signer.getAddress();
+    if (!watching) {
+      watching = true;
+      // MetaMask también avisa de los cambios que pidió el propio juego (el permiso de conexión, la red),
+      // a veces después de responder: solo cuenta un cambio real de cuenta o de red del jugador.
+      provider.on?.('accountsChanged', (accounts) => {
+        if (String(accounts?.[0] ?? '').toLowerCase() !== address?.toLowerCase()) listeners.forEach((fn) => fn('accounts'));
+      });
+      provider.on?.('chainChanged', (id) => {
+        if (Number(id) !== chainCfg.chainId) listeners.forEach((fn) => fn('chain'));
+      });
+    }
+    return address;
   }
 
   async function approveIfNeeded(spender, amount) {
@@ -106,29 +128,37 @@ export function createWallet(chainCfg) {
     get connected() {
       return !!signer;
     },
-    available: () => typeof window !== 'undefined' && !!window.ethereum,
+    available: () => typeof window !== 'undefined' && !!injected(),
     onChange(fn) {
       listeners.add(fn);
     },
 
     async connect() {
-      if (!window.ethereum) throw new Error(t('err.noWallet'));
-      browser = new BrowserProvider(window.ethereum, 'any');
+      provider = injected();
+      if (!provider) throw new Error(t('err.noWallet'));
+      browser = new BrowserProvider(provider, 'any');
       await browser.send('eth_requestAccounts', []);
       await ensureChain();
-      signer = await browser.getSigner();
-      address = await signer.getAddress();
-      window.ethereum.on?.('accountsChanged', () => listeners.forEach((fn) => fn('accounts')));
-      window.ethereum.on?.('chainChanged', () => listeners.forEach((fn) => fn('chain')));
-      return address;
+      return attach();
+    },
+
+    /** Recupera en silencio una conexión ya autorizada en la red del juego (sin abrir la wallet). */
+    async reconnect() {
+      provider = injected();
+      if (!provider) return null;
+      const [accounts, chainId] = await Promise.all([provider.request({ method: 'eth_accounts' }), provider.request({ method: 'eth_chainId' })]);
+      if (!accounts?.length || Number(chainId) !== chainCfg.chainId) return null;
+      browser = new BrowserProvider(provider, 'any');
+      return attach();
     },
 
     signMessage: (msg) => signer.signMessage(msg),
 
     /** Pide a la wallet que muestre el token del juego en su lista de activos. */
     async watchToken() {
-      if (!window.ethereum) return false;
-      return window.ethereum.request({
+      const p = provider ?? injected();
+      if (!p) return false;
+      return p.request({
         method: 'wallet_watchAsset',
         params: { type: 'ERC20', options: { address: c.RiftToken, symbol: chainCfg.tokenSymbol ?? 'RIFT', decimals: 18 } }
       });

@@ -60,6 +60,7 @@ const UI = {
     'menu.coresTitle': 'Núcleos (para mejorar tus habilidades)',
     'menu.riftTitle': 'Saldo de $RIFT',
     'menu.connect': 'Conectar wallet',
+    'menu.connecting': 'Conectando…',
     'menu.walletNoNet': 'Wallet (sin red)',
     'menu.sound': 'Sonido',
     'menu.lang': 'Idioma',
@@ -294,6 +295,7 @@ const UI = {
 
     'err.unknown': 'Error desconocido',
     'err.rejected': 'Operación cancelada en la wallet',
+    'err.pending': 'MetaMask ya tiene una ventana abierta esperando tu respuesta: ábrela, acéptala o recházala y vuelve a intentar.',
     'err.funds': 'Fondos insuficientes para pagar la operación y el gas',
     'err.network': 'La red rechazó la operación. Revisa tu saldo y que la wallet esté en la red del juego.',
     'err.connectFirst': 'Conecta tu wallet primero',
@@ -494,6 +496,7 @@ const UI = {
     'menu.coresTitle': 'Cores (to upgrade your skills)',
     'menu.riftTitle': '$RIFT balance',
     'menu.connect': 'Connect wallet',
+    'menu.connecting': 'Connecting…',
     'menu.walletNoNet': 'Wallet (no network)',
     'menu.sound': 'Sound',
     'menu.lang': 'Language',
@@ -728,6 +731,7 @@ const UI = {
 
     'err.unknown': 'Unknown error',
     'err.rejected': 'Cancelled in the wallet',
+    'err.pending': 'MetaMask already has a request waiting for you: open it, accept or reject it and try again.',
     'err.funds': 'Not enough funds to pay for the operation and gas',
     'err.network': 'The network rejected the operation. Check your balance and that your wallet is on the game’s network.',
     'err.connectFirst': 'Connect your wallet first',
@@ -928,6 +932,7 @@ const UI = {
     'menu.coresTitle': 'Núcleos (para melhorar suas habilidades)',
     'menu.riftTitle': 'Saldo de $RIFT',
     'menu.connect': 'Conectar carteira',
+    'menu.connecting': 'Conectando…',
     'menu.walletNoNet': 'Carteira (sem rede)',
     'menu.sound': 'Som',
     'menu.lang': 'Idioma',
@@ -1162,6 +1167,7 @@ const UI = {
 
     'err.unknown': 'Erro desconhecido',
     'err.rejected': 'Operação cancelada na carteira',
+    'err.pending': 'A MetaMask já tem uma janela aberta esperando sua resposta: abra, aceite ou recuse e tente de novo.',
     'err.funds': 'Saldo insuficiente para pagar a operação e o gás',
     'err.network': 'A rede rejeitou a operação. Confira seu saldo e se a carteira está na rede do jogo.',
     'err.connectFirst': 'Conecte sua carteira primeiro',

@@ -5,6 +5,7 @@
 import { BrowserProvider, JsonRpcProvider, FetchRequest } from 'ethers';
 import { FOUNDER, tierRank, bnbPriceFromReserves, bnbWeiForUsd, founderFromPayment, erc20TransferData } from '../shared/founder.js';
 import { t } from './i18n.js';
+import { injected } from './injected.js';
 
 const KEY = 'riftfall.founder';
 const SKIN_KEY = 'riftfall.skin';
@@ -123,7 +124,7 @@ async function ensureMainnet(browser) {
 export async function buyFounder(tierId, method, onStage = () => {}) {
   const tier = FOUNDER.tiers.find((x) => x.id === tierId);
   if (!tier) throw new Error('nivel desconocido');
-  if (!window.ethereum) throw new Error(t('err.noWallet'));
+  if (!injected()) throw new Error(t('err.noWallet'));
   busy = true;
   try {
     return await purchase(tier, method, onStage);
@@ -133,10 +134,10 @@ export async function buyFounder(tierId, method, onStage = () => {}) {
 }
 
 async function purchase(tier, method, onStage) {
-  let browser = new BrowserProvider(window.ethereum, 'any');
+  let browser = new BrowserProvider(injected(), 'any');
   await browser.send('eth_requestAccounts', []);
   await ensureMainnet(browser);
-  browser = new BrowserProvider(window.ethereum, 'any');
+  browser = new BrowserProvider(injected(), 'any');
   const signer = await browser.getSigner();
   const from = await signer.getAddress();
 

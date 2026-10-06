@@ -18,6 +18,7 @@ import { drawShipPreview, iconCopy } from './sprites.js';
 import { FOUNDER, tierRank, bnbWeiForUsd } from '../shared/founder.js';
 import { loadFounder, founderRank, buyFounder, verifyPayment, bnbPrice, currentSkin, setSkin, SKIN_TIER } from './founder.js';
 import { explainError } from './wallet.js';
+import { injected } from './injected.js';
 import { $, el, toast, fmtTime, fmtNum, shortAddr, fmtRift, brandText } from './dom.js';
 import { t, tx, locale } from './i18n.js';
 
@@ -294,7 +295,7 @@ export function createPanels(app) {
               const bnbAmt = price ? Number(bnbWeiForUsd(tier.usd, price) / 10n ** 12n) / 1e6 : null;
               const bnb = el('button', { class: 'btn ghost small', disabled: !bnbAmt }, bnbAmt ? t('f.payBnb', { n: bnbAmt }) : t('f.priceErr'));
               const buy = (btn, method) => async () => {
-                if (!window.ethereum) {
+                if (!injected()) {
                   toast(t('toast.openMetaMask'));
                   setTimeout(() => (location.href = `https://metamask.app.link/dapp/${location.host}${location.pathname}`), 600);
                   return;
