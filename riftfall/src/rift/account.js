@@ -135,7 +135,7 @@ export async function loginWallet(provider = eth()) {
   } catch (err) {
     throw fail(err?.code === 4001 ? 'rejected' : 'noWallet');
   }
-  const n = await api('POST', '/api/rift/wallet/nonce', { address });
+  const n = await api('POST', '/api/rift/wallet/nonce', { address, origin: location.origin });
   let signature;
   try {
     signature = await provider.request({ method: 'personal_sign', params: [utf8Hex(n.message), address] });
@@ -156,7 +156,7 @@ export const passkeysSupported = () => typeof window !== 'undefined' && !!window
 /** Protege la cuenta con huella o Face ID de este dispositivo. */
 export async function addPasskey() {
   const { startRegistration } = await import('@simplewebauthn/browser');
-  const o = await api('POST', '/api/rift/passkey/options', { mode: 'register' });
+  const o = await api('POST', '/api/rift/passkey/options', { mode: 'register', origin: location.origin });
   let response;
   try {
     response = await startRegistration({ optionsJSON: o.options });
@@ -171,7 +171,7 @@ export async function addPasskey() {
 /** Entra a la cuenta con la huella o Face ID guardada (también desde otro dispositivo). */
 export async function loginPasskey() {
   const { startAuthentication } = await import('@simplewebauthn/browser');
-  const o = await api('POST', '/api/rift/passkey/options', { mode: 'login' });
+  const o = await api('POST', '/api/rift/passkey/options', { mode: 'login', origin: location.origin });
   let response;
   try {
     response = await startAuthentication({ optionsJSON: o.options });

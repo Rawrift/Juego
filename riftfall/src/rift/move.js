@@ -1,12 +1,13 @@
-// Mudanza del sitio: el juego se publica en Cloudflare (con la Cuenta Rift). Quien abre la dirección
-// vieja (Vercel o duckdns) va a la nueva llevando en el link todo lo que tenía guardado en ese
-// navegador (progreso de RIFTFALL y de Rift Cargo, Pase Fundador, estéticos), sin perder nada.
+// Dirección única del juego: riftfall.duckdns.org (el link de siempre). Vercel reenvía esa dirección
+// a Cloudflare, donde corre el juego con la Cuenta Rift. Quien abre otra dirección (la de Vercel o la de
+// Cloudflare) va a esa llevando en el link todo lo que tenía guardado en ese navegador (progreso de
+// RIFTFALL y de Rift Cargo, Pase Fundador, estéticos y la sesión de la cuenta), sin perder nada.
 
 import { packData, unpackData } from '../shared/pack.js';
 
 /** Dirección nueva del juego. Vacía = todavía no hay mudanza (el sitio funciona donde esté). */
-export const CANONICAL = 'https://riftgames.pages.dev';
-const OLD_HOSTS = /(^|\.)vercel\.app$|(^|\.)duckdns\.org$/;
+export const CANONICAL = 'https://riftfall.duckdns.org';
+const OLD_HOSTS = /(^|\.)vercel\.app$|(^|\.)pages\.dev$/;
 const PARAM = 'mv';
 
 function storageDump() {
@@ -14,7 +15,7 @@ function storageDump() {
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (/^(riftfall|riftcargo)\./.test(k)) data[k] = localStorage.getItem(k);
+      if (/^(riftfall|riftcargo|rift)\./.test(k)) data[k] = localStorage.getItem(k);
     }
   } catch {
     /* sin almacenamiento */
@@ -51,6 +52,10 @@ export async function receiveMove({ applyRiftfall, applyCargo }) {
     const all = await unpackData(text);
     const rf = {};
     const cg = {};
+    // La sesión de la cuenta viaja con la mudanza (es el mismo navegador de la misma persona).
+    if (/^[A-Za-z0-9_-]{20,100}$/.test(all['rift.session'] ?? '') && !localStorage.getItem('rift.session')) {
+      localStorage.setItem('rift.session', all['rift.session']);
+    }
     for (const [k, v] of Object.entries(all)) {
       if (k.startsWith('riftfall.')) rf[k.slice('riftfall.'.length)] = v;
       if (k.startsWith('riftcargo.') || k === 'riftfall.founder') cg[k] = v;

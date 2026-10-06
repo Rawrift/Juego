@@ -18,3 +18,4 @@ dist-crazygames/
 dist-itch/
 riftfall-itch.zip
 .wrangler/
+.vercel-proxy/

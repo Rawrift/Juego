@@ -76,6 +76,23 @@ function deviceName(ua = '') {
   return 'Dispositivo';
 }
 
+/**
+ * Direcciones desde las que se juega. El juego se ve en riftfall.duckdns.org (que pasa por Vercel y
+ * reenvía todo acá) y en riftgames.pages.dev: el servidor recibe el pedido con la dirección de
+ * Cloudflare, así que el juego dice desde dónde lo abrieron y solo se acepta si está en esta lista.
+ * Las passkeys quedan atadas a esa dirección.
+ */
+export const SITES = ['https://riftfall.duckdns.org', 'https://riftgames.pages.dev'];
+
+function siteOf(ctx, claimed) {
+  const own = ctx.url.origin;
+  const extra = String(ctx.env.ALLOWED_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  const allowed = new Set([own, ...SITES, ...extra]);
+  const origin = typeof claimed === 'string' && allowed.has(claimed) ? claimed : own;
+  const u = new URL(origin);
+  return { origin, host: u.host, hostname: u.hostname };
+}
+
 /** Mensaje que firma la wallet para entrar (no cuesta nada ni autoriza pagos). */
 export function walletMessage(address, code, host, at) {
   return [
@@ -257,10 +274,10 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
 
     // ---------- Wallet: firmar un mensaje (gratis) ----------
     'POST /api/rift/wallet/nonce': async (ctx) => {
-      const { address } = await readJson(ctx.request, 2000);
+      const { address, origin } = await readJson(ctx.request, 2000);
       if (!/^0x[0-9a-fA-F]{40}$/.test(address ?? '')) throw new HttpError(400, 'address');
       const id = randomHex(16);
-      const message = walletMessage(address, randomHex(8), ctx.url.host, ctx.t);
+      const message = walletMessage(address, randomHex(8), siteOf(ctx, origin).host, ctx.t);
       await ctx.store.addChallenge({ id, kind: 'wallet', value: JSON.stringify({ address: address.toLowerCase(), message }), expires: ctx.t + 10 * 60_000 });
       return json({ ok: true, id, message });
     },
@@ -289,8 +306,11 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
 
     // ---------- Passkeys (huella / Face ID) ----------
     'POST /api/rift/passkey/options': async (ctx) => {
-      const { mode } = await readJson(ctx.request, 2000);
-      const rpID = ctx.url.hostname;
+      const { mode, origin } = await readJson(ctx.request, 2000);
+      const site = siteOf(ctx, origin);
+      const rpID = site.hostname;
+      // El desafío guarda la dirección: la verificación usa esa, no la que mande el juego después.
+      const challengeValue = (c) => JSON.stringify({ c, o: site.origin });
       if (mode === 'register') {
         const s = await needSession(ctx);
         const existing = await ctx.store.passkeys(s.player.id);
@@ -306,12 +326,12 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
           authenticatorSelection: { residentKey: 'required', userVerification: 'preferred' }
         });
         const id = randomHex(16);
-        await ctx.store.addChallenge({ id, kind: 'pk-reg', value: options.challenge, playerId: s.player.id, expires: ctx.t + 5 * 60_000 });
+        await ctx.store.addChallenge({ id, kind: 'pk-reg', value: challengeValue(options.challenge), playerId: s.player.id, expires: ctx.t + 5 * 60_000 });
         return json({ ok: true, id, options });
       }
       const options = await generateAuthenticationOptions({ rpID, userVerification: 'preferred', allowCredentials: [] });
       const id = randomHex(16);
-      await ctx.store.addChallenge({ id, kind: 'pk-auth', value: options.challenge, expires: ctx.t + 5 * 60_000 });
+      await ctx.store.addChallenge({ id, kind: 'pk-auth', value: challengeValue(options.challenge), expires: ctx.t + 5 * 60_000 });
       return json({ ok: true, id, options });
     },
 
@@ -320,13 +340,14 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
       const { id, response } = await readJson(ctx.request, 20_000);
       const ch = await ctx.store.takeChallenge(String(id ?? ''), 'pk-reg', ctx.t);
       if (!ch || ch.player_id !== s.player.id) throw new HttpError(400, 'expired');
+      const { c: challenge, o: origin } = JSON.parse(ch.value);
       let v;
       try {
         v = await verifyRegistrationResponse({
           response,
-          expectedChallenge: ch.value,
-          expectedOrigin: ctx.url.origin,
-          expectedRPID: ctx.url.hostname,
+          expectedChallenge: challenge,
+          expectedOrigin: origin,
+          expectedRPID: new URL(origin).hostname,
           requireUserVerification: false
         });
       } catch {
@@ -353,13 +374,14 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
       if (!ch) throw new HttpError(400, 'expired');
       const row = await ctx.store.passkey(String(response?.id ?? ''));
       if (!row) throw new HttpError(404, 'passkey-unknown');
+      const { c: challenge, o: origin } = JSON.parse(ch.value);
       let v;
       try {
         v = await verifyAuthenticationResponse({
           response,
-          expectedChallenge: ch.value,
-          expectedOrigin: ctx.url.origin,
-          expectedRPID: ctx.url.hostname,
+          expectedChallenge: challenge,
+          expectedOrigin: origin,
+          expectedRPID: new URL(origin).hostname,
           credential: { id: row.cred_id, publicKey: unb64url(row.public_key), counter: row.counter, transports: JSON.parse(row.transports || '[]') },
           requireUserVerification: false
         });

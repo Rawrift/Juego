@@ -219,19 +219,19 @@ test('cuenta con wallet: firmar (gratis) la suma a la cuenta y otro dispositivo 
   }
 });
 
-test('mudanza: quien abre la dirección vieja (Vercel) pasa a la nueva con su progreso de los dos juegos', async ({ browser }) => {
+test('mudanza: quien abre otra dirección (Vercel o Cloudflare) pasa al link de siempre (duckdns) con su progreso', async ({ browser }) => {
   test.setTimeout(240_000);
   const DIST = path.resolve('dist-e2e');
   const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg' };
   const api = createApi({ chain: { payment: async () => ({ kind: null, reason: 'notFound' }) } });
   const env = { DB: createD1() };
   const ctx = await browser.newContext(phone);
-  // Las dos direcciones se sirven desde el build de prueba (sin red): la vieja de Vercel y la nueva.
-  await ctx.route(/^https?:\/\/(riftfall-chi\.vercel\.app|riftgames\.pages\.dev)\//, async (route) => {
+  // Las tres direcciones se sirven desde el build de prueba (sin red); duckdns es la de siempre.
+  await ctx.route(/^https?:\/\/(riftfall-chi\.vercel\.app|riftgames\.pages\.dev|riftfall\.duckdns\.org)\//, async (route) => {
     const req = route.request();
     const url = new URL(req.url());
     if (url.pathname.startsWith('/api/')) {
-      if (url.hostname !== 'riftgames.pages.dev') return route.fulfill({ status: 404, contentType: 'text/plain', body: 'not found' });
+      if (url.hostname === 'riftfall-chi.vercel.app') return route.fulfill({ status: 404, contentType: 'text/plain', body: 'not found' });
       const r = await api.handle(new Request(url, { method: req.method(), headers: req.headers(), body: req.postDataBuffer() ?? undefined }), env);
       return route.fulfill({ status: r.status, headers: Object.fromEntries(r.headers), body: Buffer.from(await r.arrayBuffer()) });
     }
@@ -250,7 +250,7 @@ test('mudanza: quien abre la dirección vieja (Vercel) pasa a la nueva con su pr
       }
     }, progress);
     await page.goto('https://riftfall-chi.vercel.app/');
-    await page.waitForURL(/^https:\/\/riftgames\.pages\.dev\//, { timeout: 60_000 });
+    await page.waitForURL(/^https:\/\/riftfall\.duckdns\.org\//, { timeout: 60_000 });
     await expect.poll(() => page.evaluate(() => window.__RIFTFALL__?.app.progress.bestScore ?? 0).catch(() => 0), { timeout: 60_000 }).toBe(7777);
     expect(page.url()).not.toContain('mv=');
     // Y el progreso queda en la cuenta (nube) del sitio nuevo.

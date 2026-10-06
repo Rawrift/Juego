@@ -178,3 +178,16 @@ test('control rápido: rechaza grabaciones rotas y resúmenes inventados', () =>
   assert.equal(quickVerify({ inputs: [0, 600], choices: [], claimed: { score: 10, timeSec: 10, kills: 1 } }).ok, true);
   assert.equal(quickVerify({ inputs: [0, 600], choices: [], claimed: { score: -1, timeSec: 10, kills: 1 } }).ok, false);
 });
+
+test('passkeys desde el link de siempre (duckdns, que llega reenviado): solo direcciones de la lista', async () => {
+  const { call } = setup();
+  const { token } = await call('POST', '/api/rift/guest', {});
+  const duck = await call('POST', '/api/rift/passkey/options', { token, body: { mode: 'register', origin: 'https://riftfall.duckdns.org' } });
+  assert.equal(duck.options.rp.id, 'riftfall.duckdns.org');
+  const evil = await call('POST', '/api/rift/passkey/options', { token, body: { mode: 'register', origin: 'https://evil.example' } });
+  assert.equal(evil.options.rp.id, 'rift.test');
+  const login = await call('POST', '/api/rift/passkey/options', { body: { mode: 'login', origin: 'https://riftfall.duckdns.org' } });
+  assert.equal(login.options.rpId, 'riftfall.duckdns.org');
+  const n = await call('POST', '/api/rift/wallet/nonce', { body: { address: Wallet.createRandom().address, origin: 'https://riftfall.duckdns.org' } });
+  assert.match(n.message, /Sitio: riftfall\.duckdns\.org/);
+});

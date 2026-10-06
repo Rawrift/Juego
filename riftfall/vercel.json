@@ -1,7 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "functions": {
-    "api/daily.js": { "maxDuration": 30 },
-    "api/ranking.js": { "maxDuration": 30 }
-  }
+  "installCommand": "echo sin dependencias",
+  "buildCommand": "node scripts/vercel-proxy.mjs",
+  "outputDirectory": ".vercel-proxy",
+  "rewrites": [
+    {
+      "source": "/:path*",
+      "destination": "https://riftgames.pages.dev/:path*"
+    }
+  ]
 }
