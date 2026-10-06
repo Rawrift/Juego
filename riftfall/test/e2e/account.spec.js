@@ -218,3 +218,44 @@ test('cuenta con wallet: firmar (gratis) la suma a la cuenta y otro dispositivo 
     site.close();
   }
 });
+
+test('mudanza: quien abre la dirección vieja (Vercel) pasa a la nueva con su progreso de los dos juegos', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const DIST = path.resolve('dist-e2e');
+  const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg' };
+  const api = createApi({ chain: { payment: async () => ({ kind: null, reason: 'notFound' }) } });
+  const env = { DB: createD1() };
+  const ctx = await browser.newContext(phone);
+  // Las dos direcciones se sirven desde el build de prueba (sin red): la vieja de Vercel y la nueva.
+  await ctx.route(/^https?:\/\/(riftfall-chi\.vercel\.app|riftgames\.pages\.dev)\//, async (route) => {
+    const req = route.request();
+    const url = new URL(req.url());
+    if (url.pathname.startsWith('/api/')) {
+      if (url.hostname !== 'riftgames.pages.dev') return route.fulfill({ status: 404, contentType: 'text/plain', body: 'not found' });
+      const r = await api.handle(new Request(url, { method: req.method(), headers: req.headers(), body: req.postDataBuffer() ?? undefined }), env);
+      return route.fulfill({ status: r.status, headers: Object.fromEntries(r.headers), body: Buffer.from(await r.arrayBuffer()) });
+    }
+    let file = path.join(DIST, url.pathname);
+    if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, 'index.html');
+    if (!fs.existsSync(file)) return route.fulfill({ status: 404, contentType: 'text/plain', body: 'not found' });
+    return route.fulfill({ status: 200, contentType: TYPES[path.extname(file)] ?? 'application/octet-stream', body: fs.readFileSync(file) });
+  });
+  try {
+    const page = await ctx.newPage();
+    const progress = { cores: 321, lifetimeCores: 900, talents: { hull: 2 }, riftMax: 1, parts: {}, loadout: {}, runs: 9, bestScore: 7777, bestTime: 300, kills: 800, bosses: 2, victories: 0, streak: 2, lastDay: '', updatedAt: Date.now() };
+    await ctx.addInitScript((p) => {
+      if (location.hostname.endsWith('vercel.app') && !localStorage.getItem('riftfall.progress')) {
+        localStorage.setItem('riftfall.progress', JSON.stringify(p));
+        localStorage.setItem('riftfall.name', 'Papá');
+      }
+    }, progress);
+    await page.goto('https://riftfall-chi.vercel.app/');
+    await page.waitForURL(/^https:\/\/riftgames\.pages\.dev\//, { timeout: 60_000 });
+    await expect.poll(() => page.evaluate(() => window.__RIFTFALL__?.app.progress.bestScore ?? 0).catch(() => 0), { timeout: 60_000 }).toBe(7777);
+    expect(page.url()).not.toContain('mv=');
+    // Y el progreso queda en la cuenta (nube) del sitio nuevo.
+    await expect.poll(async () => (await env.DB.prepare("SELECT data FROM saves WHERE game = 'riftfall'").first())?.data ?? '', { timeout: 30_000 }).toContain('"bestScore":7777');
+  } finally {
+    await ctx.close();
+  }
+});

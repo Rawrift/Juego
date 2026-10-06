@@ -5,7 +5,7 @@
 import { packData, unpackData } from '../shared/pack.js';
 
 /** Dirección nueva del juego. Vacía = todavía no hay mudanza (el sitio funciona donde esté). */
-export const CANONICAL = '';
+export const CANONICAL = 'https://riftgames.pages.dev';
 const OLD_HOSTS = /(^|\.)vercel\.app$|(^|\.)duckdns\.org$/;
 const PARAM = 'mv';
 

@@ -1,0 +1,9 @@
+# Cloudflare Pages: el juego (dist) + el servidor de la Cuenta Rift (functions/) con la base D1.
+name = "riftgames"
+pages_build_output_dir = "./dist"
+compatibility_date = "2026-10-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "rift"
+database_id = "ddcf2b70-a2a2-4e06-b692-47b07d98e30f"
