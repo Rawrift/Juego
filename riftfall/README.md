@@ -34,6 +34,7 @@ Las naves son **NFT** que se compran, se forjan y se revenden. En la **Arena** s
   - **Versión para portales** (CrazyGames) con anuncios opcionales, sin cripto y con el progreso guardado en la cuenta
     del jugador: `npm run build:crazygames` genera un único `dist-crazygames/index.html`.
   - Guía completa, grants de BNB Chain y borrador de postulación: [`docs/FINANCIAMIENTO.md`](docs/FINANCIAMIENTO.md).
+- **Conseguir jugadores:** textos para cada red, calendario de 2 semanas y videos promocionales en [`docs/REDES.md`](docs/REDES.md).
 
 ## Inicio rápido (todo en local, con blockchain)
 
