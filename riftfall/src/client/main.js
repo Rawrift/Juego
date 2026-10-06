@@ -1135,6 +1135,9 @@ document.querySelectorAll('[data-open]').forEach((b) =>
     panels.open(b.dataset.open);
   })
 );
+// El navegador solo deja sonar el audio después de un toque o una tecla (la primera partida del
+// portal arranca sola, sin ese toque).
+for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, () => audio.unlock(), { once: true });
 window.addEventListener('keydown', (e) => {
   if (game.mode === 'play') {
     if (game.choiceOpen && ['Digit1', 'Digit2', 'Digit3', 'Numpad1', 'Numpad2', 'Numpad3'].includes(e.code)) {
@@ -1173,6 +1176,8 @@ async function boot() {
     updateMenu();
     setNet(t('net.practice'), 'warn');
     portal.loadingStop();
+    // Quien nunca jugó entra directo a la partida (regla del portal: nada de menús antes de jugar).
+    if (!app.progress.runs) startRun('normal');
     return;
   }
   setupPwa();

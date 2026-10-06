@@ -486,7 +486,7 @@ test('versión para portales (CrazyGames): sin cripto, revivir y x2 Núcleos con
   await new Promise((r) => site.listen(4179, '127.0.0.1', r));
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: 'en-US' });
   // SDK simulado: anota las llamadas y "muestra" cada anuncio completo.
-  await ctx.route('https://sdk.crazygames.com/**', (route) =>
+  const sdkMock = (route) =>
     route.fulfill({
       status: 200,
       contentType: 'text/javascript',
@@ -504,13 +504,15 @@ test('versión para portales (CrazyGames): sin cripto, revivir y x2 Núcleos con
           ad: { requestAd: (type, cb) => { __cg.push('ad:' + type); setTimeout(() => { cb.adStarted(); setTimeout(cb.adFinished, 50); }, 50); }, hasAdblock: async () => false },
           // Cuenta del portal con progreso de otro dispositivo.
           data: (() => {
-            const m = new Map([['riftfall.progress', JSON.stringify({ cores: 777, lifetimeCores: 777 })], ['riftfall.tutorial', '1']]);
+            const m = location.search.includes('nuevo')
+              ? new Map()
+              : new Map([['riftfall.progress', JSON.stringify({ cores: 777, lifetimeCores: 777, runs: 4 })], ['riftfall.tutorial', '1']]);
             window.__cgData = m;
             return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k), clear: () => m.clear() };
           })()
         } };`
-    })
-  );
+    });
+  await ctx.route('https://sdk.crazygames.com/**', sdkMock);
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -579,6 +581,19 @@ test('versión para portales (CrazyGames): sin cripto, revivir y x2 Núcleos con
     await expect(page.locator('#hud')).toBeVisible();
     expect((await calls()).filter((c) => c === 'ad:midgame')).toHaveLength(1);
     expect(errors).toEqual([]);
+
+    // Un jugador nuevo entra directo a la partida, sin tocar nada.
+    const fresh = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: 'en-US' });
+    try {
+      await fresh.route('https://sdk.crazygames.com/**', sdkMock);
+      const p2 = await fresh.newPage();
+      await p2.goto('http://127.0.0.1:4179/juegos/riftfall/?nuevo');
+      await expect(p2.locator('#hud')).toBeVisible();
+      await expect(p2.locator('#menu')).toBeHidden();
+      await expect.poll(() => p2.evaluate(() => window.__cg)).toContain('gameplayStart');
+    } finally {
+      await fresh.close();
+    }
   } finally {
     await ctx.close();
     site.close();
