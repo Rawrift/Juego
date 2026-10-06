@@ -30,7 +30,8 @@
     "deploy:base": "hardhat run scripts/deploy.cjs --network base",
     "build:portal": "vite build --mode portal --outDir dist-portal",
     "build:crazygames": "npm run build:portal && node scripts/inline-portal.mjs",
-    "build:crazygames:full": "VITE_PORTAL_ADS=1 npm run build:crazygames"
+    "build:crazygames:full": "VITE_PORTAL_ADS=1 npm run build:crazygames",
+    "build:itch": "VITE_PORTAL_SDK=none npm run build:portal && node scripts/inline-portal.mjs dist-portal dist-itch && rm -f riftfall-itch.zip && cd dist-itch && zip -q ../riftfall-itch.zip index.html"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^6.1.2",

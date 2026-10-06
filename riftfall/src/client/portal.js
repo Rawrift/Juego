@@ -5,6 +5,8 @@ export const PORTAL = import.meta.env.MODE === 'portal';
 // En el Basic Launch de CrazyGames no se permiten anuncios: se activan con VITE_PORTAL_ADS=1 para el Full Launch.
 const ADS = import.meta.env.VITE_PORTAL_ADS === '1';
 const SDK_URL = 'https://sdk.crazygames.com/crazygames-sdk-v3.js';
+// Portales sin SDK (itch.io, Newgrounds…): VITE_PORTAL_SDK=none. El juego queda igual, sin anuncios.
+const USE_SDK = import.meta.env.VITE_PORTAL_SDK !== 'none';
 
 let sdk = null;
 
@@ -12,6 +14,7 @@ let sdk = null;
 export async function initPortal() {
   if (!PORTAL) return;
   document.documentElement.classList.add('portal');
+  if (!USE_SDK) return;
   await new Promise((resolve) => {
     const s = document.createElement('script');
     s.src = SDK_URL;
