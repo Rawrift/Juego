@@ -23,7 +23,8 @@ Las naves son **NFT** que se compran, se forjan y se revenden. En la **Arena** s
 - **Economía con anti-trampas real ("Proof of Play"):** el servidor re-simula cada partida tick a tick antes de pagar.
 - **Ingresos para el creador:** venta de naves, comisiones de Forja, Mercado y Arena, regalías y liquidez. Detalle en [`docs/ECONOMIA.md`](docs/ECONOMIA.md).
 - **Se instala como app** (PWA) desde el navegador del celular o de la PC, y la partida funciona sin conexión.
-- **Desafío diario:** la misma semilla y las mismas reglas para todos, con ranking propio y resultado para compartir.
+- **Desafío diario:** la misma semilla y las mismas reglas para todos, con resultado para compartir y **ranking mundial**:
+  la función `api/daily.js` (Vercel) vuelve a jugar cada partida enviada y guarda el top 50 del día en Vercel Blob.
 - **Duelo con amigos:** juegas un mapa y mandas el link por WhatsApp; tu amigo juega el mismo mapa con la misma nave y ve
   quién ganó, y puede devolverte el reto. Funciona sin servidor: el link lleva la semilla y la marca.
 - **Taller:** 20 piezas coleccionables (cañón, motor, alas y núcleo, 5 niveles cada una) que salen de cajas, cambian
