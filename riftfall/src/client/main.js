@@ -50,6 +50,7 @@ import {
   buyLocalCrate
 } from './progress.js';
 import { dailyNumber, dailySeed, DAILY_RULES, msToNextDaily } from '../shared/daily.js';
+import { DUEL_RULES, decodeDuel, duelUrl, cleanName } from '../shared/duel.js';
 import { shareResult } from './share.js';
 
 applyStatic();
@@ -185,6 +186,86 @@ function updateDailyCard() {
   }
 }
 $('#dcPlay').addEventListener('click', () => startRun('daily'));
+
+// --------------------------------------------------------------------- Duelo con amigos
+
+/** Reto recibido por link (?duel=…). */
+let incomingDuel = null;
+/** Duelo en juego: la semilla y el rival (null si es un reto nuevo). */
+let duelCtx = null;
+const NAME_KEY = 'riftfall.name';
+
+function readIncomingDuel() {
+  const code = new URLSearchParams(location.search).get('duel');
+  if (!code || PORTAL) return;
+  incomingDuel = decodeDuel(code);
+  if (!incomingDuel) toast(t('du.bad'), 'err');
+}
+
+function updateDuelInvite() {
+  $('#duelInvite').classList.toggle('hidden', !incomingDuel);
+  if (!incomingDuel) return;
+  const d = incomingDuel;
+  $('#duelFrom').textContent = d.name ? t('du.from', { name: d.name }) : t('du.fromAnon');
+  $('#duelMark').textContent = t('du.mark', { score: fmtNum(d.score), time: fmtTime(d.timeSec), kills: fmtNum(d.kills) });
+}
+
+function pilotName() {
+  try {
+    return cleanName(localStorage.getItem(NAME_KEY));
+  } catch {
+    return '';
+  }
+}
+
+$('#duelAccept').addEventListener('click', () => {
+  duelCtx = { seed: incomingDuel.seed, opp: incomingDuel };
+  startRun('duel');
+});
+$('#duelPlay').addEventListener('click', () => {
+  duelCtx = { seed: (Math.random() * 2 ** 32) >>> 0, opp: null };
+  startRun('duel');
+});
+
+/** Fin de un duelo: quién ganó y el botón para mandar (o devolver) el reto. */
+function showDuelResult(duel, local) {
+  $('#goDuel').classList.toggle('hidden', !duel);
+  $('#againBtn').textContent = duel ? t('du.again') : t('go.again');
+  if (!duel) return;
+  const opp = duel.opp;
+  const name = opp?.name || t('du.friend');
+  const diff = opp ? local.score - opp.score : 0;
+  const res = $('#goDuelResult');
+  res.className = !opp ? '' : diff > 0 ? 'won' : diff < 0 ? 'lost' : '';
+  res.textContent = !opp
+    ? t('du.ready')
+    : diff > 0
+      ? t('du.won', { name, diff: fmtNum(diff) })
+      : diff < 0
+        ? t('du.lost', { name, diff: fmtNum(-diff) })
+        : t('du.tie', { name });
+  $('#duelSend').textContent = opp ? t('du.sendBack') : t('du.send');
+  $('#duelName').value = pilotName();
+}
+
+$('#duelSend').addEventListener('click', async () => {
+  if (lastResult?.duelSeed == null) return;
+  const name = cleanName($('#duelName').value);
+  try {
+    localStorage.setItem(NAME_KEY, name);
+  } catch {
+    /* sin almacenamiento */
+  }
+  const s = lastResult.summary;
+  const url = duelUrl(location.origin, { seed: lastResult.duelSeed, score: s.score, timeSec: s.timeSec, kills: s.kills, victory: s.victory, name });
+  const b = $('#duelSend');
+  b.disabled = true;
+  try {
+    await shareResult({ ...lastResult, duelUrl: url });
+  } finally {
+    b.disabled = false;
+  }
+});
 
 // --------------------------------------------------------------------- Nivel del Rift
 
@@ -326,6 +407,7 @@ function updateMenu() {
   $('#streakTag').textContent = t('menu.streak', { n: pl.streak });
   updateRiftPick();
   updateDailyCard();
+  updateDuelInvite();
   const unit = pl.online ? '◆' : '✦';
   $('#missionList').replaceChildren(
     ...pl.missions.map((m) =>
@@ -426,6 +508,8 @@ async function startRun(mode = 'normal') {
   game.offline = false;
   try {
     if (PORTAL) throw new Error('sin servidor en portales');
+    // El duelo usa la semilla del link: se juega en el dispositivo, sin recompensas del servidor.
+    if (mode === 'duel') throw new Error('duelo sin servidor');
     run = await api.startRun({
       mode,
       rift: mode === 'normal' ? riftLevel() : 0,
@@ -445,6 +529,8 @@ async function startRun(mode = 'normal') {
     if (mode === 'daily') {
       const n = dailyNumber();
       run = { runId: null, seed: dailySeed(n), ship: DAILY_RULES.ship, shipLevel: DAILY_RULES.shipLevel, talents: {}, rift: DAILY_RULES.rift, mode: 'daily', daily: n };
+    } else if (mode === 'duel') {
+      run = { runId: null, seed: duelCtx.seed, ship: DUEL_RULES.ship, shipLevel: DUEL_RULES.shipLevel, talents: {}, rift: DUEL_RULES.rift, mode: 'duel', duel: duelCtx };
     } else {
       run = {
         runId: null,
@@ -457,7 +543,7 @@ async function startRun(mode = 'normal') {
         mode: 'normal'
       };
     }
-    if (!practiceNoticeShown && !PORTAL) {
+    if (!practiceNoticeShown && !PORTAL && mode !== 'duel') {
       practiceNoticeShown = true;
       toast(t('toast.practice'));
     }
@@ -477,12 +563,14 @@ async function startRun(mode = 'normal') {
   $('#hud').classList.remove('hidden');
   $('#bossBar').classList.add('hidden');
   const hudRift = $('#hudRift');
-  hudRift.textContent = run.mode === 'daily' ? t('dc.hud', { n: run.daily }) : t('hud.rift', { n: game.sim.rift });
-  hudRift.classList.toggle('hidden', game.sim.rift === 0 && run.mode !== 'daily');
+  hudRift.textContent = run.mode === 'daily' ? t('dc.hud', { n: run.daily }) : run.mode === 'duel' ? t('du.hud') : t('hud.rift', { n: game.sim.rift });
+  hudRift.classList.toggle('hidden', game.sim.rift === 0 && !['daily', 'duel'].includes(run.mode));
   input.setEnabled(true);
   game.reviveOffered = false;
   portal.gameplayStart();
+  const opp = run.duel?.opp;
   if (run.mode === 'daily') announce(t('ann.daily', { n: run.daily }), t('ann.dailySub'), 'good');
+  else if (run.mode === 'duel') announce(t('du.hud'), opp ? t('du.vs', { name: opp.name || t('du.friend'), score: fmtNum(opp.score) }) : t('du.new'), 'good');
   else announce(run.mode === 'arena' ? t('ann.arena') : t('ann.survive'), run.mode === 'arena' ? t('ann.arenaSub') : t('ann.surviveSub'), 'good');
   showTutorial();
 }
@@ -651,7 +739,9 @@ async function showGameOver(local, victory) {
   $('#goKicker').textContent = victory ? t('go.victory') : t('go.kicker');
   $('#goTitle').textContent = title;
   const daily = game.run?.mode === 'daily' ? game.run.daily : null;
-  lastResult = { summary: local, shipKey: game.sim.shipKey, title: daily ? t('dc.hud', { n: daily }) : title, daily };
+  const duel = game.run?.mode === 'duel' ? game.run.duel : null;
+  lastResult = { summary: local, shipKey: game.sim.shipKey, title: daily ? t('dc.hud', { n: daily }) : duel ? t('du.hud') : title, daily, duelSeed: duel?.seed ?? null };
+  showDuelResult(duel, local);
   // Desafío del Día: se guarda la mejor marca de hoy en este dispositivo (también con servidor).
   const challengeRow = () => {
     if (!daily) return [];
@@ -691,7 +781,8 @@ async function showGameOver(local, victory) {
     verify.className = 'verify';
     verify.textContent = t('go.practice');
     $('#goTotalLabel').textContent = t('go.coresEarned');
-    const res = recordLocalRun(app.progress, local, { daily: !!daily });
+    // El duelo sigue las reglas parejas del desafío: sin cajas ni desbloqueo de niveles.
+    const res = recordLocalRun(app.progress, local, { daily: !!daily || !!duel });
     // Portales: duplicar los Núcleos de la partida viendo un anuncio (opcional, una vez).
     const dbl = $('#doubleBtn');
     dbl.classList.toggle('hidden', !(PORTAL && portal.active && res.cores > 0));
@@ -1003,7 +1094,7 @@ function frame(now) {
 // --------------------------------------------------------------------- eventos de UI
 
 $('#playBtn').addEventListener('click', () => startRun('normal'));
-$('#againBtn').addEventListener('click', () => startRun(['arena', 'daily'].includes(game.run?.mode) ? game.run.mode : 'normal'));
+$('#againBtn').addEventListener('click', () => startRun(['arena', 'daily', 'duel'].includes(game.run?.mode) ? game.run.mode : 'normal'));
 $('#menuBtn').addEventListener('click', backToMenu);
 $('#goTalentsBtn').addEventListener('click', () => {
   backToMenu();
@@ -1085,6 +1176,7 @@ async function boot() {
     return;
   }
   setupPwa();
+  readIncomingDuel();
   newDemo();
   requestAnimationFrame(frame);
   applyCosmetics();

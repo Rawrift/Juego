@@ -79,6 +79,14 @@
         <div class="eyebrow crypto-only" data-i18n="menu.season">TEMPORADA 1 · PROOF OF PLAY</div>
         <h1 class="logo">RIFT<span>FALL</span></h1>
         <p class="tagline" data-i18n-html="menu.tagline"></p>
+        <div class="duel-invite web-only hidden" id="duelInvite">
+          <div>
+            <b id="duelFrom"></b>
+            <span id="duelMark"></span>
+            <small data-i18n="du.sub">Mismo mapa, misma nave. ¿Le ganas?</small>
+          </div>
+          <button id="duelAccept" class="btn primary" data-i18n="du.accept">ACEPTAR DUELO</button>
+        </div>
         <div class="ship-pick" id="shipPick">
           <canvas id="shipPreview" width="160" height="160"></canvas>
           <div>
@@ -110,6 +118,11 @@
           <header><h3><span data-i18n="dc.title">DESAFÍO DEL DÍA</span> <b id="dcNum">#1</b></h3><span id="dcNext"></span></header>
           <p id="dcInfo"></p>
           <button class="btn gold small" id="dcPlay" data-i18n="dc.play">JUGAR DESAFÍO</button>
+        </section>
+        <section class="card duel-card web-only" id="duelCard">
+          <header><h3 data-i18n="du.title">DUELO CON AMIGOS</h3></header>
+          <p data-i18n="du.text"></p>
+          <button class="btn secondary small" id="duelPlay" data-i18n="du.play">JUGAR Y RETAR</button>
         </section>
         <section class="card daily">
           <header><h3 data-i18n="menu.daily">Misiones diarias</h3><span class="streak" id="streakTag"></span></header>
@@ -179,6 +192,13 @@
         <div class="verify" id="goVerify"></div>
         <ul id="goRewardList"></ul>
         <div class="go-total"><small id="goTotalLabel"></small><b id="goTotal">0</b></div>
+      </div>
+      <div class="go-duel hidden" id="goDuel">
+        <p id="goDuelResult"></p>
+        <div class="go-duel-row">
+          <input id="duelName" maxlength="16" autocomplete="nickname" data-i18n-placeholder="du.name" placeholder="Tu nombre (opcional)" />
+          <button id="duelSend" class="btn primary" data-i18n="du.send">⚔ RETAR A UN AMIGO</button>
+        </div>
       </div>
       <div class="go-actions">
         <button id="againBtn" class="btn primary big" data-i18n="go.again">JUGAR OTRA VEZ</button>

@@ -784,8 +784,54 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .daily-challenge p { font-size: 13px; }
 }
 
+/* ------------------------------------------------------------------ Duelo con amigos */
+.duel-card {
+  display: grid; gap: 8px;
+  border-color: rgba(255, 77, 210, 0.45);
+  background: linear-gradient(120deg, rgba(255, 77, 210, 0.12), rgba(12, 15, 34, 0.82) 55%);
+}
+.duel-card header { margin-bottom: 0 !important; }
+.duel-card p { margin: 0; color: #c9d6f5; font-size: 15px; }
+.duel-card .btn { justify-self: start; }
+.duel-invite {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  margin: 4px 0 14px; padding: 12px 16px; border-radius: 14px;
+  border: 1px solid rgba(255, 77, 210, 0.7);
+  background: linear-gradient(110deg, rgba(255, 77, 210, 0.22), rgba(12, 15, 34, 0.85) 70%);
+  box-shadow: 0 0 28px rgba(255, 77, 210, 0.28);
+  animation: duel-pulse 2.4s ease-in-out infinite;
+}
+.duel-invite > div { display: grid; gap: 2px; flex: 1; min-width: 200px; }
+.duel-invite b { font-family: var(--display); font-size: 15px; letter-spacing: 0.06em; color: #fff; text-shadow: 0 0 12px rgba(255, 77, 210, 0.9); }
+.duel-invite span { font-family: var(--display); font-size: 14px; color: var(--gold); }
+.duel-invite small { color: #e3c9f2; font-size: 14px; }
+@keyframes duel-pulse { 50% { box-shadow: 0 0 40px rgba(255, 77, 210, 0.5); } }
+.go-duel {
+  display: grid; gap: 10px; margin: 0 0 16px; padding: 12px 14px; border-radius: 14px;
+  border: 1px solid rgba(255, 77, 210, 0.5); background: rgba(255, 77, 210, 0.08);
+}
+.go-duel p { margin: 0; font-family: var(--display); font-size: 15px; letter-spacing: 0.04em; }
+.go-duel p.won { color: var(--green); text-shadow: 0 0 12px rgba(77, 255, 154, 0.6); }
+.go-duel p.lost { color: #ffb3c1; }
+.go-duel-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.go-duel-row input {
+  flex: 1; min-width: 140px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line-strong);
+  background: rgba(4, 8, 20, 0.8); color: var(--text); font-family: var(--ui); font-size: 16px;
+  user-select: text; -webkit-user-select: text;
+}
+.go-duel-row .btn { flex: 1; min-width: 180px; white-space: nowrap; }
+@media (orientation: landscape) and (max-height: 520px) {
+  .duel-card { padding: 10px 12px; gap: 6px; }
+  .duel-card p { font-size: 13px; }
+  .duel-invite { padding: 8px 12px; margin: 2px 0 8px; }
+  .go-duel { margin-bottom: 10px; padding: 8px 10px; gap: 8px; }
+  .go-duel p { font-size: 13px; }
+  .go-duel-row input { min-width: 0; padding: 8px 10px; font-size: 13px; }
+  .go-duel-row .btn { min-width: 0; flex: 1.5; white-space: normal; font-size: 12px; letter-spacing: 0.06em; padding: 8px 10px; }
+}
+
 /* ------------------------------------------------------------------ versión para portales */
-.portal .crypto-only { display: none !important; }
+.portal .crypto-only, .portal .web-only { display: none !important; }
 .portal .ship-pick { grid-template-columns: 96px 1fr; }
 #revive { z-index: 30; }
 .revive-card {

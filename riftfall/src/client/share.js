@@ -16,8 +16,9 @@ export function shareUrl() {
   return PORTAL ? '' : `${location.origin}/`;
 }
 
-export function shareText({ summary, daily }) {
+export function shareText({ summary, daily, duelUrl }) {
   const vars = { time: fmtTime(summary.timeSec), kills: fmtNum(summary.kills), score: fmtNum(summary.score), n: daily };
+  if (duelUrl) return t('sh.duel', vars);
   if (daily) return t('sh.daily', vars);
   return t(summary.victory ? 'sh.textWin' : 'sh.text', vars);
 }
@@ -144,10 +145,10 @@ function roundRect(g, x, y, w, h, r) {
   g.closePath();
 }
 
-/** Comparte el resultado con la mejor opción disponible en este navegador. */
+/** Comparte el resultado con la mejor opción disponible en este navegador (un duelo lleva su propio link). */
 export async function shareResult(result) {
   const text = shareText(result);
-  const url = shareUrl();
+  const url = result.duelUrl ?? shareUrl();
   const full = url ? `${text}\n${url}` : text;
   try {
     const card = await buildCard(result);

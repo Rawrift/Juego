@@ -626,3 +626,110 @@ test('Taller: comprar una caja con Núcleos, equipar la pieza y jugar con ella',
     site.close();
   }
 });
+
+test('Duelo con amigos: link con semilla y marca, mismo mapa con reglas parejas, resultado y devolver el reto', async ({ browser }) => {
+  const { encodeDuel, decodeDuel } = await import('../../src/shared/duel.js');
+  const seed = 123_456_789;
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: 'es-ES', baseURL: 'http://127.0.0.1:4174' });
+  try {
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    // El duelo no pide partidas al servidor aunque esté en línea.
+    const runStarts = [];
+    page.on('request', (r) => r.url().includes('/api/run/start') && runStarts.push(r.url()));
+    await page.addInitScript(() => {
+      window.__shared = null;
+      navigator.canShare = () => false;
+      navigator.share = async (data) => {
+        window.__shared = data;
+      };
+      // Aunque tenga habilidades, el duelo se juega sin ellas.
+      if (!localStorage.getItem('riftfall.progress')) localStorage.setItem('riftfall.progress', JSON.stringify({ cores: 0, talents: { hull: 5, power: 5 } }));
+    });
+    await page.goto(`/?duel=${encodeDuel({ seed, score: 98_765, timeSec: 400, kills: 500, victory: false, name: 'Ana' })}`);
+    await expect(page.locator('#duelInvite')).toBeVisible();
+    await expect(page.locator('#duelFrom')).toHaveText('⚔ Ana te retó a un duelo');
+    await expect(page.locator('#duelMark')).toContainText('06:40');
+
+    await page.click('#duelAccept');
+    await expect(page.locator('#hud')).toBeVisible();
+    await expect(page.locator('#hudRift')).toHaveText('DUELO');
+    const cfg = await page.evaluate(() => {
+      const s = window.__RIFTFALL__.game.sim;
+      return { seed: s.seed, ship: s.shipKey, rift: s.rift, talents: s.talents };
+    });
+    expect(cfg).toEqual({ seed, ship: 'spark', rift: 0, talents: {} });
+
+    await page.evaluate(() => window.__RIFTFALL__.fastForward(20));
+    await page.evaluate(() => {
+      window.__RIFTFALL__.setPaused(true);
+      document.getElementById('quitBtn').click();
+    });
+    await expect(page.locator('#gameover')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('#goDuel')).toBeVisible();
+    await expect(page.locator('#goDuelResult')).toContainText('Ana te ganó por');
+    await expect(page.locator('#duelSend')).toHaveText('⚔ DEVOLVER EL RETO');
+    await expect(page.locator('#againBtn')).toHaveText('MISMO MAPA');
+
+    // Devolver el reto: el link lleva la misma semilla, mi marca y mi nombre.
+    await page.fill('#duelName', 'Rodri 🚀');
+    await page.click('#duelSend');
+    await page.waitForFunction(() => window.__shared !== null);
+    const shared = await page.evaluate(() => window.__shared);
+    expect(shared.text).toContain('Te reto a un duelo');
+    const back = decodeDuel(new URL(shared.url).searchParams.get('duel'));
+    const myScore = Number((await page.locator('#goStats div:last-child b').textContent()).replace(/\D/g, ''));
+    expect(back).toMatchObject({ seed, name: 'Rodri 🚀', score: myScore });
+
+    // Revancha en el mismo mapa.
+    await page.click('#againBtn');
+    await expect(page.locator('#hudRift')).toHaveText('DUELO');
+    expect(await page.evaluate(() => window.__RIFTFALL__.game.sim.seed)).toBe(seed);
+    await page.evaluate(() => {
+      window.__RIFTFALL__.setPaused(true);
+      document.getElementById('quitBtn').click();
+    });
+    await expect(page.locator('#gameover')).toBeVisible({ timeout: 10_000 });
+
+    // Quien recibe el link de vuelta ve el reto con mi nombre.
+    await page.goto(new URL(shared.url).pathname + new URL(shared.url).search);
+    await expect(page.locator('#duelFrom')).toHaveText('⚔ Rodri 🚀 te retó a un duelo');
+
+    // Un reto nuevo desde el menú: semilla nueva y sin rival.
+    await page.goto('/');
+    await expect(page.locator('#duelInvite')).toBeHidden();
+    await page.click('#duelPlay');
+    await expect(page.locator('#hudRift')).toHaveText('DUELO');
+    expect(await page.evaluate(() => window.__RIFTFALL__.game.sim.seed)).not.toBe(seed);
+    await page.evaluate(() => {
+      window.__RIFTFALL__.setPaused(true);
+      document.getElementById('quitBtn').click();
+    });
+    await expect(page.locator('#goDuelResult')).toContainText('Envía el link');
+    await expect(page.locator('#duelSend')).toHaveText('⚔ RETAR A UN AMIGO');
+    await expect(page.locator('#duelName')).toHaveValue('Rodri 🚀');
+    // Las partidas normales no muestran el duelo.
+    await page.click('#menuBtn');
+    await page.click('#playBtn');
+    await expect(page.locator('#hud')).toBeVisible();
+    await page.evaluate(() => {
+      window.__RIFTFALL__.setPaused(true);
+      document.getElementById('quitBtn').click();
+    });
+    await expect(page.locator('#gameover')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('#goDuel')).toBeHidden();
+    await expect(page.locator('#againBtn')).toHaveText('JUGAR OTRA VEZ');
+    expect(runStarts).toHaveLength(1);
+
+    // Un link editado a mano avisa y no muestra el reto.
+    const code = encodeDuel({ seed, score: 10, timeSec: 10, kills: 1, victory: false, name: 'X' }).split('.');
+    code[2] = 'zzzz';
+    await page.goto(`/?duel=${code.join('.')}`);
+    await expect(page.locator('#toasts')).toContainText('modificado');
+    await expect(page.locator('#duelInvite')).toBeHidden();
+    expect(errors).toEqual([]);
+  } finally {
+    await ctx.close();
+  }
+});
