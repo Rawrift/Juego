@@ -63,11 +63,51 @@ export function loadProgress() {
 }
 
 export function saveProgress(p) {
+  p.updatedAt = Date.now();
   try {
     localStorage.setItem(KEY, JSON.stringify(p));
   } catch {
     /* modo privado */
   }
+}
+
+const isBlank = (p) => !p || (!(p.runs > 0) && !(p.lifetimeCores > 0) && !(p.cores > 0));
+const maxMap = (a = {}, b = {}) => {
+  const out = { ...a };
+  for (const [k, v] of Object.entries(b ?? {})) out[k] = Math.max(Number(out[k]) || 0, Number(v) || 0);
+  return out;
+};
+
+/**
+ * Une dos progresos del mismo jugador (por ejemplo, el de Chrome y el del navegador de MetaMask)
+ * sin perder nada: los récords y lo desbloqueado quedan en lo mejor de ambos; lo que se gasta
+ * (Núcleos) y la pieza equipada vienen del que se usó último.
+ */
+export function mergeProgress(a, b) {
+  if (isBlank(a)) return b ? { ...b } : a;
+  if (isBlank(b)) return { ...a };
+  const newer = (Number(b.updatedAt) || 0) > (Number(a.updatedAt) || 0) ? b : a;
+  const older = newer === a ? b : a;
+  const out = { ...older, ...newer };
+  for (const k of ['runs', 'bestScore', 'bestTime', 'kills', 'bosses', 'victories', 'lifetimeCores', 'riftMax']) {
+    out[k] = Math.max(Number(a[k]) || 0, Number(b[k]) || 0);
+  }
+  out.talents = maxMap(a.talents, b.talents);
+  out.parts = maxMap(a.parts, b.parts);
+  // La racha y las misiones del día más reciente.
+  const later = (a.lastDay ?? '') >= (b.lastDay ?? '') ? a : b;
+  out.lastDay = later.lastDay;
+  out.streak = later.streak;
+  if (a.daily?.day && b.daily?.day) out.daily = a.daily.day >= b.daily.day ? a.daily : b.daily;
+  // El mejor Desafío del Día de cada día.
+  const ca = a.challenge;
+  const cb = b.challenge;
+  if (ca && cb && ca.n === cb.n) {
+    const best = !ca.best ? cb.best : !cb.best ? ca.best : cb.best.score > ca.best.score ? cb.best : ca.best;
+    out.challenge = { n: ca.n, best, tries: Math.max(ca.tries ?? 0, cb.tries ?? 0) };
+  } else if (ca || cb) out.challenge = (ca?.n ?? -1) > (cb?.n ?? -1) ? ca : cb;
+  out.updatedAt = Math.max(Number(a.updatedAt) || 0, Number(b.updatedAt) || 0);
+  return out;
 }
 
 function rollDay(p) {

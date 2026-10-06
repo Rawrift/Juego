@@ -53,3 +53,38 @@ export async function submitWorldDaily({ n, name, rec }) {
   if (!res.ok || !data?.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
   return data;
 }
+
+// --------------------------------------------------------------------- Ranking de todas las partidas
+
+/** Ranking compartido de partidas normales: { day, today, all }. */
+export async function fetchRunBoard() {
+  const res = await fetch('/api/ranking');
+  const data = res.ok ? await res.json().catch(() => null) : null;
+  if (!Array.isArray(data?.today) || !Array.isArray(data?.all)) throw new Error(`ranking ${res.status}`);
+  return data;
+}
+
+/** Manda una partida normal (con su nave, talentos, piezas y Rift) para que el servidor la re-juegue. */
+export async function submitRunBoard({ name, run, rec }) {
+  const pid = playerId();
+  if (!pid) throw new Error('sin almacenamiento');
+  const res = await fetch('/api/ranking', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      pid,
+      name,
+      seed: run.seed,
+      ship: run.ship,
+      shipLevel: run.shipLevel,
+      talents: run.talents,
+      rift: run.rift ?? 0,
+      parts: run.parts ?? null,
+      inputs: rec.inputs,
+      choices: rec.choices
+    })
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data?.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
+  return data;
+}

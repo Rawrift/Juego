@@ -43,6 +43,18 @@ En `/cargo/` del mismo sitio está **Rift Cargo**: una empresa de transporte esp
 control (pedidos, mercado, flota, drones de carga y planetas que se mueven). Detalles en
 [`docs/RIFT-CARGO.md`](docs/RIFT-CARGO.md). En desarrollo se abre en `http://localhost:5173/cargo/`.
 
+## Ranking compartido y progreso entre navegadores
+
+- **Ranking de hoy / histórico** (`api/ranking.js` + `server/run-board.mjs`): cada partida normal que mejora tu
+  marca del día se manda a la web, que la vuelve a jugar con su nave, talentos, piezas y nivel del Rift antes de
+  anotarla. Todos los jugadores ven a todos (tarjeta "Ranking de hoy" y panel Ranking). Un solo archivo en
+  Vercel Blob: se escribe solo cuando alguien entra o sube en el ranking (el plan gratuito incluye 2.000
+  escrituras por mes).
+- **Progreso que no se pierde** (`src/client/transfer.js`): en el celular, conectar la wallet abre el juego dentro
+  de MetaMask, que tiene otra memoria. El progreso, el nombre y el id del ranking viajan comprimidos en el link y
+  se suman a lo que hubiera (nunca se pisa algo con partidas por algo vacío). En Habilidades está el botón
+  "Copiar link de mi progreso" para seguir en otro dispositivo.
+
 ## Inicio rápido (todo en local, con blockchain)
 
 Requisitos: Node.js 22.9 o superior.

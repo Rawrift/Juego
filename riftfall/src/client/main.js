@@ -50,9 +50,10 @@ import {
   equipLocalPart,
   buyLocalCrate
 } from './progress.js';
+import { receiveTransfer, metamaskLink } from './transfer.js';
 import { dailyNumber, dailySeed, DAILY_RULES, msToNextDaily } from '../shared/daily.js';
 import { DUEL_RULES, decodeDuel, duelUrl, cleanName } from '../shared/duel.js';
-import { WORLD, fetchWorldDaily, submitWorldDaily, myPublicId, defaultName } from './world.js';
+import { WORLD, fetchWorldDaily, submitWorldDaily, myPublicId, defaultName, fetchRunBoard, submitRunBoard } from './world.js';
 import { shareResult } from './share.js';
 
 applyStatic();
@@ -227,7 +228,7 @@ async function refreshWorld() {
   renderWorld();
 }
 
-$('#wdRename').addEventListener('click', () => {
+function renamePilot() {
   const v = prompt(t('wd.prompt'), pilotName());
   if (v === null) return;
   try {
@@ -236,7 +237,81 @@ $('#wdRename').addEventListener('click', () => {
     /* sin almacenamiento */
   }
   renderWorld();
-});
+  renderRunBoard();
+}
+$('#wdRename').addEventListener('click', renamePilot);
+$('#rkRename').addEventListener('click', renamePilot);
+
+// --------------------------------------------------------------------- Ranking de hoy (todas las partidas)
+
+let runBoard = null;
+
+function renderRunBoard() {
+  const card = $('#rankCard');
+  const ok = WORLD && !app.online && runBoard;
+  card.classList.toggle('hidden', !ok);
+  if (!ok) return;
+  $('#rkRename').textContent = t('wd.as', { name: pilotName() || defaultName() });
+  const entries = runBoard.today;
+  const mine = entries.findIndex((e) => e.id === worldMe);
+  $('#rkList').replaceChildren(
+    ...entries.slice(0, 5).map((e, i) =>
+      el('li', { class: i === mine ? 'me' : '' }, [el('span', {}, `#${i + 1}`), el('b', {}, e.name), el('em', {}, fmtNum(e.score))])
+    )
+  );
+  const you = $('#rkYou');
+  if (!entries.length) you.textContent = t('rk.none');
+  else if (mine >= 0) you.innerHTML = t('wd.you', { n: mine + 1 });
+  else you.textContent = t('rk.play');
+}
+
+async function refreshRunBoard() {
+  if (!WORLD || app.online) return;
+  try {
+    worldMe ??= await myPublicId();
+    runBoard = await fetchRunBoard();
+  } catch {
+    runBoard = null;
+  }
+  renderRunBoard();
+}
+
+/** Mejor puntaje de hoy ya enviado (para no mandar partidas que no cambian nada). */
+const RANK_SENT = 'riftfall.rankSent';
+function sentToday() {
+  try {
+    const v = JSON.parse(localStorage.getItem(RANK_SENT) ?? 'null');
+    return v?.day === dailyNumber() ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Fin de una partida normal: si es tu mejor de hoy va al ranking compartido (el servidor la re-juega). */
+function submitRunToWorld(local, rec) {
+  if (!WORLD || app.online || !(local.score > 0)) return;
+  const sent = sentToday();
+  const nameChanged = sent && sent.name !== pilotName();
+  if (sent && local.score <= sent.best && !nameChanged) return;
+  const row = el('li', { class: 'world-row' }, [el('span', {}, t('rk.checking')), el('b', {}, '')]);
+  $('#goRewardList').append(row);
+  submitRunBoard({ name: pilotName(), run: game.run, rec })
+    .then((res) => {
+      try {
+        localStorage.setItem(RANK_SENT, JSON.stringify({ day: dailyNumber(), best: Math.max(res.score, sent?.best ?? 0), name: pilotName() }));
+      } catch {
+        /* sin almacenamiento */
+      }
+      runBoard = res.board;
+      row.firstChild.textContent = res.rankToday ? t('rk.rank', { n: res.rankToday }) : t('rk.out', { max: 50 });
+      if (res.rankAll && res.rankAll <= 10) row.firstChild.textContent += ` · ${t('rk.allRank', { n: res.rankAll })}`;
+      if (res.rankToday && res.rankToday <= 3) audio.play('levelup');
+      renderRunBoard();
+    })
+    .catch(() => {
+      row.firstChild.textContent = t('rk.sendErr');
+    });
+}
 
 /** Fin de un desafío: la partida va al ranking mundial y la fila del resultado se actualiza sola. */
 function submitDailyToWorld(n, rec) {
@@ -485,6 +560,7 @@ function updateMenu() {
   updateDailyCard();
   updateDuelInvite();
   renderWorld();
+  renderRunBoard();
   const unit = pl.online ? '◆' : '✦';
   $('#missionList').replaceChildren(
     ...pl.missions.map((m) =>
@@ -536,10 +612,13 @@ async function connectWallet() {
     toast(t('toast.noChain'), 'err');
     return false;
   }
-  // En el celular, fuera del navegador de una wallet, abrimos el juego dentro de MetaMask.
+  // En el celular, fuera del navegador de una wallet, abrimos el juego dentro de MetaMask. Ese
+  // navegador tiene otra memoria: el progreso viaja en el link para que no se pierda nada.
   if (!injected() && matchMedia('(pointer: coarse)').matches) {
     toast(t('toast.openMetaMask'));
-    setTimeout(() => (location.href = `https://metamask.app.link/dapp/${location.host}${location.pathname}`), 600);
+    saveProgress(app.progress);
+    const link = await metamaskLink();
+    setTimeout(() => (location.href = link), 600);
     return false;
   }
   const wb = $('#walletBtn');
@@ -898,6 +977,7 @@ async function showGameOver(local, victory) {
     };
     const rows = [...challengeRow(), [t('go.rowCores'), res.cores, '✦']];
     const worldRec = daily && !PORTAL ? game.rec.finish() : null;
+    const runRec = !daily && !duel && !PORTAL && game.run?.mode === 'normal' ? game.rec.finish() : null;
     if (res.streak) rows.push([t('go.rowStreak'), res.streak, '✦']);
     for (const m of res.missions) rows.push([t('go.rowMission', { name: tx.missionName(m.id, m.name) }), m.reward, '✦']);
     rows.push(...crateRows(res.crates));
@@ -905,6 +985,7 @@ async function showGameOver(local, victory) {
     if (res.riftUnlocked) rows.push([`🔓 ${t('go.riftUnlocked', { n: res.riftUnlocked })}`, '', '']);
     showRows(rows);
     if (worldRec) submitDailyToWorld(daily, worldRec);
+    if (runRec) submitRunToWorld(local, runRec);
     maybeSuggestFounder(local);
     countUp($('#goTotal'), res.total);
     if (res.total > 0) setTimeout(() => audio.play('shard'), 400);
@@ -1309,6 +1390,13 @@ async function boot() {
   }
   setupPwa();
   setupAnalytics();
+  // Progreso que llega en el link (por ejemplo, al abrir el juego dentro de MetaMask).
+  if (await receiveTransfer()) {
+    app.progress = loadProgress();
+    app.ship = loadShipChoice();
+    readRiftChoice();
+    setTimeout(() => toast(t('toast.transferred'), 'ok'), 400);
+  }
   readIncomingDuel();
   newDemo();
   requestAnimationFrame(frame);
@@ -1357,7 +1445,10 @@ async function boot() {
     }
   }
   // El ranking mundial es de la web publicada (función /api/daily); con servidor propio el desafío usa el suyo.
-  if (!app.online) refreshWorld();
+  if (!app.online) {
+    refreshWorld();
+    refreshRunBoard();
+  }
   updateMenu();
 }
 

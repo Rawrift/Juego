@@ -19,6 +19,9 @@ import { FOUNDER, tierRank, bnbWeiForUsd } from '../shared/founder.js';
 import { loadFounder, founderRank, buyFounder, verifyPayment, bnbPrice, currentSkin, setSkin, SKIN_TIER } from './founder.js';
 import { explainError } from './wallet.js';
 import { injected } from './injected.js';
+import { metamaskLink, continueLink } from './transfer.js';
+import { WORLD, myPublicId, fetchRunBoard, fetchWorldDaily } from './world.js';
+import { dailyNumber } from '../shared/daily.js';
 import { $, el, toast, fmtTime, fmtNum, shortAddr, fmtRift, brandText } from './dom.js';
 import { t, tx, locale } from './i18n.js';
 
@@ -297,7 +300,8 @@ export function createPanels(app) {
               const buy = (btn, method) => async () => {
                 if (!injected()) {
                   toast(t('toast.openMetaMask'));
-                  setTimeout(() => (location.href = `https://metamask.app.link/dapp/${location.host}${location.pathname}`), 600);
+                  const link = await metamaskLink();
+                  setTimeout(() => (location.href = link), 600);
                   return;
                 }
                 const prev = btn.textContent;
@@ -568,7 +572,7 @@ export function createPanels(app) {
       kicker: 'r.kicker',
       title: 'r.title',
       async render() {
-        if (!app.online) return [serverNotice(t('r.server'))];
+        if (!app.online) return staticRanking();
         const wrap = el('div', {});
         const tabs = el('div', { class: 'tabs' });
         const load = async (scope) => {
@@ -784,6 +788,21 @@ export function createPanels(app) {
               stat(t('st.victories'), fmtNum(st.victories))
             ])
           );
+          // Llevar el progreso a otro dispositivo o navegador con un link.
+          const move = el('button', { class: 'btn ghost small' }, t('mv.btn'));
+          move.addEventListener('click', async () => {
+            const link = await continueLink();
+            try {
+              if (navigator.share && matchMedia('(pointer: coarse)').matches) await navigator.share({ title: 'RIFTFALL', url: link });
+              else {
+                await navigator.clipboard.writeText(link);
+                toast(t('mv.copied'), 'ok');
+              }
+            } catch {
+              /* compartir cancelado */
+            }
+          });
+          out.push(el('h3', {}, t('mv.title')), el('p', { class: 'hint' }, t('mv.text')), move);
           return out;
         }
 
@@ -867,6 +886,43 @@ export function createPanels(app) {
 
   function stat(label, value, cls = '') {
     return el('div', { class: 'stat' }, [el('small', {}, label), el('b', { class: cls }, String(value))]);
+  }
+
+  /**
+   * Ranking sin servidor de recompensas: el compartido de la web publicada (todas las partidas,
+   * hoy e histórico) y el del Desafío del Día. Cada partida la verifica la propia web.
+   */
+  async function staticRanking() {
+    if (!WORLD) return [serverNotice(t('r.server'))];
+    const me = await myPublicId().catch(() => null);
+    const wrap = el('div', {});
+    const tabs = el('div', { class: 'tabs' });
+    const show = (entries) => {
+      if (!entries.length) return wrap.replaceChildren(el('div', { class: 'notice info' }, t('r.empty')));
+      const mine = entries.findIndex((e) => e.id === me);
+      wrap.replaceChildren(
+        rankingTable(entries, me, 'id'),
+        el('p', { class: 'hint' }, mine >= 0 ? t('rk.youAre', { n: mine + 1 }) : t('rk.play'))
+      );
+    };
+    const load = async (scope) => {
+      [...tabs.children].forEach((b) => b.classList.toggle('on', b.dataset.scope === scope));
+      wrap.replaceChildren(el('p', { class: 'hint' }, t('sheet.loading')));
+      try {
+        if (scope === 'challenge') show((await fetchWorldDaily(dailyNumber())).entries.map((e) => ({ ...e, ship: 'spark' })));
+        else {
+          const board = await fetchRunBoard();
+          show(scope === 'all' ? board.all : board.today);
+        }
+      } catch {
+        wrap.replaceChildren(el('div', { class: 'notice info' }, t('rk.err')));
+      }
+    };
+    for (const [scope, label] of [['daily', t('r.today')], ['challenge', t('r.challenge')], ['all', t('r.all')]]) {
+      tabs.append(el('button', { 'data-scope': scope, onclick: () => load(scope) }, label));
+    }
+    load('daily');
+    return [el('p', {}, t('rk.intro')), tabs, wrap];
   }
 
   function rankingTable(entries, me, key) {

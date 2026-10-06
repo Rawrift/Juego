@@ -1089,3 +1089,108 @@ test('sugerencia del Pase Fundador: tras una buena partida, una vez por día y n
     site.close();
   }
 });
+
+test('ranking compartido: el papá juega y el hijo ve su puntaje desde otro celular', async ({ browser }) => {
+  const { createRunBoard } = await import('../../server/run-board.mjs');
+  let stored = null;
+  let posts = 0;
+  const board = createRunBoard({ load: async () => (stored ? structuredClone(stored) : null), save: async (b) => (stored = structuredClone(b)) });
+  const site = await staticSite(4186);
+  // La función /api/ranking de Vercel, con el mismo código y un almacenamiento en memoria (compartido por los dos celulares).
+  const route = async (r) => {
+    const req = r.request();
+    if (req.method() === 'POST') {
+      posts++;
+      const res = await board.submit(JSON.parse(req.postData()));
+      return r.fulfill({ status: res.ok ? 200 : 400, contentType: 'application/json', body: JSON.stringify(res) });
+    }
+    return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(await board.get()) });
+  };
+  const dadCtx = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'es-ES' });
+  const kidCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, locale: 'es-ES' });
+  await dadCtx.route('**/api/ranking**', route);
+  await kidCtx.route('**/api/ranking**', route);
+  try {
+    const dad = await dadCtx.newPage();
+    const errors = [];
+    dad.on('pageerror', (e) => errors.push(e.message));
+    dad.on('dialog', (d) => d.accept('Papá'));
+    await dad.goto('http://127.0.0.1:4186/');
+    await expect(dad.locator('#rankCard')).toBeVisible();
+    await expect(dad.locator('#rkYou')).toContainText('primera');
+    await dad.click('#rkRename');
+    await expect(dad.locator('#rkRename')).toHaveText('✎ Papá');
+    await dad.click('#playBtn');
+    await expect(dad.locator('#hud')).toBeVisible();
+    await dad.evaluate(() => window.__RIFTFALL__.fastForward(25));
+    await dad.evaluate(() => {
+      window.__RIFTFALL__.setPaused(true);
+      document.getElementById('quitBtn').click();
+    });
+    await expect(dad.locator('#gameover')).toBeVisible({ timeout: 10_000 });
+    await expect(dad.locator('#goRewardList')).toContainText('Puesto #1 del ranking de hoy', { timeout: 20_000 });
+    expect(posts).toBe(1);
+    const shown = Number((await dad.locator('#goStats div:last-child b').textContent()).replace(/\D/g, ''));
+    expect(stored.today[0].score).toBe(shown);
+    expect(errors).toEqual([]);
+
+    // El hijo, en su celular, ve el puntaje del papá en el menú y en el ranking completo.
+    const kid = await kidCtx.newPage();
+    await kid.goto('http://127.0.0.1:4186/');
+    await expect(kid.locator('#rkList li').first()).toContainText('Papá');
+    await expect(kid.locator('#rkList li').first()).toContainText(shown.toLocaleString('es-ES'));
+    await kid.locator('#rankCard [data-open="ranking"]').click();
+    await expect(kid.locator('#sheetBody table')).toContainText('Papá');
+    await kid.screenshot({ path: 'test-results/riftfall-ranking-hijo.png' });
+  } finally {
+    await dadCtx.close();
+    await kidCtx.close();
+    site.close();
+  }
+});
+
+test('MetaMask en el celular: al conectar la wallet el progreso viaja al navegador de MetaMask', async ({ browser }) => {
+  const deployment = JSON.parse(fs.readFileSync('public/deployment.json', 'utf8'));
+  const site = await staticSite(4187, { deployment });
+  const mobile = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, locale: 'es-ES' };
+  const chromeCtx = await browser.newContext(mobile);
+  const progress = { cores: 250, lifetimeCores: 900, talents: { hull: 2 }, riftMax: 1, parts: {}, loadout: {}, runs: 7, bestScore: 4321, bestTime: 300, kills: 800, bosses: 2, victories: 0, streak: 2, lastDay: '', updatedAt: Date.now() };
+  await chromeCtx.addInitScript((p) => {
+    if (!localStorage.getItem('riftfall.progress')) {
+      localStorage.setItem('riftfall.progress', JSON.stringify(p));
+      localStorage.setItem('riftfall.name', 'Rodri');
+      localStorage.setItem('riftfall.pid', 'cd'.repeat(16));
+    }
+  }, progress);
+  let opened = null;
+  await chromeCtx.route('https://metamask.app.link/**', (r) => {
+    opened = r.request().url();
+    return r.fulfill({ status: 200, contentType: 'text/html', body: '<p>MetaMask</p>' });
+  });
+  const mmCtx = await browser.newContext(mobile);
+  try {
+    const page = await chromeCtx.newPage();
+    await page.goto('http://127.0.0.1:4187/');
+    await expect(page.locator('#menuCores')).toHaveText('250');
+    await page.click('#walletBtn');
+    await expect.poll(() => opened, { timeout: 15_000 }).not.toBeNull();
+    expect(opened).toContain('/dapp/127.0.0.1:4187/?rf=');
+
+    // El navegador de MetaMask tiene la memoria vacía: con el link llega todo el progreso.
+    const target = `http://${opened.split('/dapp/')[1]}`;
+    const mm = await mmCtx.newPage();
+    await mm.goto(target);
+    await expect(mm.locator('.toast').first()).toContainText('tu progreso llegó');
+    await expect(mm.locator('#menuCores')).toHaveText('250');
+    const got = await mm.evaluate(() => ({ p: JSON.parse(localStorage.getItem('riftfall.progress')), name: localStorage.getItem('riftfall.name'), pid: localStorage.getItem('riftfall.pid'), url: location.href }));
+    expect(got.p.bestScore).toBe(4321);
+    expect(got.p.runs).toBe(7);
+    expect(got.name).toBe('Rodri');
+    expect(got.pid).toBe('cd'.repeat(16));
+    expect(got.url).not.toContain('rf=');
+  } finally {
+    await chromeCtx.close();
+    await mmCtx.close();
+    site.close();
+  }
+});
