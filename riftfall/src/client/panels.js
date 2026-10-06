@@ -364,6 +364,9 @@ export function createPanels(app) {
         };
         out.push(el('p', {}, t('h.intro')));
         out.push(el('h3', {}, t('h.yours')));
+        // Las naves NFT se leen de la wallet: sin conectarla no aparecen.
+        const mineNotice = app.config?.chain && !app.wallet?.connected ? needWalletNotice(t('h.connectMine')) : null;
+        if (mineNotice) out.push(mineNotice);
         const mine = [
           shipCard({
             key: 'spark',
@@ -423,7 +426,7 @@ export function createPanels(app) {
           return out;
         }
         if ([97, 84532, 31337].includes(app.config.chain.chainId)) out.push(el('div', { class: 'notice info' }, t('h.testnet')));
-        const notice = needWalletNotice(t('h.connect'));
+        const notice = mineNotice ? null : needWalletNotice(t('h.connect'));
         if (notice) out.push(notice);
         if (app.config?.chain) {
           const catalog = await (app.wallet ?? null)?.catalog?.().catch(() => null);

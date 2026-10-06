@@ -383,7 +383,10 @@ let previewT = 0;
 function updateMenu() {
   const s = SHIPS[app.ship.key];
   $('#shipName').textContent = `${s.name}${app.ship.key !== 'spark' ? ` · ${t('hud.level', { n: app.ship.level })}` : ''}`;
-  $('#shipDesc').textContent = tx.shipDesc(app.ship.key);
+  // Una nave NFT solo se puede volar con la wallet conectada.
+  const needsWallet = !!app.ship.tokenId && !app.wallet?.connected;
+  $('#shipDesc').textContent = needsWallet ? t('ship.needWallet') : tx.shipDesc(app.ship.key);
+  $('#shipDesc').classList.toggle('warn', needsWallet);
   $('#shipYield').textContent = t('ship.yield', { m: shipYield(app.ship.key, app.ship.level).toFixed(2) });
   const p = app.profile;
   const pl = pilot();
@@ -513,6 +516,16 @@ async function startRun(mode = 'normal') {
   // Portales: un anuncio en la pausa natural entre partidas (el portal limita la frecuencia).
   if (PORTAL && runsThisSession > 0) await portal.ad('midgame', adAudio);
   runsThisSession++;
+  // Nave NFT elegida: hace falta la wallet conectada (y que la nave siga siendo suya) para volarla.
+  if (mode === 'normal' && app.config?.staticMode && app.ship.tokenId) {
+    if (!app.wallet?.connected && (!injected() || !(await connectWallet()))) toast(t('toast.sparkFallback', { name: SHIPS[app.ship.key].name }));
+    else if (app.wallet?.connected) {
+      const owned = await app.wallet.myShips().catch(() => null);
+      const mine = owned?.find((s) => s.tokenId === app.ship.tokenId);
+      if (owned && !mine) selectShip({ key: 'spark', tokenId: null, level: 1 });
+      else if (mine && mine.level !== app.ship.level) selectShip({ ...app.ship, level: mine.level });
+    }
+  }
   let run = null;
   game.offline = false;
   try {

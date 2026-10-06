@@ -907,3 +907,74 @@ test('portal en Basic Launch: sin anuncios (ni revivir, ni x2, ni entre partidas
     site.close();
   }
 });
+
+test('nave NFT elegida sin wallet conectada: el menú lo avisa, al jugar se conecta y vuela con ella', async ({ browser }) => {
+  const { AbiCoder, id } = await import('ethers');
+  const deployment = JSON.parse(fs.readFileSync('public/deployment.json', 'utf8'));
+  const site = await staticSite(4184, { deployment });
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: 'es-ES' });
+  const SHIPS_OF = id('shipsOf(address)').slice(0, 10);
+  // La wallet tiene la LEVIATHAN #1 en nivel 6 (clase 3 del contrato).
+  const shipsOf = AbiCoder.defaultAbiCoder().encode(['uint256[]', 'uint16[]', 'uint8[]'], [[1n], [3], [6]]);
+  await ctx.route('https://bsc-testnet-rpc.publicnode.com/**', (r) => {
+    const body = JSON.parse(r.request().postData());
+    const one = (q) => ({
+      jsonrpc: '2.0',
+      id: q.id,
+      result: q.method === 'eth_chainId' ? '0x61' : q.method === 'eth_call' && q.params[0].data.startsWith(SHIPS_OF) ? shipsOf : `0x${'0'.repeat(64)}`
+    });
+    r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(Array.isArray(body) ? body.map(one) : one(body)) });
+  });
+  await ctx.addInitScript(() => {
+    localStorage.setItem('riftfall.tutorial', '1');
+    localStorage.setItem('riftfall.ship', JSON.stringify({ key: 'leviathan', tokenId: '1', level: 6 }));
+    const ACC = '0x09af2acf700d6be84009655fb814a5311daec7dd';
+    let authorized = false;
+    window.ethereum = {
+      isMetaMask: true,
+      on() {},
+      removeListener() {},
+      async request({ method, params }) {
+        switch (method) {
+          case 'eth_requestAccounts':
+            authorized = true;
+            return [ACC];
+          case 'eth_accounts':
+            return authorized ? [ACC] : [];
+          case 'eth_chainId':
+            return '0x61';
+          case 'net_version':
+            return '97';
+          case 'wallet_watchAsset':
+            return true;
+          default:
+            throw Object.assign(new Error(`no soportado: ${method} ${JSON.stringify(params ?? [])}`), { code: 4200 });
+        }
+      }
+    };
+  });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  try {
+    await page.goto('http://127.0.0.1:4184/');
+    await expect(page.locator('#walletBtn')).toHaveText('Conectar wallet');
+    await expect(page.locator('#shipName')).toContainText('LEVIATHAN');
+    await expect(page.locator('#shipDesc')).toHaveText('Conecta tu wallet para volar con esta nave.');
+
+    // En el hangar se explica por qué no aparece la nave.
+    await page.click('#menu [data-open="hangar"]');
+    await expect(page.locator('#sheetBody')).toContainText('Conecta tu wallet para ver y usar tus naves NFT.');
+    await page.keyboard.press('Escape');
+
+    // Al jugar se conecta la wallet y la partida usa la LEVIATHAN nivel 6.
+    await page.click('#playBtn');
+    await expect(page.locator('#hud')).toBeVisible();
+    expect(await page.evaluate(() => ({ ship: window.__RIFTFALL__.game.sim.shipKey, level: window.__RIFTFALL__.game.run.shipLevel }))).toEqual({ ship: 'leviathan', level: 6 });
+    await expect(page.locator('#walletBtn')).toHaveText('0x09aF…c7Dd');
+    expect(errors).toEqual([]);
+  } finally {
+    await ctx.close();
+    site.close();
+  }
+});

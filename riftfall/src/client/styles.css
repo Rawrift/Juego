@@ -188,6 +188,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .ship-pick small { display: block; color: var(--muted); font-size: 11px; letter-spacing: 0.2em; font-family: var(--display); }
 .ship-pick b { display: block; font-family: var(--display); font-size: 20px; letter-spacing: 0.1em; }
 .ship-pick span { display: block; color: #c4cff0; font-size: 15px; }
+.ship-pick span.warn { color: var(--gold); }
 .ship-pick em { display: inline-block; margin-top: 4px; font-style: normal; color: var(--gold); font-weight: 700; }
 .cta-row { display: flex; gap: 14px; flex-wrap: wrap; }
 
