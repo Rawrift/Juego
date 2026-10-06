@@ -1033,3 +1033,59 @@ test('ranking mundial del desafío: la partida se verifica en el servidor, apare
     site.close();
   }
 });
+
+test('sugerencia del Pase Fundador: tras una buena partida, una vez por día y nunca a quien ya es Fundador', async ({ browser }) => {
+  const site = await staticSite(4186);
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'es-ES' });
+  await ctx.addInitScript(() => {
+    if (!localStorage.getItem('riftfall.progress')) localStorage.setItem('riftfall.progress', JSON.stringify({ cores: 0, runs: 5 }));
+    localStorage.setItem('riftfall.tutorial', '1');
+  });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  const playAndQuit = async (seconds) => {
+    await page.click('#againBtn:visible, #playBtn:visible');
+    await expect(page.locator('#hud')).toBeVisible();
+    await page.evaluate((s) => {
+      const H = window.__RIFTFALL__;
+      H.game.sim.player.invuln = 1e9;
+      H.fastForward(s);
+      H.setPaused(true);
+      document.getElementById('quitBtn').click();
+    }, seconds);
+    await expect(page.locator('#gameover')).toBeVisible({ timeout: 10_000 });
+  };
+  try {
+    await page.goto('http://127.0.0.1:4186/');
+    // Una partida corta no la muestra.
+    await playAndQuit(30);
+    await expect(page.locator('#goFounder')).toBeHidden();
+    // Una buena partida sí, con el botón al panel del Pase.
+    await playAndQuit(130);
+    await expect(page.locator('#goFounder')).toBeVisible();
+    await page.click('#goFounderNo');
+    await expect(page.locator('#goFounder')).toBeHidden();
+    // El mismo día no se repite.
+    await playAndQuit(130);
+    await expect(page.locator('#goFounder')).toBeHidden();
+    // Al día siguiente vuelve, y el botón abre el Pase Fundador.
+    await page.evaluate(() => localStorage.setItem('riftfall.upsellDay', '2000-01-01'));
+    await playAndQuit(130);
+    await page.click('#goFounderBtn');
+    await expect(page.locator('#sheet')).toBeVisible();
+    await expect(page.locator('#sheetTitle')).toContainText('Fundador');
+    // A quien ya es Fundador no se le ofrece.
+    await page.evaluate(() => {
+      localStorage.setItem('riftfall.upsellDay', '2000-01-01');
+      localStorage.setItem('riftfall.founder', JSON.stringify({ tier: 'pilot', tx: '0x1' }));
+    });
+    await page.keyboard.press('Escape');
+    await playAndQuit(130);
+    await expect(page.locator('#goFounder')).toBeHidden();
+    expect(errors).toEqual([]);
+  } finally {
+    await ctx.close();
+    site.close();
+  }
+});

@@ -905,6 +905,7 @@ async function showGameOver(local, victory) {
     if (res.riftUnlocked) rows.push([`🔓 ${t('go.riftUnlocked', { n: res.riftUnlocked })}`, '', '']);
     showRows(rows);
     if (worldRec) submitDailyToWorld(daily, worldRec);
+    maybeSuggestFounder(local);
     countUp($('#goTotal'), res.total);
     if (res.total > 0) setTimeout(() => audio.play('shard'), 400);
     afterRewards();
@@ -938,6 +939,28 @@ async function showGameOver(local, victory) {
     $('#goTotal').textContent = '0';
   }
 }
+
+// Sugerencia del Pase Fundador: solo en la web, a quien ya jugó varias partidas y acaba de hacer una buena,
+// como mucho una vez por día y nunca a quien ya es Fundador.
+const UPSELL_KEY = 'riftfall.upsellDay';
+function maybeSuggestFounder(local) {
+  const box = $('#goFounder');
+  box.classList.add('hidden');
+  if (PORTAL || founderRank() > 0 || (app.progress.runs ?? 0) < 3 || local.timeSec < 120) return;
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    if (localStorage.getItem(UPSELL_KEY) === today) return;
+    localStorage.setItem(UPSELL_KEY, today);
+  } catch {
+    return;
+  }
+  box.classList.remove('hidden');
+}
+$('#goFounderBtn').addEventListener('click', () => {
+  backToMenu();
+  panels.open('founder');
+});
+$('#goFounderNo').addEventListener('click', () => $('#goFounder').classList.add('hidden'));
 
 function countUp(node, target) {
   const t0 = performance.now();
@@ -1258,6 +1281,13 @@ langSel.addEventListener('change', () => setLang(langSel.value));
 
 // --------------------------------------------------------------------- arranque
 
+/** Visitas con Vercel Web Analytics (sin cookies ni datos personales), solo en la web publicada. */
+function setupAnalytics() {
+  if (!/(^|\.)duckdns\.org$|\.vercel\.app$/.test(location.hostname)) return;
+  window.va ??= (...args) => (window.vaq ??= []).push(args);
+  document.head.append(el('script', { defer: true, src: '/_vercel/insights/script.js' }));
+}
+
 async function boot() {
   if (PORTAL) {
     // Portales: sin servidor, sin wallet ni pagos; solo el juego, en modo práctica.
@@ -1278,6 +1308,7 @@ async function boot() {
     return;
   }
   setupPwa();
+  setupAnalytics();
   readIncomingDuel();
   newDemo();
   requestAnimationFrame(frame);

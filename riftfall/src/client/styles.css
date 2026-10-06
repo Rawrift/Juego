@@ -785,6 +785,14 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .daily-challenge p { font-size: 13px; }
 }
 
+/* ------------------------------------------------------------------ sugerencia del Pase Fundador */
+.go-founder {
+  display: grid; gap: 8px; margin-top: 12px; padding: 12px 14px; border-radius: 14px; text-align: left;
+  border: 1px solid rgba(255, 201, 77, 0.55); background: linear-gradient(110deg, rgba(255, 201, 77, 0.14), rgba(12, 15, 34, 0.8) 70%);
+}
+.go-founder p { margin: 0; font-size: 15px; color: #ffe9c2; }
+.go-founder-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
 /* ------------------------------------------------------------------ Ranking mundial del desafío */
 .dc-world { display: grid; gap: 6px; margin-top: 4px; padding-top: 10px; border-top: 1px solid rgba(77, 232, 255, 0.22); }
 .dc-world-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
