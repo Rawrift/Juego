@@ -65,6 +65,10 @@ export function founderFromPayment({ tx, receipt, bnbUsd }) {
   const ok = receipt.status === 1 || receipt.status === '0x1' || receipt.status === 1n;
   if (!ok) return { tier: null, reason: 'failed' };
   const treasury = lower(FOUNDER.treasury);
+  // Un pago con etiqueta (los estéticos de Rift Cargo) es de otra compra: no sirve como pase.
+  const data = lower(tx.data ?? tx.input ?? '0x');
+  const extra = lower(tx.to) === lower(FOUNDER.usdt) ? data.slice(2 + 8 + 128) : data.slice(2);
+  if (extra) return { tier: null, reason: 'otherItem' };
 
   // Pago en USDT: un evento Transfer del contrato de USDT hacia la tesorería.
   if (lower(tx.to) === lower(FOUNDER.usdt)) {

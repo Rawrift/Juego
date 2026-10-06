@@ -9,12 +9,28 @@ import { createUI } from './ui/ui.js';
 import { createAudio } from './audio.js';
 import { t } from './i18n.js';
 import { load, save, clear } from './save.js';
+import { receiveCargoTransfer, owned, signText, setSign } from './style.js';
+import { setStationSign } from './render/stationScene.js';
 import { step, acceptOffer, buyCargo, buyUpgrade, buyShip, setAuto, fastForward, newGame } from './sim/sim.js';
 import { OFFLINE_MAX } from './sim/data.js';
 
 await document.fonts.load('800 100px "Plus Jakarta Sans"').catch(() => {});
 
+// Si se llegó desde el link de MetaMask, primero se trae la partida y los estéticos.
+if (new URLSearchParams(location.search).has('rf')) await receiveCargoTransfer();
+
 const { state, away } = load();
+// Estéticos: solo se muestra lo que el jugador tiene (compras y Pase Fundador).
+{
+  const mine = owned();
+  for (const s of state.ships) {
+    if (s.baseName && !mine.has('plates')) s.name = s.baseName;
+    if (!s.look) continue;
+    if (!mine.has(`liv-${s.look.livery}`)) s.look.livery = 'rift';
+    if (!mine.has(`trail-${s.look.trail}`)) s.look.trail = 'cian';
+  }
+}
+setStationSign(signText());
 const stage = createStage(document.getElementById('stage'));
 const station = createStation(stage, state);
 const audio = createAudio();
@@ -100,6 +116,13 @@ const ui = createUI({
     toggleSound: () => audio.toggle(),
     isMuted: () => audio.muted,
     langChanged: () => map?.relabel(),
+    restyle: () => save(state),
+    persist: () => save(state),
+    setSign(text) {
+      if (!setSign(text)) return false;
+      setStationSign(signText());
+      return true;
+    },
     reset() {
       clear();
       location.reload();
@@ -160,6 +183,8 @@ ui.renderAll(true);
 stage.start();
 if (away && away.seconds > 60) ui.showAway(away);
 else ui.tutorial();
+// Un pago de estéticos que quedó sin confirmar la vez anterior se verifica solo.
+setTimeout(() => ui.checkPending(), 2500);
 document.title = `${t('brand')} · ${t('hub.name')}`;
 
 // Estadísticas de visitas (Vercel Web Analytics) solo en el sitio publicado.

@@ -7,7 +7,7 @@ import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { t as tr } from '../i18n.js';
 import { UPGRADES } from '../sim/data.js';
 import { buildStationScene, dockCenter, parkCenter, dronePad, PARK, PAD, DOCK_X } from './stationScene.js';
-import { makeShip, makeDrone, makeContainer, containerMaterial, setShipCargo, setThrust, shipDims, makePin, userUpdates, DRONE_SCALE } from './models.js';
+import { makeShip, shipStyleKey, makeDrone, makeContainer, containerMaterial, setShipCargo, setThrust, shipDims, makePin, userUpdates, DRONE_SCALE } from './models.js';
 import { padTexture, parkTexture } from './textures.js';
 import { mat } from './kit.js';
 import { position } from '../sim/orbit.js';
@@ -123,8 +123,21 @@ export function createStation(stage, state) {
   // ---------- Naves ----------
   function shipObj(s) {
     let o = ships.get(s.id);
+    const key = shipStyleKey(s);
+    if (o && o.key !== key) {
+      // Cambió la matrícula o un estético: se rearma la malla en el mismo lugar.
+      const old = o.mesh;
+      o.mesh = makeShip(s.model, s.name, s.look);
+      o.mesh.position.copy(old.position);
+      o.mesh.rotation.copy(old.rotation);
+      o.mesh.visible = old.visible;
+      o.mesh.userData.shipId = s.id;
+      old.removeFromParent();
+      scene.add(o.mesh);
+      Object.assign(o, { key, shown: 0, cargo: null });
+    }
     if (!o) {
-      o = { mesh: makeShip(s.model, s.name), shown: 0, cargo: null };
+      o = { mesh: makeShip(s.model, s.name, s.look), shown: 0, cargo: null, key };
       o.mesh.userData.shipId = s.id;
       scene.add(o.mesh);
       ships.set(s.id, o);

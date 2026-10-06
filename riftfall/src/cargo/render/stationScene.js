@@ -218,7 +218,8 @@ function buildBuilding(root) {
     part(root, cyl(0.32, 0.32, 0.06, 20), mat(C.steel, { rough: 0.5 }), x, h + 1.62, z);
   }
   // Cartel con el logo sobre el techo.
-  const logo = part(root, cached('roofLogo', () => new THREE.PlaneGeometry(9, 2.25)), mat(0xffffff, { map: logoTexture(), transparent: true, rough: 0.5 }), x0 + 6.4, h + 2.75, cz + 1.2, 0, 0, 0, { shadow: false });
+  logoMat = new THREE.MeshStandardMaterial({ map: logoTexture({ text: signText }), transparent: true, roughness: 0.5 });
+  const logo = part(root, cached('roofLogo', () => new THREE.PlaneGeometry(9, 2.25)), logoMat, x0 + 6.4, h + 2.75, cz + 1.2, 0, 0, 0, { shadow: false });
   logo.userData.treatAsOpaque = true;
   part(root, rbox(8.6, 0.12, 0.12, 0.05), mat(C.steel, { rough: 0.5 }), x0 + 6.4, h + 1.6, cz + 1.12);
   for (const sx of [-1, 1]) part(root, rbox(0.12, 1.9, 0.12, 0.04), mat(C.steel, { rough: 0.5 }), x0 + 6.4 + sx * 3.8, h + 0.95, cz + 1.12);
@@ -460,6 +461,17 @@ function buildClouds(root) {
   mesh.userData.cannotReceiveAO = false;
   root.add(mesh);
   return m;
+}
+
+// Cartel del techo: "RIFT CARGO" o el nombre que elija el jugador (estético).
+let logoMat = null;
+let signText = '';
+export function setStationSign(text = '') {
+  signText = text;
+  if (logoMat) {
+    logoMat.map = logoTexture({ text });
+    logoMat.needsUpdate = true;
+  }
 }
 
 export function buildStationScene({ docks = 1, shadow = 4096 } = {}) {

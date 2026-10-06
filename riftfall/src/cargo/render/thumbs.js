@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { makeShip, setShipCargo, shipDims } from './models.js';
+import { makeShip, setShipCargo, setThrust, shipDims } from './models.js';
 
 const cache = new Map();
 let r = null;
@@ -42,15 +42,21 @@ function shoot(object, { w = 240, h = 160, view = 6, az = 0.8, el = 0.5, target 
   return url;
 }
 
-/** Imagen de una nave (con carga de muestra para que se lea qué es). */
-export function shipThumb(model, cargo = 'agua') {
-  const key = `ship:${model}:${cargo}`;
+/**
+ * Imagen de una nave (con carga de muestra para que se lea qué es). `look` = { livery, trail };
+ * `thrust` > 0 enciende los motores (para ver el color de la estela).
+ */
+export function shipThumb(model, cargo = 'agua', look = {}, { thrust = 0, w = 240, h = 160 } = {}) {
+  const key = `ship:${model}:${cargo}:${look?.livery ?? 'rift'}:${look?.trail ?? 'cian'}:${thrust}:${w}x${h}`;
   if (!cache.has(key)) {
-    const ship = makeShip(model, model === 'colibri' ? 'RC' : 'RIFT CARGO');
+    const ship = makeShip(model, model === 'colibri' ? 'RC' : 'RIFT CARGO', look ?? {});
     setShipCargo(ship, cargo, ship.userData.slots.length);
+    if (thrust) setThrust(ship, thrust, 0);
     const d = shipDims(model);
-    const center = new THREE.Vector3(0, d.height * 0.45, (d.front - d.back) / 2);
-    cache.set(key, shoot(ship, { view: Math.max(3.6, d.length * 0.58), target: center, az: 0.95, el: 0.42 }));
+    const back = thrust ? d.back + 1.6 * thrust : d.back;
+    const center = new THREE.Vector3(0, d.height * 0.45, (d.front - back) / 2);
+    const view = Math.max(3.6, (d.front + back) * 0.58);
+    cache.set(key, shoot(ship, { w, h, view, target: center, az: 0.95, el: 0.42 }));
   }
   return cache.get(key);
 }

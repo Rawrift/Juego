@@ -131,9 +131,10 @@ export function signTexture(text, { bg = '#4de8ff', fg = '#06081a', w = 256, h =
   });
 }
 
-/** Logo de la empresa: cubo isométrico azul y "RIFT CARGO". */
-export function logoTexture({ dark = false } = {}) {
-  return once(`logo:${dark}`, () => {
+/** Logo de la empresa: cubo isométrico y "RIFT CARGO" (o el nombre propio que compró el jugador). */
+export function logoTexture({ dark = false, text = '' } = {}) {
+  const label = String(text || 'RIFT CARGO').toUpperCase();
+  return once(`logo:${dark}:${label}`, () => {
     const [c, g] = canvas(1024, 256);
     g.clearRect(0, 0, 1024, 256);
     g.fillStyle = 'rgba(8,10,30,0.92)';
@@ -145,9 +146,15 @@ export function logoTexture({ dark = false } = {}) {
     g.stroke();
     drawLogoCube(g, 132, 128, 76);
     g.fillStyle = '#e9f3ff';
-    g.font = '800 104px "Plus Jakarta Sans", system-ui, sans-serif';
+    // El texto se achica si es largo, para que entre siempre en el cartel.
+    let size = 104;
+    g.font = `800 ${size}px "Plus Jakarta Sans", system-ui, sans-serif`;
+    while (size > 56 && g.measureText(label).width > 740) {
+      size -= 4;
+      g.font = `800 ${size}px "Plus Jakarta Sans", system-ui, sans-serif`;
+    }
     g.textBaseline = 'middle';
-    g.fillText('RIFT CARGO', 236, 134, 760);
+    g.fillText(label, 236, 134, 760);
     return toTexture(c);
   });
 }

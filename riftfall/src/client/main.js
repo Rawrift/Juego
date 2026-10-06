@@ -1398,6 +1398,8 @@ async function boot() {
     setTimeout(() => toast(t('toast.transferred'), 'ok'), 400);
   }
   readIncomingDuel();
+  // Desde Rift Cargo se puede llegar directo al Pase Fundador (/?panel=founder).
+  if (!PORTAL && new URLSearchParams(location.search).get('panel') === 'founder') setTimeout(() => panels.open('founder'), 300);
   newDemo();
   requestAnimationFrame(frame);
   applyCosmetics();

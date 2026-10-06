@@ -7,7 +7,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { makePlanet, makeSun } from './planets.js';
-import { makeShip, setShipCargo, setThrust, makePin, userUpdates } from './models.js';
+import { makeShip, shipStyleKey, setShipCargo, setThrust, makePin, userUpdates } from './models.js';
 import { rbox, mat, part, bake } from './kit.js';
 import { C, CARGO_COLORS } from './palette.js';
 import { solarTexture } from './textures.js';
@@ -216,15 +216,30 @@ export function createMap(stage, state, { onMarket } = {}) {
   const routes = new Map();
   const tmp = new THREE.Vector3();
 
+  function shipMesh(s) {
+    const mesh = makeShip(s.model, s.name, s.look);
+    mesh.scale.setScalar(SHIP_SCALE);
+    mesh.traverse((x) => (x.userData.shipId = s.id));
+    mesh.userData.shipId = s.id;
+    scene.add(mesh);
+    return mesh;
+  }
+
   function shipObj(s) {
     let o = ships.get(s.id);
+    const key = shipStyleKey(s);
+    if (o && o.key !== key) {
+      // Cambió la matrícula o un estético: se rearma la malla en el mismo lugar.
+      const old = o.mesh;
+      o.mesh = shipMesh(s);
+      o.mesh.position.copy(old.position);
+      o.mesh.rotation.copy(old.rotation);
+      o.mesh.visible = old.visible;
+      old.removeFromParent();
+      Object.assign(o, { key, shown: -1, cargo: null });
+    }
     if (!o) {
-      const mesh = makeShip(s.model, s.name);
-      mesh.scale.setScalar(SHIP_SCALE);
-      mesh.traverse((x) => (x.userData.shipId = s.id));
-      mesh.userData.shipId = s.id;
-      scene.add(mesh);
-      o = { mesh, shown: -1, cargo: null, yaw: 0 };
+      o = { mesh: shipMesh(s), shown: -1, cargo: null, yaw: 0, key };
       ships.set(s.id, o);
     }
     return o;

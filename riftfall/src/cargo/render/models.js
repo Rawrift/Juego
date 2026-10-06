@@ -2,7 +2,7 @@
 // (los "montacargas"), naves de carga, estanterías y pines. Todos miran hacia +Z.
 
 import * as THREE from 'three';
-import { C, LIVERY, hex } from './palette.js';
+import { C, LIVERY, LIVERY_LOOKS, TRAIL_COLORS, hex } from './palette.js';
 import { containerTexture, signTexture, bedTexture } from './textures.js';
 import { rbox, cyl, sphere, lathe, mat, glass, glow, part, bake, profile, cached } from './kit.js';
 
@@ -28,25 +28,26 @@ export function makeContainer(cargo) {
 
 // ---------- Llama del motor ----------
 
-let flameMat = null;
-export function flameMaterial() {
-  if (flameMat) return flameMat;
-  flameMat = new THREE.ShaderMaterial({
+const flameMats = new Map();
+export function flameMaterial(color = TRAIL_COLORS.cian[0]) {
+  if (flameMats.has(color)) return flameMats.get(color);
+  const m = new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
-    uniforms: { uTime: { value: 0 } },
+    uniforms: { uTime: { value: 0 }, uColor: { value: new THREE.Color(color) } },
     vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-    fragmentShader: `uniform float uTime; varying vec2 vUv;
+    fragmentShader: `uniform float uTime; uniform vec3 uColor; varying vec2 vUv;
       void main(){
         float a = 1.0 - vUv.y;
         float flick = 0.85 + 0.15 * sin(uTime * 40.0 + vUv.y * 12.0);
-        vec3 col = mix(vec3(0.35,0.75,1.0), vec3(1.0), pow(a, 3.0));
+        vec3 col = mix(uColor, vec3(1.0), pow(a, 3.0));
         gl_FragColor = vec4(col * flick, pow(a, 1.6) * 0.85);
       }`
   });
-  userUpdates.add((t) => { flameMat.uniforms.uTime.value = t; });
-  return flameMat;
+  userUpdates.add((t) => { m.uniforms.uTime.value = t; });
+  flameMats.set(color, m);
+  return m;
 }
 
 /** Funciones que se llaman en cada cuadro con el tiempo (animaciones compartidas). */
@@ -156,8 +157,32 @@ export function shipDims(model) {
   return { ...SHIP_LOOKS[model], ...d, length: d.front + d.back };
 }
 
+/** Materiales de fábrica de cada modelo (pintura "rift"). */
+const BASE = {
+  colibri: { hull: C.white, rough: 0.38, metal: 0.3, env: 1.2, dark: 0x232a55, ei: 0.25, neon: 2.2, steelMetal: 0.4 },
+  mula: { hull: C.white, rough: 0.4, metal: 0.25, env: 1.1, dark: 0x222852, ei: 0.22, neon: 2.3, steelMetal: 0.4 },
+  titan: { hull: 0x56609a, rough: 0.36, metal: 0.5, env: 1.2, dark: 0x1d2348, ei: 0.2, neon: 2.4, steelMetal: 0.45 }
+};
+
+/** Materiales de una nave según su pintura y su estela (estéticos). */
+function shipLook(model, { livery = 'rift', trail = 'cian' } = {}) {
+  const b = BASE[model];
+  const p = LIVERY_LOOKS[livery] ?? null;
+  const liv = p?.accent ?? SHIP_LOOKS[model].livery;
+  const neonColor = p?.neon ?? liv;
+  return {
+    liv,
+    hull: p ? mat(p.hull, { rough: p.rough, metal: p.metal, env: 1.3 }) : mat(b.hull, { rough: b.rough, metal: b.metal, env: b.env }),
+    dark: mat(p?.dark ?? b.dark, { rough: 0.5, metal: 0.3 }),
+    paint: mat(liv, { rough: 0.35, emissive: liv, ei: b.ei }),
+    neon: glow(neonColor, b.neon),
+    steel: mat(C.steel, { rough: 0.45, metal: b.steelMetal }),
+    trail: TRAIL_COLORS[trail] ?? TRAIL_COLORS.cian
+  };
+}
+
 /** Motor: carcasa, aro del color de la librea, tobera, brillo y llama. Apunta hacia atrás (-Z). */
-function addEngine(g, flames, x, y, z, s, ring, shell) {
+function addEngine(g, flames, x, y, z, s, ring, shell, trail = TRAIL_COLORS.cian) {
   const housing = lathe('engHousing', [[0.001, 0], [0.14, 0.02], [0.21, 0.1], [0.23, 0.32], [0.22, 0.5], [0.17, 0.56]], 28);
   const nozzle = lathe('engNozzle', [[0.15, 0], [0.19, 0.1], [0.25, 0.26], [0.27, 0.3], [0.23, 0.3], [0.17, 0.16], [0.12, 0.08]], 28);
   const e = new THREE.Group();
@@ -167,18 +192,18 @@ function addEngine(g, flames, x, y, z, s, ring, shell) {
   part(e, housing, shell, 0, 0, 0);
   part(e, cyl(0.235, 0.235, 0.08, 28), ring, 0, 0.3, 0);
   part(e, nozzle, mat(C.steel, { rough: 0.4, metal: 0.5 }), 0, 0.5, 0);
-  part(e, cached('nozzleGlow', () => new THREE.CircleGeometry(0.15, 20).rotateX(-Math.PI / 2)), glow(0x9ff3ff, 2.6), 0, 0.62, 0, 0, 0, 0, { shadow: false });
+  part(e, cached('nozzleGlow', () => new THREE.CircleGeometry(0.15, 20).rotateX(-Math.PI / 2)), glow(trail[2], 2.6), 0, 0.62, 0, 0, 0, 0, { shadow: false });
   const flame = new THREE.Mesh(cached('flame', () => {
     // Ancha en la tobera (y = 0) y en punta hacia atrás (y = 1).
     const fg = new THREE.ConeGeometry(0.17, 1, 18, 1, true);
     fg.translate(0, 0.5, 0);
     return fg;
-  }), flameMaterial());
+  }), flameMaterial(trail[0]));
   flame.position.y = 0.66;
   flame.userData.live = true;
   flame.scale.set(1, 0.001, 1);
   e.add(flame);
-  const halo = glowSprite(0x7fe8ff, 0.9);
+  const halo = glowSprite(trail[1], 0.9);
   halo.position.y = 0.75;
   e.add(halo);
   flame.userData.halo = halo;
@@ -208,13 +233,8 @@ function leg(legs, x, z, h, sx, steel, dark, r = 0.05) {
 }
 
 /** Colibrí: fuselaje fino con domo, un contenedor a cada lado, motor central grande y esquíes. */
-function buildColibri(g, label, flames, navLights, legs) {
-  const liv = SHIP_LOOKS.colibri.livery;
-  const hull = mat(C.white, { rough: 0.38, metal: 0.3, env: 1.2 });
-  const dark = mat(0x232a55, { rough: 0.5, metal: 0.3 });
-  const paint = mat(liv, { rough: 0.35, emissive: liv, ei: 0.25 });
-  const neon = glow(liv, 2.2);
-  const steel = mat(C.steel, { rough: 0.45, metal: 0.4 });
+function buildColibri(g, label, flames, navLights, legs, L) {
+  const { liv, hull, dark, paint, neon, steel } = L;
   const body = cached('colibriBody', () => {
     const geo = lathe('colibriLathe', [[0.001, 0], [0.3, 0.05], [0.46, 0.35], [0.55, 1.0], [0.57, 2.4], [0.5, 3.3], [0.36, 3.85], [0.17, 4.12], [0.001, 4.2]], 40).clone();
     geo.rotateX(Math.PI / 2);
@@ -235,11 +255,11 @@ function buildColibri(g, label, flames, navLights, legs) {
     part(g, rbox(0.1, 0.5, 0.1, 0.03), steel, sx * 1.08, 0.72, 0.55);
     part(g, rbox(1.02, 0.12, 0.14, 0.04), paint, sx * 1.08, 0.52, 0.56);
     // Propulsor chico detrás de cada cuna.
-    addEngine(g, flames, sx * 1.08, 0.62, -1.0, 0.75, paint, hull);
+    addEngine(g, flames, sx * 1.08, 0.62, -1.0, 0.75, paint, hull, L.trail);
     navLight(g, navLights, sx * 1.62, 0.56, 0.52, sx < 0 ? 0xff4d6a : 0x4dff9a);
   }
   // Motor principal y deriva de cola.
-  addEngine(g, flames, 0, 1.0, -2.2, 1.85, neon, hull);
+  addEngine(g, flames, 0, 1.0, -2.2, 1.85, neon, hull, L.trail);
   part(g, profile('colibriFin', [[0, 0], [0.95, 0], [0.35, 0.72], [0.05, 0.72]], 0.09, 0.03), paint, 0, 1.45, -2.0);
   plate(g, label, liv, 0.06, 1.88, -1.55, Math.PI / 2, 0.62);
   plate(g, label, liv, -0.06, 1.88, -1.55, -Math.PI / 2, 0.62);
@@ -254,13 +274,8 @@ function buildColibri(g, label, flames, navLights, legs) {
 }
 
 /** Mula: cabina alta y cuadrada, plataforma con 6 contenedores y dos motores laterales grandes. */
-function buildMula(g, label, flames, navLights, legs) {
-  const liv = SHIP_LOOKS.mula.livery;
-  const hull = mat(C.white, { rough: 0.4, metal: 0.25, env: 1.1 });
-  const dark = mat(0x222852, { rough: 0.5, metal: 0.3 });
-  const paint = mat(liv, { rough: 0.35, emissive: liv, ei: 0.22 });
-  const neon = glow(liv, 2.3);
-  const steel = mat(C.steel, { rough: 0.45, metal: 0.4 });
+function buildMula(g, label, flames, navLights, legs, L) {
+  const { liv, hull, dark, paint, neon, steel } = L;
   // Cabina: arriba acero, abajo la franja de color, parabrisas ancho y barra de luces.
   part(g, rbox(2.3, 1.25, 1.95, 0.2), hull, 0, 1.68, 1.08);
   part(g, rbox(2.36, 0.62, 2.0, 0.16), paint, 0, 0.82, 1.08);
@@ -287,8 +302,8 @@ function buildMula(g, label, flames, navLights, legs) {
     part(g, pod, hull, sx * 1.72, 0.98, -1.6);
     part(g, cyl(0.46, 0.46, 0.14, 32), paint, sx * 1.72, 0.98, -2.6, Math.PI / 2, 0, 0);
     part(g, rbox(0.7, 0.16, 0.9, 0.05), dark, sx * 1.36, 0.82, -2.6);
-    addEngine(g, flames, sx * 1.72, 1.16, -3.8, 1.0, neon, hull);
-    addEngine(g, flames, sx * 1.72, 0.76, -3.8, 1.0, neon, hull);
+    addEngine(g, flames, sx * 1.72, 1.16, -3.8, 1.0, neon, hull, L.trail);
+    addEngine(g, flames, sx * 1.72, 0.76, -3.8, 1.0, neon, hull, L.trail);
     navLight(g, navLights, sx * 2.18, 0.98, -1.45, sx < 0 ? 0xff4d6a : 0x4dff9a);
   }
   for (const [sx, z] of [[-1, 1.4], [1, 1.4], [-1, -3.9], [1, -3.9]]) leg(legs, sx * 1.0, z, 0.45, sx, steel, dark, 0.06);
@@ -298,13 +313,8 @@ function buildMula(g, label, flames, navLights, legs) {
 }
 
 /** Titán: columna de reticulado, puente de mando, 12 contenedores, bloque de 6 motores y radiadores. */
-function buildTitan(g, label, flames, navLights, legs) {
-  const liv = SHIP_LOOKS.titan.livery;
-  const hull = mat(0x56609a, { rough: 0.36, metal: 0.5, env: 1.2 });
-  const dark = mat(0x1d2348, { rough: 0.5, metal: 0.35 });
-  const paint = mat(liv, { rough: 0.35, emissive: liv, ei: 0.2 });
-  const neon = glow(liv, 2.4);
-  const steel = mat(C.steel, { rough: 0.45, metal: 0.45 });
+function buildTitan(g, label, flames, navLights, legs, L) {
+  const { liv, hull, dark, paint, neon, steel } = L;
   // Columna de reticulado (cuatro largueros y riostras cruzadas).
   for (const x of [-0.45, 0.45]) for (const y of [0.4, 0.95]) part(g, rbox(0.14, 0.14, 7.2, 0.04), steel, x, y, -2.4);
   for (let z = 0.8; z > -6; z -= 1.0) {
@@ -335,7 +345,7 @@ function buildTitan(g, label, flames, navLights, legs) {
   // Bloque de motores con 6 toberas y radiadores con borde encendido.
   part(g, rbox(3.1, 1.6, 1.3, 0.18), dark, 0, 1.05, -6.15);
   part(g, rbox(3.16, 0.16, 1.34, 0.06), paint, 0, 1.6, -6.15);
-  for (const r of [0, 1]) for (const c of [-1, 0, 1]) addEngine(g, flames, c * 0.98, 0.7 + r * 0.72, -6.85, 1.3, neon, hull);
+  for (const r of [0, 1]) for (const c of [-1, 0, 1]) addEngine(g, flames, c * 0.98, 0.7 + r * 0.72, -6.85, 1.3, neon, hull, L.trail);
   for (const sx of [-1, 1]) {
     for (const k of [0, 1]) {
       const fin = new THREE.Group();
@@ -358,15 +368,16 @@ const BUILDERS = { colibri: buildColibri, mula: buildMula, titan: buildTitan };
 /**
  * Nave de carga. userData.slots: posiciones locales de los contenedores (de adelante hacia atrás);
  * userData.flames: llamas de los motores (escalar en Z según el empuje); userData.cargo: grupo donde
- * van los contenedores; userData.legs: patas de aterrizaje. `label` es la matrícula pintada.
+ * van los contenedores; userData.legs: patas de aterrizaje. `label` es la matrícula pintada y
+ * `style` = { livery, trail } los estéticos (pintura y color de la estela).
  */
-export function makeShip(model, label = 'RC') {
+export function makeShip(model, label = 'RC', style = {}) {
   const g = new THREE.Group();
   const flames = [];
   const navLights = [];
   const legs = new THREE.Group();
   legs.userData.live = true;
-  const slots = BUILDERS[model](g, label, flames, navLights, legs);
+  const slots = BUILDERS[model](g, label, flames, navLights, legs, shipLook(model, style));
   g.add(legs);
   bake(g);
   const cargo = new THREE.Group();
@@ -374,6 +385,11 @@ export function makeShip(model, label = 'RC') {
   g.add(cargo);
   g.userData = { ...g.userData, slots, flames, cargo, legs, navLights, model, dims: shipDims(model) };
   return g;
+}
+
+/** Clave de lo que cambia el aspecto de una nave del juego (para rearmarla si cambia). */
+export function shipStyleKey(s) {
+  return `${s.model}|${s.name}|${s.look?.livery ?? 'rift'}|${s.look?.trail ?? 'cian'}`;
 }
 
 /** Pone `n` contenedores del tipo `cargoType` en la nave (o los saca). */

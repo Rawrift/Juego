@@ -12,6 +12,9 @@ import {
 import { position, dist } from '../sim/orbit.js';
 import { shipThumb } from '../render/thumbs.js';
 import { morph } from './morph.js';
+import { LIVERY_IDS, TRAIL_IDS, LIVERIES, TRAILS, STYLE_ITEMS } from '../../shared/cargo-style.js';
+import { C, LIVERY, LIVERY_LOOKS, TRAIL_COLORS, hex } from '../render/palette.js';
+import * as style from '../style.js';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const shipName = (s) => s.name;
@@ -19,6 +22,9 @@ const cargoName = (c) => t(`cargo.${c}`);
 const portName = (p) => t(`port.${p}`);
 const cg = (c, cls = '') => `<span class="cg cg-${c} ${cls}">${icon(c)}</span>`;
 const until = (at, cls = '') => `<b class="until ${cls}" data-until="${at}"></b>`;
+
+/** Lo que trae el pack (para saber si ya está todo). */
+const PACK_ALL = Object.keys(STYLE_ITEMS).filter((id) => id !== 'pack');
 
 const STATUS_PILL = {
   parked: 'idle', queued: 'wait', docking: 'loading', docked: 'loading', waitdrones: 'wait', working: 'loading',
@@ -295,19 +301,22 @@ export function createUI({ state, actions, isMap }) {
       const eta = shipEta(s, state);
       const L = s.load;
       return `<article class="ship ${ui.detailId === s.id ? 'sel' : ''}" data-act="select" data-v="${s.id}">
-        <img class="ship-img" src="${shipThumb(s.model, L?.cargo ?? 'agua')}" alt="" />
+        <img class="ship-img" src="${shipThumb(s.model, L?.cargo ?? 'agua', s.look)}" alt="" />
         <div class="ship-txt">
           <h4>${shipName(s)} <small>${t(`ship.${s.model}`)} · ${SHIPS[s.model].cap} t</small></h4>
           <p>${statusText(s)}${eta ? ` · ${until(eta)}` : ''}</p>
           ${L ? `<p class="load">${cg(L.cargo, 'xs')}${L.tons} t ${cargoName(L.cargo)}</p>` : ''}
         </div>
         ${pill(s)}
-        <label class="auto ${hasAuto ? '' : 'off'}" data-stop>
-          ${icon('bot')}<span>${t('fleet.auto')}</span>
-          <select data-act="auto" data-ship="${s.id}" ${hasAuto ? '' : 'disabled'}>
-            ${['off', 'supply', 'orders', 'freight'].map((m) => `<option value="${m}" ${s.auto === m ? 'selected' : ''}>${t(`auto.${m}`)}</option>`).join('')}
-          </select>
-        </label>
+        <div class="ship-row" data-stop>
+          <label class="auto ${hasAuto ? '' : 'off'}">
+            ${icon('bot')}<span>${t('fleet.auto')}</span>
+            <select data-act="auto" data-ship="${s.id}" ${hasAuto ? '' : 'disabled'}>
+              ${['off', 'supply', 'orders', 'freight'].map((m) => `<option value="${m}" ${s.auto === m ? 'selected' : ''}>${t(`auto.${m}`)}</option>`).join('')}
+            </select>
+          </label>
+          <button class="btn line sm sty-btn" data-act="style" data-v="${s.id}" title="${t('style.title')}">${icon('brush')}<span>${t('style.open')}</span></button>
+        </div>
       </article>`;
     }).join('');
     const full = state.ships.length >= fleetCap(state);
@@ -322,7 +331,8 @@ export function createUI({ state, actions, isMap }) {
           ${locked ? `${icon('lock')}${t('up.needLevel', { n: def.level })}` : money(def.price)}</button>
       </article>`;
     }).join('');
-    return `<h3 class="ph">${t('fleet.title')} <small>${t('fleet.hangar', { n: state.ships.length, cap: fleetCap(state) })}</small></h3>
+    return `<button class="sty-cta" data-act="style">${icon('brush', 'sty-cta-ic')}<span><b>${t('style.cta')}</b><small>${t('style.ctaSub')}</small></span>${icon('right')}</button>
+      <h3 class="ph">${t('fleet.title')} <small>${t('fleet.hangar', { n: state.ships.length, cap: fleetCap(state) })}</small></h3>
       ${hasAuto ? '' : `<p class="hint">${icon('bot')}${t('fleet.autoLocked')}</p>`}
       ${ships}
       <h3 class="ph sub">${t('fleet.buy')}</h3>${full ? `<p class="hint">${icon('alert')}${t('fleet.full')}</p>` : ''}${shop}`;
@@ -367,7 +377,7 @@ export function createUI({ state, actions, isMap }) {
   function signature() {
     return JSON.stringify([
       ui.tab, lang, [...ui.expanded], ui.detailId, state.level, state.up, Math.floor(state.credits / 50),
-      state.offers.map((o) => o.id), state.ships.map((s) => [s.id, s.status, s.step, s.auto, s.load?.tons, s.job?.id]),
+      state.offers.map((o) => o.id), state.ships.map((s) => [s.id, s.status, s.step, s.auto, s.load?.tons, s.job?.id, s.name, s.look?.livery, s.look?.trail]),
       state.stock, state.incoming, state.reserved
     ]);
   }
@@ -445,7 +455,7 @@ export function createUI({ state, actions, isMap }) {
       <div class="track-body">
         <ol class="steps">${nodes}</ol>
         <button class="shipcard" data-act="select" data-v="${s.id}">
-          <img src="${shipThumb(s.model, j.cargo)}" alt="" />
+          <img src="${shipThumb(s.model, j.cargo, s.look)}" alt="" />
           <div><b>#${j.id} · ${shipName(s)}</b><small>${t('track.to', { port: portName(dest) })} · ${cg(j.cargo, 'xs')}${j.tons} t</small>${pill(s)}</div>
           ${icon('right')}
         </button>
@@ -464,7 +474,7 @@ export function createUI({ state, actions, isMap }) {
     const row = (k, v) => `<div class="row"><small>${k}</small><b>${v}</b></div>`;
     morph(el, `
       <div class="detail-head">
-        <img src="${shipThumb(s.model, s.load?.cargo ?? 'agua')}" alt="" />
+        <img src="${shipThumb(s.model, s.load?.cargo ?? 'agua', s.look)}" alt="" />
         <div><small>${t(`ship.${s.model}`).toUpperCase()} · ${SHIPS[s.model].cap} t</small><h4>${shipName(s)}</h4></div>
         <button class="x" data-act="closeDetail">${icon('x')}</button>
       </div>
@@ -553,10 +563,194 @@ export function createUI({ state, actions, isMap }) {
     m.innerHTML = `
       <small>${t('menu.lang')}</small>
       <div class="seg">${['es', 'en', 'pt'].map((l) => `<button class="seg-btn ${lang === l ? 'on' : ''}" data-act="lang" data-v="${l}">${l.toUpperCase()}</button>`).join('')}</div>
+      <button class="mi" data-act="style">${icon('brush')}${t('menu.style')}</button>
       <button class="mi" data-act="sound">${icon(actions.isMuted?.() ? 'mute' : 'sound')}${t('menu.sound')}</button>
       <a class="mi" href="/">${icon('zap')}${t('menu.riftfall')}</a>
       <button class="mi danger" data-act="reset">${icon('rotl')}${t('menu.reset')}</button>`;
     m.hidden = false;
+  }
+
+  // ---------- Taller de estilo (estéticos pagados) ----------
+  // Se prueba antes de comprar: tocar una pintura o una estela la muestra en la vista previa; si es
+  // tuya, además se aplica a la nave. Lo que no tenés muestra su precio y los botones de pago.
+  const sty = { open: false, shipId: null, livery: 'rift', trail: 'cian', price: null, busy: null };
+  const fmtBnb = (n) => new Intl.NumberFormat(lang === 'en' ? 'en-US' : 'es-AR', { maximumFractionDigits: 6 }).format(n);
+  const itemName = (item) => {
+    if (item.startsWith('liv-')) return t('item.liv', { name: t(`liv.${item.slice(4)}`) });
+    if (item.startsWith('trail-')) return t('item.trail', { name: t(`trail.${item.slice(6)}`) });
+    return t(`item.${item}`);
+  };
+  const lookOf = (s) => ({ livery: s?.look?.livery ?? 'rift', trail: s?.look?.trail ?? 'cian' });
+
+  function openStyle(shipId) {
+    const s = shipById(state, shipId) ?? shipById(state, ui.detailId) ?? state.ships[0];
+    Object.assign(sty, { open: true, shipId: s?.id ?? null, ...lookOf(s) });
+    $('#menu', root).hidden = true;
+    renderStyle(true);
+    if (sty.price == null) {
+      style.bnbPrice().then((p) => (sty.price = p)).catch(() => (sty.price = 0)).finally(() => sty.open && renderStyle());
+    }
+    checkPending();
+  }
+
+  /** Pagos que quedaron sin confirmar (se cerró la página): se verifican solos. */
+  function checkPending() {
+    if (!style.loadStyle().pending.length || style.styleBusy()) return;
+    style.retryPending().then((done) => {
+      for (const rec of done) toast(`${icon('sparkle')}<span>${t('style.bought', { name: itemName(rec.item) })}</span>`, 'ok', 4200);
+      if (done.length) {
+        renderPanel(true);
+        if (sty.open) renderStyle();
+      }
+    }).catch(() => {});
+  }
+
+  function swatch(kind, id, s) {
+    const item = `${kind}-${id}`;
+    const has = style.has(item);
+    const def = kind === 'liv' ? LIVERIES[id] : TRAILS[id];
+    const cur = lookOf(s)[kind === 'liv' ? 'livery' : 'trail'] === id;
+    const sel = (kind === 'liv' ? sty.livery : sty.trail) === id;
+    let a;
+    let b;
+    if (kind === 'liv') {
+      const p = LIVERY_LOOKS[id];
+      a = p ? p.hull : s?.model === 'titan' ? 0x56609a : C.white;
+      b = p?.accent ?? LIVERY[s?.model ?? 'colibri'];
+    } else [a, b] = TRAIL_COLORS[id];
+    const tag = has ? (cur ? t('style.using') : t('style.owned')) : STYLE_ITEMS[item] ? `US$ ${STYLE_ITEMS[item].usd}` : t('style.founderTag', { tier: t(`founder.${def.founder}`) });
+    return `<button class="sw ${sel ? 'on' : ''} ${has ? 'has' : 'lock'}" data-act="${kind === 'liv' ? 'styLiv' : 'styTrail'}" data-v="${id}">
+      <i class="sw-dot ${kind}" style="--a:${hex(a)};--b:${hex(b)}"></i><span>${t(`${kind === 'liv' ? 'liv' : 'trail'}.${id}`)}</span>
+      <small>${has ? '' : icon('lock')}${tag}</small></button>`;
+  }
+
+  function payButtons(item) {
+    const usd = STYLE_ITEMS[item].usd;
+    const busy = sty.busy;
+    const label = (m, txt) => (busy?.item === item && busy.method === m ? t(`style.stage.${busy.stage}`) : txt);
+    const bnb = sty.price ? style.bnbFor(item, sty.price) : 0;
+    return `<div class="pay-row">
+      <button class="btn primary sm" data-act="styBuy" data-v="${item}" data-m="usdt" ${busy ? 'disabled' : ''}>${icon('wallet')}${label('usdt', t('style.payUsdt', { n: usd }))}</button>
+      <button class="btn line sm" data-act="styBuy" data-v="${item}" data-m="bnb" ${busy || !bnb ? 'disabled' : ''}>${label('bnb', bnb ? t('style.payBnb', { n: fmtBnb(bnb) }) : sty.price === 0 ? t('style.noPrice') : '…')}</button>
+    </div>`;
+  }
+
+  /** Caja de compra de lo que se está probando y no es tuyo (o el aviso del Pase Fundador). */
+  function buyBox(item, def) {
+    if (style.has(item)) return '';
+    if (!STYLE_ITEMS[item]) {
+      return `<div class="sty-buy founder">${icon('star')}<span>${t('style.founderHint', { tier: t(`founder.${def.founder}`) })}</span>
+        <a class="btn line sm" href="/?panel=founder">${t('style.founderGo')}</a></div>`;
+    }
+    return `<div class="sty-buy"><div class="sty-buy-txt"><b>${t('style.buy', { name: itemName(item) })}</b><small>US$ ${STYLE_ITEMS[item].usd}</small></div>${payButtons(item)}</div>`;
+  }
+
+  function renderStyle(fresh = false) {
+    const s = shipById(state, sty.shipId);
+    // Al redibujar, la sección de restaurar queda como estaba (abierta o cerrada).
+    const restoreOpen = !fresh && !!$('#modal .sty-restore', root)?.open;
+    const owned = style.owned();
+    const ships = state.ships.map((x) => `<button class="seg-btn ${x.id === sty.shipId ? 'on' : ''}" data-act="styShip" data-v="${x.id}">${x.name}</button>`).join('');
+    const preview = s ? shipThumb(s.model, s.load?.cargo ?? 'agua', { livery: sty.livery, trail: sty.trail }, { thrust: 0.9, w: 560, h: 260 }) : '';
+    const plates = owned.has('plates');
+    const sign = owned.has('sign');
+    const pack = PACK_ALL.every((x) => owned.has(x));
+    const html = `
+      <div class="sty-head"><span class="sty-ic">${icon('brush')}</span>
+        <div><h2>${t('style.title')}</h2><p>${t('style.sub')}</p></div>
+        <button class="x" data-act="closeModal" aria-label="close">${icon('x')}</button></div>
+      <div class="seg sty-ships">${ships}</div>
+      <div class="sty-preview">${preview ? `<img src="${preview}" alt="" />` : ''}<span class="sty-plate">${s ? s.name : ''}</span></div>
+      <h3 class="ph">${icon('brush')}${t('style.livery')}</h3>
+      <div class="sw-grid">${LIVERY_IDS.map((id) => swatch('liv', id, s)).join('')}</div>
+      ${buyBox(`liv-${sty.livery}`, LIVERIES[sty.livery])}
+      <h3 class="ph">${icon('zap')}${t('style.trail')}</h3>
+      <div class="sw-grid">${TRAIL_IDS.map((id) => swatch('trail', id, s)).join('')}</div>
+      ${buyBox(`trail-${sty.trail}`, TRAILS[sty.trail])}
+      <h3 class="ph">${icon('tag')}${t('style.plate')}</h3>
+      <p class="sty-d">${t('style.plateD')}</p>
+      ${plates
+        ? `<div class="sty-field"><input id="styPlate" maxlength="10" autocomplete="off" spellcheck="false" placeholder="${t('style.platePh')}" value="${s ? s.name : ''}" /><button class="btn line sm" data-act="styPlate">${t('style.save')}</button></div>`
+        : buyBox('plates')}
+      <h3 class="ph">${icon('sign')}${t('style.sign')}</h3>
+      <p class="sty-d">${t('style.signD')}</p>
+      ${sign
+        ? `<div class="sty-field"><input id="stySign" maxlength="18" autocomplete="off" spellcheck="false" placeholder="${t('style.signPh')}" value="${style.signText()}" /><button class="btn line sm" data-act="stySign">${t('style.save')}</button></div>`
+        : buyBox('sign')}
+      <div class="sty-pack ${pack ? 'owned' : ''}">
+        <div class="sty-pack-txt"><b>${icon('sparkle')}${t('style.pack')}</b><small>${pack ? t('style.packOwned') : t('style.packD')}</small></div>
+        ${pack ? icon('check') : `<span class="sty-pack-price">US$ ${STYLE_ITEMS.pack.usd}</span>${payButtons('pack')}`}
+      </div>
+      <details class="sty-restore" ${restoreOpen ? 'open' : ''}><summary>${t('style.restore')}</summary>
+        <div class="sty-field"><input id="styHash" placeholder="0x…" autocomplete="off" spellcheck="false" /><button class="btn line sm" data-act="styRestore">${t('style.verify')}</button></div>
+      </details>
+      <p class="sty-note">${t('style.note')}</p>`;
+    const m = $('#modal', root);
+    const card = m.querySelector('.modal-card.style');
+    if (fresh || !card || m.hidden) {
+      m.innerHTML = `<div class="modal-card card style">${html}</div>`;
+      m.hidden = false;
+    } else {
+      // Se conserva lo que el jugador está escribiendo en los campos de texto.
+      const keep = {};
+      for (const id of ['styPlate', 'stySign', 'styHash']) {
+        const el = card.querySelector(`#${id}`);
+        if (el && document.activeElement === el) keep[id] = el.value;
+      }
+      morph(card, html);
+      for (const [id, v] of Object.entries(keep)) {
+        const el = card.querySelector(`#${id}`);
+        if (el) el.value = v;
+      }
+    }
+  }
+
+  /** Aplica a la nave lo que se está probando, si es del jugador. */
+  function applyLook() {
+    const s = shipById(state, sty.shipId);
+    if (!s) return;
+    const look = { ...lookOf(s) };
+    if (style.has(`liv-${sty.livery}`)) look.livery = sty.livery;
+    if (style.has(`trail-${sty.trail}`)) look.trail = sty.trail;
+    s.look = look.livery === 'rift' && look.trail === 'cian' ? undefined : look;
+    actions.restyle?.();
+    renderPanel(true);
+    renderDetail();
+  }
+
+  async function buyItem(item, method) {
+    if (!style.hasWallet()) {
+      if (isMobile()) {
+        toast(`${icon('wallet')}<span>${t('style.openMetaMask')}</span>`, 'info');
+        actions.persist?.();
+        const link = await style.metamaskLink();
+        setTimeout(() => (location.href = link), 700);
+      } else toast(`${icon('wallet')}<span>${t('style.noWallet')}</span>`, 'err', 4200);
+      return;
+    }
+    sty.busy = { item, method, stage: 'wallet' };
+    renderStyle();
+    try {
+      const rec = await style.buyStyle(item, method, (stage) => {
+        sty.busy = { item, method, stage };
+        renderStyle();
+      });
+      sty.busy = null;
+      applyLook();
+      toast(`${icon('sparkle')}<span>${t('style.bought', { name: itemName(rec.item) })}</span>`, 'ok', 4200);
+      actions.sound?.('level');
+    } catch (err) {
+      sty.busy = null;
+      styleError(err);
+    }
+    if (sty.open) renderStyle();
+  }
+
+  function styleError(err) {
+    const code = err?.code;
+    const key = typeof code === 'string' && t(`style.err.${code}`) !== `style.err.${code}` ? `style.err.${code}` : null;
+    const msg = key ? t(key) : t('style.err.generic', { msg: String(err?.shortMessage ?? err?.message ?? err).slice(0, 90) });
+    toast(`${icon('alert')}<span>${msg}</span>`, 'err', 4800);
   }
 
   // ---------- Tutorial ----------
@@ -770,8 +964,61 @@ export function createUI({ state, actions, isMap }) {
         if (confirm(t('menu.resetConfirm'))) actions.reset();
         break;
       case 'closeModal':
+        sty.open = false;
         closeModal();
         break;
+      case 'style':
+        openStyle(v != null ? Number(v) : null);
+        break;
+      case 'styShip': {
+        const s = shipById(state, Number(v));
+        Object.assign(sty, { shipId: s?.id ?? null, ...lookOf(s) });
+        renderStyle();
+        break;
+      }
+      case 'styLiv':
+        sty.livery = v;
+        applyLook();
+        renderStyle();
+        break;
+      case 'styTrail':
+        sty.trail = v;
+        applyLook();
+        renderStyle();
+        break;
+      case 'styBuy':
+        if (!sty.busy) buyItem(v, el.dataset.m);
+        break;
+      case 'styPlate': {
+        const s = shipById(state, sty.shipId);
+        if (!s || !style.has('plates')) break;
+        const name = style.cleanPlate($('#styPlate', root)?.value);
+        s.baseName ??= s.name; // la matrícula de fábrica, para volver a ella si se borra el nombre
+        s.name = name || s.baseName;
+        actions.restyle?.();
+        toast(`${icon('check')}<span>${t('style.saved')}</span>`, 'ok', 1800);
+        renderPanel(true);
+        renderDetail();
+        renderTrack();
+        renderStyle();
+        break;
+      }
+      case 'stySign':
+        if (actions.setSign?.($('#stySign', root)?.value ?? '')) toast(`${icon('check')}<span>${t('style.saved')}</span>`, 'ok', 1800);
+        renderStyle();
+        break;
+      case 'styRestore': {
+        const input = $('#styHash', root);
+        el.disabled = true;
+        style.verifyStylePayment(input?.value ?? '')
+          .then((rec) => {
+            toast(`${icon('check')}<span>${t('style.restored', { name: itemName(rec.item) })}</span>`, 'ok', 4200);
+            applyLook();
+          })
+          .catch(styleError)
+          .finally(() => sty.open && renderStyle());
+        break;
+      }
       case 'tutNext':
         setTut((TUT.tut ?? 0) + 1);
         break;
@@ -813,6 +1060,7 @@ export function createUI({ state, actions, isMap }) {
     root,
     toast,
     showAway,
+    checkPending,
     tutorial,
     setView(v) {
       root.querySelectorAll('.views .seg-btn').forEach((b) => b.classList.toggle('on', b.dataset.v === v));

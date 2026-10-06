@@ -30,13 +30,37 @@ o en el celular, en **/cargo/** del mismo sitio (por ejemplo `riftfall.duckdns.o
 | Mapa del sistema | `src/cargo/render/map.js`, `planets.js` (texturas generadas por código) |
 | Modelos (naves, drones, contenedores) | `src/cargo/render/models.js`, `kit.js` |
 | Interfaz y textos | `src/cargo/ui/ui.js`, `src/cargo/i18n.js` (castellano, inglés, portugués) |
-| Pruebas | `test/unit/cargo.test.mjs`, `test/e2e/cargo.spec.js` |
+| Taller de estilo (estéticos pagados) | `src/shared/cargo-style.js` (catálogo y verificación), `src/cargo/style.js` (wallet y compra) |
+| Pruebas | `test/unit/cargo.test.mjs`, `test/unit/cargo-style.test.mjs`, `test/e2e/cargo.spec.js` |
 
 Gráficos con Three.js, oclusión ambiental (N8AO) y sombras suaves. La calidad baja sola si el equipo no
 llega a ~40 cuadros por segundo (se puede forzar con `?q=low` o `?q=high`).
+
+## Taller de estilo (estéticos pagados)
+
+Pinturas para las naves, color de la estela de los motores, matrícula con el nombre que quieras y el
+nombre de tu empresa en el cartel de la estación. Se prueban gratis en la vista previa y se pagan en
+USDT o BNB (red principal de BNB Chain) directo a la wallet del creador. Solo cambian cómo se ve el juego.
+
+| Artículo | Precio |
+|---|---:|
+| Pintura Carbono, Aurora o Solar | US$ 2 c/u |
+| Estela magenta, verde, violeta o dorada | US$ 1 c/u |
+| Matrícula propia (nombre en cada nave) | US$ 1 |
+| Cartel propio de la estación | US$ 2 |
+| Pack Rift completo (todo lo anterior; suelto suma US$ 13) | US$ 7 |
+
+- Cada pago lleva en la transacción la etiqueta del artículo (`RCS:liv-aurora`): el juego la lee en la
+  cadena, así un pago vale para una sola cosa y no sirve como Pase Fundador (ni al revés).
+- **Otro dispositivo:** se pega el hash del pago y se recupera la compra.
+- **Celular sin wallet:** pagar abre la app de MetaMask llevando la partida y las compras en el link.
+- **Pase Fundador de RIFTFALL:** Piloto regala la matrícula propia; Oro, además, la pintura Dorado Fundador
+  y la estela dorada; Leyenda, además, la pintura Prisma.
+- Se ven solo en tu juego. Más adelante, con un servidor, los demás jugadores podrían ver tu flota en un ranking.
 
 ## Próximos pasos
 
 1. Más contenido: eventos (tormentas solares, piratas), contratos fijos de largo plazo, logros.
 2. Versión para portales (CrazyGames, Poki, itch.io) con anuncios con premio ("duplicá esta carga").
-3. Conectar con la wallet: el Pase Fundador da una nave dorada exclusiva y un ranking de empresas.
+3. Etapas 2 y 3 de la economía (naves NFT con mejoras grabadas y Contratos Rift en $RIFT): ver
+   [`RIFT-CARGO-ECONOMIA.md`](RIFT-CARGO-ECONOMIA.md).

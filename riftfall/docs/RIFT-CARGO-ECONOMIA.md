@@ -150,5 +150,11 @@ free-to-play.
 | **2. Naves NFT + mejoras + Mercado** | Contrato de flota con ranuras de mejora, Mercado multi-colección; primero en testnet | Contratos nuevos + auditoría liviana | Medio |
 | **3. Contratos Rift en $RIFT** | Reloj en el servidor, Shards y vales | Servidor en línea, token en red principal, pool de liquidez abierto | El más alto |
 
+**Decisiones tomadas:** empezar por los estéticos (etapa 1) y, cuando lleguen los Contratos Rift, usar el modelo
+híbrido de licencias (1 contrato gratis por día con wallet, +2 por nave NFT, hasta 3 naves).
+
+**Etapa 1: hecha.** El Taller de estilo está en el juego. El catálogo, los precios y cómo se verifica cada
+pago están en [`RIFT-CARGO.md`](RIFT-CARGO.md#taller-de-estilo-estéticos-pagados).
+
 Recomendación: **empezar ya por la etapa 1.** Genera ingreso sin tocar el token, prueba si los jugadores pagan
 por verse bien y deja la estructura lista (pagos, inventario, Fundadores) para las etapas 2 y 3.
