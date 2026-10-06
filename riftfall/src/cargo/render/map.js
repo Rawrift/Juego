@@ -50,7 +50,7 @@ function miniStation() {
   part(g, rbox(0.3, 1.4, 0.3, 0.12), mat(C.white, { rough: 0.5 }), -1.1, 0.8, -0.6);
   part(g, rbox(0.4, 0.2, 0.4, 0.1), mat(C.glass, { rough: 0.2 }), -1.1, 1.55, -0.6);
   for (const sx of [-1, 1]) {
-    part(g, rbox(2.2, 0.08, 0.1, 0.03), mat(0xb8c1dc, { rough: 0.5 }), sx * 2.6, 0.05, 0);
+    part(g, rbox(2.2, 0.08, 0.1, 0.03), mat(C.steelLight, { rough: 0.5 }), sx * 2.6, 0.05, 0);
     part(g, rbox(1.6, 0.06, 1.3, 0.04), mat(0xffffff, { map: solarTexture(), rough: 0.3, metal: 0.2 }), sx * 2.9, 0.08, 0);
   }
   part(g, rbox(3.5, 0.06, 0.08, 0.03), mat(C.blue, { rough: 0.4 }), 0, 0.2, 1.1);
@@ -60,12 +60,12 @@ function miniStation() {
 
 export function createMap(stage, state, { onMarket } = {}) {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xe7edfb);
+  scene.background = new THREE.Color(0x04050e);
 
-  scene.add(new THREE.HemisphereLight(0xffffff, 0xc4cdee, 1.25));
-  const sunLight = new THREE.PointLight(0xfff3e0, 3.2, 0, 0);
+  scene.add(new THREE.HemisphereLight(0x8fa0ff, 0x1a1238, 0.55));
+  const sunLight = new THREE.PointLight(0xfff0dc, 2.8, 0, 0);
   scene.add(sunLight);
-  const top = new THREE.DirectionalLight(0xffffff, 0.9);
+  const top = new THREE.DirectionalLight(0x9fb0ff, 0.35);
   top.position.set(-30, 120, 40);
   top.castShadow = true;
   top.shadow.mapSize.set(2048, 2048);
@@ -81,12 +81,12 @@ export function createMap(stage, state, { onMarket } = {}) {
     c.width = c.height = 1024;
     const g = c.getContext('2d');
     const grd = g.createRadialGradient(512, 512, 0, 512, 512, 512);
-    grd.addColorStop(0, '#f5f7fe');
-    grd.addColorStop(0.8, '#edf1fc');
-    grd.addColorStop(1, 'rgba(231,237,251,0)');
+    grd.addColorStop(0, 'rgba(40,30,110,0.55)');
+    grd.addColorStop(0.55, 'rgba(18,16,60,0.45)');
+    grd.addColorStop(1, 'rgba(4,5,14,0)');
     g.fillStyle = grd;
     g.fillRect(0, 0, 1024, 1024);
-    g.fillStyle = 'rgba(120,140,210,0.16)';
+    g.fillStyle = 'rgba(77,232,255,0.13)';
     for (let x = 16; x < 1024; x += 24) for (let y = 16; y < 1024; y += 24) {
       const d = Math.hypot(x - 512, y - 512);
       if (d < 470) g.fillRect(x - 1.2, y - 1.2, 2.4, 2.4);
@@ -97,18 +97,40 @@ export function createMap(stage, state, { onMarket } = {}) {
     floor.position.y = floorY;
     floor.userData.cannotReceiveAO = true;
     scene.add(floor);
-    const shadow = new THREE.Mesh(new THREE.CircleGeometry(124, 96).rotateX(-Math.PI / 2), new THREE.ShadowMaterial({ opacity: 0.1, color: 0x1b2659 }));
+    const shadow = new THREE.Mesh(new THREE.CircleGeometry(124, 96).rotateX(-Math.PI / 2), new THREE.ShadowMaterial({ opacity: 0.25, color: 0x000000 }));
     shadow.position.y = floorY + 0.05;
     shadow.receiveShadow = true;
     shadow.userData.treatAsOpaque = true;
     scene.add(shadow);
   }
 
+  // Estrellas de fondo (puntos fijos muy lejos) y una nebulosa suave de la grieta.
+  {
+    const n = 2600;
+    const pos = new Float32Array(n * 3);
+    const col = new Float32Array(n * 3);
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+    const tint = [[1, 1, 1], [0.6, 0.9, 1], [1, 0.6, 0.9], [0.8, 0.7, 1]];
+    for (let i = 0; i < n; i++) {
+      pos.set([(rnd() - 0.5) * 900, -60 - rnd() * 220, (rnd() - 0.5) * 900], i * 3);
+      const t = tint[i % tint.length];
+      const b = 0.4 + rnd() * 0.6;
+      col.set([t[0] * b, t[1] * b, t[2] * b], i * 3);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const stars = new THREE.Points(geo, new THREE.PointsMaterial({ size: 2.2, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false }));
+    stars.userData.cannotReceiveAO = true;
+    scene.add(stars);
+  }
+
   // Órbitas.
   const orbitLines = {};
   for (const id of Object.keys(PORTS)) {
     const isHq = id === 'hq';
-    const line = fatLine(circlePoints(PORTS[id].orbit), { color: isHq ? C.blue : 0x8b9bd3, width: isHq ? 2 : 1.4, dashed: true, dash: isHq ? 2.4 : 1.2, gap: isHq ? 1.6 : 1.4, opacity: isHq ? 0.85 : 0.7 });
+    const line = fatLine(circlePoints(PORTS[id].orbit), { color: isHq ? C.blue : 0x7b6cff, width: isHq ? 2 : 1.4, dashed: true, dash: isHq ? 2.4 : 1.2, gap: isHq ? 1.6 : 1.4, opacity: isHq ? 0.9 : 0.55 });
     scene.add(line);
     orbitLines[id] = line;
   }
@@ -134,7 +156,7 @@ export function createMap(stage, state, { onMarket } = {}) {
     const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
-    const tones = [0xd8cfc4, 0xcfc6d9, 0xe3dbd0, 0xbfb6c9, 0xd6c3b0];
+    const tones = [0x8a7f9c, 0x6f6a8f, 0x9a8da8, 0x5f5a7e, 0x857a96];
     for (let i = 0; i < ROCKS; i++) {
       const a = rnd() * Math.PI * 2;
       const r = BELT.inner + 0.6 + rnd() * (BELT.outer - BELT.inner - 1.2);
@@ -197,7 +219,7 @@ export function createMap(stage, state, { onMarket } = {}) {
   function shipObj(s) {
     let o = ships.get(s.id);
     if (!o) {
-      const mesh = makeShip(s.model);
+      const mesh = makeShip(s.model, s.name);
       mesh.scale.setScalar(SHIP_SCALE);
       mesh.traverse((x) => (x.userData.shipId = s.id));
       mesh.userData.shipId = s.id;
@@ -303,7 +325,7 @@ export function createMap(stage, state, { onMarket } = {}) {
       if (pl.userData.clouds) pl.userData.clouds.rotation.y += dt * 0.16;
       labels[id].position.set(p.x, vis(id) + 1.8, p.z);
       const locked = PORTS[id].level > state.level;
-      pl.userData.body.material.color.setHex(locked ? 0xc9cfdf : 0xffffff);
+      pl.userData.body.material.color.setHex(locked ? 0x6a6f8f : 0xffffff);
       orbitLines[id].material.opacity = locked ? 0.35 : 0.7;
     }
     const h = position('hq', tSim);
@@ -406,7 +428,7 @@ export function createMap(stage, state, { onMarket } = {}) {
   return {
     scene,
     enter() {
-      stage.setScene(scene, { ao: { radius: 5, intensity: 2.2, falloff: 2.5 } });
+      stage.setScene(scene, { ao: { radius: 5, intensity: 2.2, falloff: 2.5 }, bloom: 0.3 });
       stage.rig.view = 220;
       stage.rig.bounds = { minX: -110, maxX: 110, minZ: -110, maxZ: 110 };
       stage.rig.minZoom = 0.6;

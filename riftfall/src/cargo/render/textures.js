@@ -48,13 +48,13 @@ export function containerTexture(cargo) {
     g.fillRect(0, 0, 256, 256);
     // Acanalado vertical: franjas de luz y sombra suaves.
     for (let x = 10; x < 246; x += 14) {
-      g.fillStyle = 'rgba(255,255,255,0.13)';
+      g.fillStyle = 'rgba(255,255,255,0.16)';
       g.fillRect(x, 14, 5, 228);
-      g.fillStyle = 'rgba(10,20,60,0.10)';
+      g.fillStyle = 'rgba(5,6,30,0.22)';
       g.fillRect(x + 6, 14, 4, 228);
     }
     // Marco (las esquinas reforzadas del contenedor).
-    g.strokeStyle = 'rgba(15,25,70,0.28)';
+    g.strokeStyle = 'rgba(5,6,30,0.5)';
     g.lineWidth = 12;
     g.strokeRect(6, 6, 244, 244);
     // Placa blanca con el ícono, dibujada angosta: la cara larga la estira 1,5 veces.
@@ -80,10 +80,10 @@ export function wallTexture() {
     g.fillRect(0, 0, 256, 256);
     for (let x = 0; x < 256; x += 16) {
       const grd = g.createLinearGradient(x, 0, x + 16, 0);
-      grd.addColorStop(0, 'rgba(140,155,200,0.0)');
-      grd.addColorStop(0.45, 'rgba(140,155,200,0.16)');
-      grd.addColorStop(0.55, 'rgba(255,255,255,0.5)');
-      grd.addColorStop(1, 'rgba(140,155,200,0.0)');
+      grd.addColorStop(0, 'rgba(10,12,40,0.0)');
+      grd.addColorStop(0.45, 'rgba(10,12,40,0.35)');
+      grd.addColorStop(0.55, 'rgba(140,170,255,0.22)');
+      grd.addColorStop(1, 'rgba(10,12,40,0.0)');
       g.fillStyle = grd;
       g.fillRect(x, 0, 16, 256);
     }
@@ -97,18 +97,18 @@ export function solarTexture() {
   return once('solar', () => {
     const [c, g] = canvas(256, 512);
     const grd = g.createLinearGradient(0, 0, 256, 512);
-    grd.addColorStop(0, '#3b63d6');
-    grd.addColorStop(1, '#2443a8');
+    grd.addColorStop(0, '#2a2f86');
+    grd.addColorStop(1, '#161a55');
     g.fillStyle = grd;
     g.fillRect(0, 0, 256, 512);
-    g.strokeStyle = 'rgba(200,215,255,0.55)';
+    g.strokeStyle = 'rgba(77,232,255,0.55)';
     g.lineWidth = 3;
     for (let x = 0; x <= 256; x += 64) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 512); g.stroke(); }
     for (let y = 0; y <= 512; y += 64) { g.beginPath(); g.moveTo(0, y); g.lineTo(256, y); g.stroke(); }
-    g.strokeStyle = 'rgba(200,215,255,0.18)';
+    g.strokeStyle = 'rgba(157,107,255,0.22)';
     g.lineWidth = 1;
     for (let x = 16; x < 256; x += 16) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 512); g.stroke(); }
-    g.strokeStyle = '#eef2ff';
+    g.strokeStyle = '#8f9ac8';
     g.lineWidth = 10;
     g.strokeRect(0, 0, 256, 512);
     return toTexture(c);
@@ -116,7 +116,7 @@ export function solarTexture() {
 }
 
 /** Textura de un cartel: texto en una placa redondeada. */
-export function signTexture(text, { bg = '#2f5fe8', fg = '#ffffff', w = 256, h = 128, font = 800, size = 64, radius = 28 } = {}) {
+export function signTexture(text, { bg = '#4de8ff', fg = '#06081a', w = 256, h = 128, font = 800, size = 64, radius = 28 } = {}) {
   return once(`sign:${text}:${bg}:${fg}:${w}x${h}`, () => {
     const [c, g] = canvas(w, h);
     g.fillStyle = bg;
@@ -136,11 +136,15 @@ export function logoTexture({ dark = false } = {}) {
   return once(`logo:${dark}`, () => {
     const [c, g] = canvas(1024, 256);
     g.clearRect(0, 0, 1024, 256);
-    g.fillStyle = 'rgba(255,255,255,0.96)';
+    g.fillStyle = 'rgba(8,10,30,0.92)';
     roundRect(g, 4, 20, 1016, 216, 60);
     g.fill();
+    g.strokeStyle = 'rgba(77,232,255,0.85)';
+    g.lineWidth = 6;
+    roundRect(g, 7, 23, 1010, 210, 57);
+    g.stroke();
     drawLogoCube(g, 132, 128, 76);
-    g.fillStyle = dark ? '#ffffff' : '#1d2a55';
+    g.fillStyle = '#e9f3ff';
     g.font = '800 104px "Plus Jakarta Sans", system-ui, sans-serif';
     g.textBaseline = 'middle';
     g.fillText('RIFT CARGO', 236, 134, 760);
@@ -160,9 +164,9 @@ export function drawLogoCube(g, cx, cy, s) {
     g.fillStyle = fill;
     g.fill();
   };
-  poly(top, '#7d9bff');
-  poly(left, '#2f5fe8');
-  poly(right, '#1f43b8');
+  poly(top, '#4de8ff');
+  poly(left, '#9d6bff');
+  poly(right, '#ff4dd2');
   // La "grieta" del logo: una franja clara en diagonal.
   g.strokeStyle = 'rgba(255,255,255,0.9)';
   g.lineWidth = s * 0.09;
@@ -187,11 +191,11 @@ export function deckTexture(width, depth, paint) {
   for (let x = 0; x < width; x += 2) {
     for (let z = 0; z < depth; z += 2) {
       const n = (Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1;
-      g.fillStyle = `rgba(120,135,190,${0.012 + Math.abs(n) * 0.022})`;
+      g.fillStyle = `rgba(120,150,255,${0.012 + Math.abs(n) * 0.03})`;
       g.fillRect(x * ppu, z * ppu, 2 * ppu, 2 * ppu);
     }
   }
-  g.strokeStyle = 'rgba(150,165,215,0.28)';
+  g.strokeStyle = 'rgba(110,140,255,0.16)';
   g.lineWidth = 1.5;
   for (let x = 0; x <= width; x += 2) { g.beginPath(); g.moveTo(x * ppu, 0); g.lineTo(x * ppu, c.height); g.stroke(); }
   for (let z = 0; z <= depth; z += 2) { g.beginPath(); g.moveTo(0, z * ppu); g.lineTo(c.width, z * ppu); g.stroke(); }
@@ -209,21 +213,21 @@ export function padTexture(label, { locked = false } = {}) {
     const [c, g] = canvas(w, h);
     if (locked) {
       g.clearRect(0, 0, w, h);
-      g.strokeStyle = 'rgba(47,95,232,0.55)';
+      g.strokeStyle = 'rgba(77,232,255,0.45)';
       g.setLineDash([22, 16]);
       g.lineWidth = 8;
       roundRect(g, 8, 8, w - 16, h - 16, 26);
       g.stroke();
       g.setLineDash([]);
-      g.fillStyle = 'rgba(47,95,232,0.07)';
+      g.fillStyle = 'rgba(77,232,255,0.05)';
       roundRect(g, 8, 8, w - 16, h - 16, 26);
       g.fill();
       return toTexture(c);
     }
-    g.fillStyle = '#dce2f5';
+    g.fillStyle = '#222a5c';
     roundRect(g, 0, 0, w, h, 30);
     g.fill();
-    g.fillStyle = '#d2d9f0';
+    g.fillStyle = '#181e46';
     roundRect(g, 14, 14, w - 28, h - 28, 22);
     g.fill();
     // Franjas amarillas y azul oscuro en la cabecera (el lado del portón).
@@ -231,7 +235,7 @@ export function padTexture(label, { locked = false } = {}) {
     roundRect(g, 14, 14, w - 28, 44, 12);
     g.clip();
     for (let x = -60; x < w + 60; x += 32) {
-      g.fillStyle = '#f6b52a';
+      g.fillStyle = '#ffc94d';
       g.beginPath();
       g.moveTo(x, 14); g.lineTo(x + 16, 14); g.lineTo(x + 16 - 44, 58); g.lineTo(x - 44, 58);
       g.closePath();
@@ -239,18 +243,18 @@ export function padTexture(label, { locked = false } = {}) {
     }
     g.restore();
     // Guía central punteada.
-    g.strokeStyle = '#f6b52a';
+    g.strokeStyle = '#ff4dd2';
     g.lineWidth = 6;
     g.setLineDash([26, 20]);
     g.beginPath(); g.moveTo(w / 2, 80); g.lineTo(w / 2, h - 30); g.stroke();
     g.setLineDash([]);
     // Esquineros blancos.
-    g.strokeStyle = '#ffffff';
+    g.strokeStyle = '#4de8ff';
     g.lineWidth = 7;
     const corner = (x, y, dx, dy) => { g.beginPath(); g.moveTo(x + dx * 34, y); g.lineTo(x, y); g.lineTo(x, y + dy * 34); g.stroke(); };
     corner(34, 86, 1, 1); corner(w - 34, 86, -1, 1); corner(34, h - 34, 1, -1); corner(w - 34, h - 34, -1, -1);
     // Número del muelle.
-    g.fillStyle = 'rgba(47,95,232,0.85)';
+    g.fillStyle = 'rgba(77,232,255,0.9)';
     g.font = '800 74px "Plus Jakarta Sans", system-ui, sans-serif';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
@@ -267,7 +271,7 @@ export function parkTexture(label, locked) {
     const [c, g] = canvas(w, h);
     g.clearRect(0, 0, w, h);
     if (locked) {
-      g.strokeStyle = 'rgba(47,95,232,0.4)';
+      g.strokeStyle = 'rgba(120,150,255,0.35)';
       g.setLineDash([20, 16]);
       g.lineWidth = 6;
       roundRect(g, 8, 8, w - 16, h - 16, 22);
@@ -275,14 +279,14 @@ export function parkTexture(label, locked) {
       g.setLineDash([]);
       return toTexture(c);
     }
-    g.fillStyle = 'rgba(246,181,42,0.07)';
+    g.fillStyle = 'rgba(77,232,255,0.05)';
     roundRect(g, 8, 8, w - 16, h - 16, 22);
     g.fill();
-    g.strokeStyle = '#f2b92f';
+    g.strokeStyle = '#4de8ff';
     g.lineWidth = 9;
     roundRect(g, 8, 8, w - 16, h - 16, 22);
     g.stroke();
-    g.fillStyle = 'rgba(242,185,47,0.95)';
+    g.fillStyle = 'rgba(77,232,255,0.95)';
     g.font = '800 54px "Plus Jakarta Sans", system-ui, sans-serif';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
@@ -295,16 +299,16 @@ export function parkTexture(label, locked) {
 export function ghostTexture() {
   return once('ghost', () => {
     const [c, g] = canvas(384, 205);
-    g.strokeStyle = 'rgba(47,95,232,0.42)';
+    g.strokeStyle = 'rgba(157,107,255,0.55)';
     g.setLineDash([18, 12]);
     g.lineWidth = 6;
     roundRect(g, 6, 6, 372, 193, 18);
     g.stroke();
     g.setLineDash([]);
-    g.fillStyle = 'rgba(47,95,232,0.05)';
+    g.fillStyle = 'rgba(157,107,255,0.06)';
     roundRect(g, 6, 6, 372, 193, 18);
     g.fill();
-    g.strokeStyle = 'rgba(47,95,232,0.5)';
+    g.strokeStyle = 'rgba(157,107,255,0.7)';
     drawIcon(g, 'plus', 192, 102, 56, 2.2);
     return toTexture(c);
   });
@@ -314,9 +318,9 @@ export function ghostTexture() {
 export function stripeTexture() {
   return once('stripe', () => {
     const [c, g] = canvas(256, 32);
-    g.fillStyle = '#ffffff';
+    g.fillStyle = '#141836';
     g.fillRect(0, 0, 256, 32);
-    g.fillStyle = '#ff8a3d';
+    g.fillStyle = '#ffc94d';
     for (let x = -32; x < 288; x += 40) {
       g.beginPath();
       g.moveTo(x, 32); g.lineTo(x + 20, 32); g.lineTo(x + 40, 0); g.lineTo(x + 20, 0);
@@ -335,19 +339,19 @@ export function bedTexture(cols, rows) {
     const W = cols * cw + 30;
     const H = rows * rh + 24;
     const [c, g] = canvas(W, H);
-    g.fillStyle = '#c9d0e6';
+    g.fillStyle = '#2a3164';
     g.fillRect(0, 0, W, H);
     for (let r = 0; r < rows; r++) {
       for (let k = 0; k < cols; k++) {
         const x = 15 + k * cw + 6;
         const y = 12 + r * rh + 6;
-        g.fillStyle = '#b5bedb';
+        g.fillStyle = '#1b2148';
         roundRect(g, x, y, cw - 12, rh - 12, 10);
         g.fill();
-        g.strokeStyle = 'rgba(255,255,255,0.55)';
+        g.strokeStyle = 'rgba(77,232,255,0.45)';
         g.lineWidth = 3;
         g.stroke();
-        g.fillStyle = '#f6b52a';
+        g.fillStyle = '#ffc94d';
         for (const [dx, dy] of [[8, 8], [cw - 20, 8], [8, rh - 20], [cw - 20, rh - 20]]) g.fillRect(x + dx - 4, y + dy - 4, 12, 12);
       }
     }

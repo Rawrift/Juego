@@ -2,7 +2,7 @@
 // (los "montacargas"), naves de carga, estanterías y pines. Todos miran hacia +Z.
 
 import * as THREE from 'three';
-import { C } from './palette.js';
+import { C, LIVERY, hex } from './palette.js';
 import { containerTexture, signTexture, bedTexture } from './textures.js';
 import { rbox, cyl, sphere, lathe, mat, glass, glow, part, bake, profile, cached } from './kit.js';
 
@@ -107,7 +107,7 @@ export function makeDrone() {
     rotor.userData.live = true;
     const blade = part(rotor, rbox(0.3, 0.01, 0.045, 0.005, 1), mat(C.navy, { rough: 0.5 }), 0, 0, 0, 0, 0, 0, { shadow: false });
     blade.userData.live = true;
-    const blur = part(rotor, cached('rotorBlur', () => new THREE.CircleGeometry(0.15, 24).rotateX(-Math.PI / 2)), mat(0x8b96b8, { transparent: true, opacity: 0.25 }), 0, 0.002, 0, 0, 0, 0, { shadow: false, receive: false });
+    const blur = part(rotor, cached('rotorBlur', () => new THREE.CircleGeometry(0.15, 24).rotateX(-Math.PI / 2)), mat(0xa9b4de, { transparent: true, opacity: 0.25 }), 0, 0.002, 0, 0, 0, 0, { shadow: false, receive: false });
     blur.userData.live = true;
     g.add(rotor);
     rotors.push(rotor);
@@ -133,186 +133,246 @@ export function makeDrone() {
 }
 
 // ---------- Naves de carga ----------
+// Cada modelo tiene su propia silueta (no es la misma nave más grande) y su color de librea:
+// Colibrí (correo veloz, cian), Mula (camión de plataforma, magenta), Titán (carguero pesado, dorado).
 
 export const SHIP_LOOKS = {
-  // Liviana: cabina azul, 2 contenedores en fila.
-  colibri: { cols: 1, rows: 2, cabW: 1.35, cabL: 1.6, cabH: 1.78, engines: 2, cab: C.blue, stripe: C.white, trim: C.yellow, rail: C.blue, skirt: C.navy },
-  // Mediana: cabina blanca con franja azul, 2x3 contenedores.
-  mula: { cols: 2, rows: 3, cabW: 2.15, cabL: 1.9, cabH: 1.95, engines: 4, cab: C.white, stripe: C.blue, trim: C.blue, rail: C.blue, skirt: C.navy },
-  // Pesada: cabina azul oscuro con puente de mando, 3x4 contenedores.
-  titan: { cols: 3, rows: 4, cabW: 3.05, cabL: 2.35, cabH: 2.0, engines: 6, cab: C.navy, stripe: C.orange, trim: C.orange, rail: C.orange, skirt: C.steel, bridge: true }
+  colibri: { cols: 2, rows: 1, livery: LIVERY.colibri },
+  mula: { cols: 2, rows: 3, livery: LIVERY.mula },
+  titan: { cols: 3, rows: 4, livery: LIVERY.titan }
 };
 
 export const SLOT = { x: 0.92, z: 1.34 };
 
-/** Medidas útiles de una nave (para estacionarla y ubicar la carga). */
+/** Medidas de cada nave: cuánto sobresale hacia adelante y hacia atrás de su origen, alto y ancho. */
+const DIMS = {
+  colibri: { front: 2.1, back: 2.9, height: 1.95, width: 2.6 },
+  mula: { front: 2.15, back: 4.5, height: 2.45, width: 4.3 },
+  titan: { front: 3.25, back: 7.3, height: 3.0, width: 3.9 }
+};
+
 export function shipDims(model) {
-  const L = SHIP_LOOKS[model];
-  const bedL = L.rows * SLOT.z + 0.25;
-  return { ...L, bedL, length: L.cabL + bedL + 0.9, width: Math.max(L.cabW, L.cols * SLOT.x + 0.5) + 0.8 };
+  const d = DIMS[model];
+  return { ...SHIP_LOOKS[model], ...d, length: d.front + d.back };
 }
 
-/** Alerón horizontal (envergadura hacia el lado `side`, cuerda hacia adelante). */
-function finGeometry(side) {
-  return cached(`fin:${side}`, () => {
-    let pts = [[0, 0], [0, 1.05], [0.85, 0.5], [0.85, 0.15]].map(([u, v]) => [u * side, v]);
-    if (side < 0) pts = pts.reverse();
-    const shape = new THREE.Shape();
-    pts.forEach(([u, v], i) => (i ? shape.lineTo(u, v) : shape.moveTo(u, v)));
-    shape.closePath();
-    const fg = new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.03, bevelSegments: 3 });
-    fg.rotateX(Math.PI / 2);
-    fg.computeVertexNormals();
+/** Motor: carcasa, aro del color de la librea, tobera, brillo y llama. Apunta hacia atrás (-Z). */
+function addEngine(g, flames, x, y, z, s, ring, shell) {
+  const housing = lathe('engHousing', [[0.001, 0], [0.14, 0.02], [0.21, 0.1], [0.23, 0.32], [0.22, 0.5], [0.17, 0.56]], 28);
+  const nozzle = lathe('engNozzle', [[0.15, 0], [0.19, 0.1], [0.25, 0.26], [0.27, 0.3], [0.23, 0.3], [0.17, 0.16], [0.12, 0.08]], 28);
+  const e = new THREE.Group();
+  e.position.set(x, y, z);
+  e.rotation.x = -Math.PI / 2;
+  e.scale.setScalar(s);
+  part(e, housing, shell, 0, 0, 0);
+  part(e, cyl(0.235, 0.235, 0.08, 28), ring, 0, 0.3, 0);
+  part(e, nozzle, mat(C.steel, { rough: 0.4, metal: 0.5 }), 0, 0.5, 0);
+  part(e, cached('nozzleGlow', () => new THREE.CircleGeometry(0.15, 20).rotateX(-Math.PI / 2)), glow(0x9ff3ff, 2.6), 0, 0.62, 0, 0, 0, 0, { shadow: false });
+  const flame = new THREE.Mesh(cached('flame', () => {
+    // Ancha en la tobera (y = 0) y en punta hacia atrás (y = 1).
+    const fg = new THREE.ConeGeometry(0.17, 1, 18, 1, true);
+    fg.translate(0, 0.5, 0);
     return fg;
-  });
+  }), flameMaterial());
+  flame.position.y = 0.66;
+  flame.userData.live = true;
+  flame.scale.set(1, 0.001, 1);
+  e.add(flame);
+  const halo = glowSprite(0x7fe8ff, 0.9);
+  halo.position.y = 0.75;
+  e.add(halo);
+  flame.userData.halo = halo;
+  flames.push(flame);
+  g.add(e);
+  return e;
 }
+
+/** Matrícula pintada (por ejemplo "RC-101") para distinguir naves del mismo modelo. */
+function plate(g, label, livery, x, y, z, ry, w = 0.9) {
+  const tex = signTexture(label, { bg: '#070a1e', fg: hex(livery), w: 256, h: 80, size: 46, radius: 18 });
+  const m = part(g, cached(`plate:${w}`, () => new THREE.PlaneGeometry(w, w * 0.31)), mat(0xffffff, { map: tex, rough: 0.5, emissive: 0xffffff, ei: 0.15 }), x, y, z, 0, ry, 0, { shadow: false });
+  m.receiveShadow = true;
+  return m;
+}
+
+function navLight(g, list, x, y, z, color) {
+  const nl = part(g, sphere(0.06, 10, 8), glow(color, 2.8), x, y, z, 0, 0, 0, { shadow: false });
+  nl.userData.live = true;
+  list.push(nl);
+}
+
+/** Pata de aterrizaje con su apoyo. */
+function leg(legs, x, z, h, sx, steel, dark, r = 0.05) {
+  part(legs, cyl(r, r, h, 8), steel, x, h / 2, z, 0, 0, sx * 0.22);
+  part(legs, cyl(r * 3, r * 3.4, 0.06, 16), dark, x + sx * h * 0.1, 0.03, z);
+}
+
+/** Colibrí: fuselaje fino con domo, un contenedor a cada lado, motor central grande y esquíes. */
+function buildColibri(g, label, flames, navLights, legs) {
+  const liv = SHIP_LOOKS.colibri.livery;
+  const hull = mat(C.white, { rough: 0.38, metal: 0.3, env: 1.2 });
+  const dark = mat(0x232a55, { rough: 0.5, metal: 0.3 });
+  const paint = mat(liv, { rough: 0.35, emissive: liv, ei: 0.25 });
+  const neon = glow(liv, 2.2);
+  const steel = mat(C.steel, { rough: 0.45, metal: 0.4 });
+  const body = cached('colibriBody', () => {
+    const geo = lathe('colibriLathe', [[0.001, 0], [0.3, 0.05], [0.46, 0.35], [0.55, 1.0], [0.57, 2.4], [0.5, 3.3], [0.36, 3.85], [0.17, 4.12], [0.001, 4.2]], 40).clone();
+    geo.rotateX(Math.PI / 2);
+    geo.translate(0, 0, -2.15);
+    return geo;
+  });
+  part(g, body, hull, 0, 1.0, 0);
+  // Domo de la cabina y su reflejo.
+  const dome = part(g, sphere(0.42, 28, 18), glass(), 0, 1.38, 0.95);
+  dome.scale.set(0.95, 0.62, 1.45);
+  part(g, rbox(0.3, 0.03, 0.5, 0.01), mat(0xffffff, { emissive: 0xffffff, ei: 0.5 }), -0.12, 1.62, 1.1, 0.2, 0, 0, { shadow: false });
+  // Anillos de color en el fuselaje.
+  for (const z of [0.45, -1.2]) part(g, cyl(0.585, 0.585, 0.12, 36), z > 0 ? neon : paint, 0, 1.0, z, Math.PI / 2, 0, 0);
+  // Brazos y cunas laterales para los dos contenedores.
+  for (const sx of [-1, 1]) {
+    part(g, rbox(0.75, 0.14, 1.2, 0.05), dark, sx * 0.62, 0.92, -0.2);
+    part(g, rbox(0.98, 0.1, 1.5, 0.04), dark, sx * 1.08, 0.48, -0.2);
+    part(g, rbox(0.1, 0.5, 0.1, 0.03), steel, sx * 1.08, 0.72, 0.55);
+    part(g, rbox(1.02, 0.12, 0.14, 0.04), paint, sx * 1.08, 0.52, 0.56);
+    // Propulsor chico detrás de cada cuna.
+    addEngine(g, flames, sx * 1.08, 0.62, -1.0, 0.75, paint, hull);
+    navLight(g, navLights, sx * 1.62, 0.56, 0.52, sx < 0 ? 0xff4d6a : 0x4dff9a);
+  }
+  // Motor principal y deriva de cola.
+  addEngine(g, flames, 0, 1.0, -2.2, 1.85, neon, hull);
+  part(g, profile('colibriFin', [[0, 0], [0.95, 0], [0.35, 0.72], [0.05, 0.72]], 0.09, 0.03), paint, 0, 1.45, -2.0);
+  plate(g, label, liv, 0.06, 1.88, -1.55, Math.PI / 2, 0.62);
+  plate(g, label, liv, -0.06, 1.88, -1.55, -Math.PI / 2, 0.62);
+  // Faro delantero.
+  part(g, rbox(0.3, 0.08, 0.06, 0.02), glow(0xe8fbff, 2), 0, 0.82, 2.0);
+  // Esquíes de aterrizaje.
+  for (const sx of [-1, 1]) {
+    part(legs, rbox(0.1, 0.07, 3.0, 0.03), dark, sx * 0.42, 0.04, -0.1);
+    for (const z of [0.8, -1.0]) part(legs, cyl(0.035, 0.035, 0.5, 8), steel, sx * 0.4, 0.3, z, 0, 0, sx * 0.15);
+  }
+  return [new THREE.Vector3(-1.08, 0.53 + CONTAINER.h / 2, -0.2), new THREE.Vector3(1.08, 0.53 + CONTAINER.h / 2, -0.2)];
+}
+
+/** Mula: cabina alta y cuadrada, plataforma con 6 contenedores y dos motores laterales grandes. */
+function buildMula(g, label, flames, navLights, legs) {
+  const liv = SHIP_LOOKS.mula.livery;
+  const hull = mat(C.white, { rough: 0.4, metal: 0.25, env: 1.1 });
+  const dark = mat(0x222852, { rough: 0.5, metal: 0.3 });
+  const paint = mat(liv, { rough: 0.35, emissive: liv, ei: 0.22 });
+  const neon = glow(liv, 2.3);
+  const steel = mat(C.steel, { rough: 0.45, metal: 0.4 });
+  // Cabina: arriba acero, abajo la franja de color, parabrisas ancho y barra de luces.
+  part(g, rbox(2.3, 1.25, 1.95, 0.2), hull, 0, 1.68, 1.08);
+  part(g, rbox(2.36, 0.62, 2.0, 0.16), paint, 0, 0.82, 1.08);
+  part(g, rbox(2.12, 0.5, 0.08, 0.05), glass(), 0, 1.86, 2.07);
+  for (const sx of [-1, 1]) part(g, rbox(0.06, 0.42, 0.9, 0.04), glass(), sx * 1.16, 1.9, 1.35);
+  part(g, rbox(1.6, 0.08, 0.2, 0.03), neon, 0, 2.36, 1.6);
+  for (const sx of [-1, 1]) part(g, rbox(0.42, 0.12, 0.05, 0.02), glow(0xe8fbff, 2), sx * 0.72, 0.9, 2.1);
+  part(g, rbox(1.9, 0.16, 0.06, 0.03), dark, 0, 0.62, 2.1);
+  plate(g, label, liv, 1.19, 1.42, 1.0, Math.PI / 2);
+  plate(g, label, liv, -1.19, 1.42, 1.0, -Math.PI / 2);
+  // Chasis y plataforma.
+  part(g, rbox(2.4, 0.34, 4.7, 0.1), dark, 0, 0.42, -2.25);
+  part(g, rbox(2.2, 0.1, 4.3, 0.04), mat(0xffffff, { map: bedTexture(2, 3), rough: 0.6 }), 0, 0.64, -2.25);
+  part(g, rbox(2.34, 1.15, 0.16, 0.05), dark, 0, 1.15, -0.05);
+  part(g, rbox(2.36, 0.1, 0.18, 0.04), neon, 0, 1.76, -0.05);
+  for (const sx of [-1, 1]) part(g, rbox(0.08, 0.12, 4.3, 0.03), paint, sx * 1.12, 0.74, -2.25);
+  // Góndolas de motor a los costados, con pilones.
+  for (const sx of [-1, 1]) {
+    const pod = cached('mulaPod', () => {
+      const geo = lathe('mulaPodLathe', [[0.001, 0], [0.28, 0.08], [0.42, 0.4], [0.45, 1.6], [0.36, 2.1], [0.001, 2.25]], 32).clone();
+      geo.rotateX(-Math.PI / 2);
+      return geo;
+    });
+    part(g, pod, hull, sx * 1.72, 0.98, -1.6);
+    part(g, cyl(0.46, 0.46, 0.14, 32), paint, sx * 1.72, 0.98, -2.6, Math.PI / 2, 0, 0);
+    part(g, rbox(0.7, 0.16, 0.9, 0.05), dark, sx * 1.36, 0.82, -2.6);
+    addEngine(g, flames, sx * 1.72, 1.16, -3.8, 1.0, neon, hull);
+    addEngine(g, flames, sx * 1.72, 0.76, -3.8, 1.0, neon, hull);
+    navLight(g, navLights, sx * 2.18, 0.98, -1.45, sx < 0 ? 0xff4d6a : 0x4dff9a);
+  }
+  for (const [sx, z] of [[-1, 1.4], [1, 1.4], [-1, -3.9], [1, -3.9]]) leg(legs, sx * 1.0, z, 0.45, sx, steel, dark, 0.06);
+  const slots = [];
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 2; c++) slots.push(new THREE.Vector3((c - 0.5) * SLOT.x, 0.69 + CONTAINER.h / 2, -0.82 - r * SLOT.z));
+  return slots;
+}
+
+/** Titán: columna de reticulado, puente de mando, 12 contenedores, bloque de 6 motores y radiadores. */
+function buildTitan(g, label, flames, navLights, legs) {
+  const liv = SHIP_LOOKS.titan.livery;
+  const hull = mat(0x56609a, { rough: 0.36, metal: 0.5, env: 1.2 });
+  const dark = mat(0x1d2348, { rough: 0.5, metal: 0.35 });
+  const paint = mat(liv, { rough: 0.35, emissive: liv, ei: 0.2 });
+  const neon = glow(liv, 2.4);
+  const steel = mat(C.steel, { rough: 0.45, metal: 0.45 });
+  // Columna de reticulado (cuatro largueros y riostras cruzadas).
+  for (const x of [-0.45, 0.45]) for (const y of [0.4, 0.95]) part(g, rbox(0.14, 0.14, 7.2, 0.04), steel, x, y, -2.4);
+  for (let z = 0.8; z > -6; z -= 1.0) {
+    part(g, rbox(1.0, 0.1, 0.1, 0.03), steel, 0, 0.4, z);
+    part(g, rbox(1.0, 0.1, 0.1, 0.03), steel, 0, 0.95, z);
+    for (const x of [-0.45, 0.45]) part(g, rbox(0.08, 0.66, 0.08, 0.02), steel, x, 0.68, z - 0.5, 0.6, 0, 0);
+  }
+  // Cuna de carga arriba de la columna.
+  part(g, rbox(3.0, 0.12, 5.75, 0.05), mat(0xffffff, { map: bedTexture(3, 4), rough: 0.6 }), 0, 1.08, -2.7);
+  for (const sx of [-1, 1]) part(g, rbox(0.1, 0.16, 5.75, 0.04), paint, sx * 1.48, 1.16, -2.7);
+  // Puente de mando en cuña, con ventanal y franja dorada.
+  part(g, profile('titanBridge', [[0, 0.3], [1.7, 0.3], [2.3, 0.95], [1.95, 2.25], [0.25, 2.45], [0, 2.25]], 2.7, 0.12), hull, 0, 0, 0.7);
+  part(g, rbox(2.5, 0.42, 0.06, 0.04), glass(), 0, 1.9, 2.77, -0.52, 0, 0);
+  part(g, rbox(2.75, 0.14, 1.9, 0.05), paint, 0, 1.0, 1.65);
+  // Ventanales a los costados del puente y franjas doradas.
+  for (const sx of [-1, 1]) {
+    part(g, rbox(0.06, 0.34, 1.35, 0.04), glass(), sx * 1.37, 1.85, 1.55);
+    part(g, rbox(0.05, 0.06, 1.5, 0.02), neon, sx * 1.38, 2.08, 1.55);
+    part(g, rbox(0.05, 0.12, 2.0, 0.03), paint, sx * 1.38, 0.62, 1.6);
+  }
+  part(g, rbox(0.9, 0.08, 0.9, 0.04), paint, 0, 2.5, 0.9, 0, Math.PI / 4, 0);
+  part(g, rbox(2.2, 0.08, 0.08, 0.03), neon, 0, 2.52, 1.4);
+  part(g, cyl(0.03, 0.03, 0.9, 6), steel, 0.8, 2.95, 1.0);
+  part(g, lathe('titanDish', [[0.001, 0], [0.3, 0.05], [0.5, 0.18], [0.001, 0.04]], 24), hull, -0.7, 2.6, 1.0, -0.5, 0.4, 0);
+  plate(g, label, liv, 1.42, 1.55, 1.6, Math.PI / 2, 1.0);
+  plate(g, label, liv, -1.42, 1.55, 1.6, -Math.PI / 2, 1.0);
+  for (const sx of [-1, 1]) part(g, rbox(0.4, 0.1, 0.05, 0.02), glow(0xe8fbff, 2), sx * 0.85, 0.7, 3.0);
+  // Bloque de motores con 6 toberas y radiadores con borde encendido.
+  part(g, rbox(3.1, 1.6, 1.3, 0.18), dark, 0, 1.05, -6.15);
+  part(g, rbox(3.16, 0.16, 1.34, 0.06), paint, 0, 1.6, -6.15);
+  for (const r of [0, 1]) for (const c of [-1, 0, 1]) addEngine(g, flames, c * 0.98, 0.7 + r * 0.72, -6.85, 1.3, neon, hull);
+  for (const sx of [-1, 1]) {
+    for (const k of [0, 1]) {
+      const fin = new THREE.Group();
+      fin.position.set(sx * 1.6, 1.3 + k * 0.05, -5.7 - k * 0.75);
+      fin.rotation.z = sx * -0.5;
+      part(fin, rbox(0.06, 1.35, 0.6, 0.02), mat(0x3a4378, { rough: 0.5, metal: 0.4 }), 0, 0.6, 0);
+      part(fin, rbox(0.08, 0.06, 0.62, 0.02), neon, 0, 1.28, 0);
+      g.add(fin);
+    }
+    navLight(g, navLights, sx * 1.56, 1.2, 2.2, sx < 0 ? 0xff4d6a : 0x4dff9a);
+  }
+  for (const [sx, z] of [[-1, 1.8], [1, 1.8], [-1, -2.0], [1, -2.0], [-1, -5.8], [1, -5.8]]) leg(legs, sx * 1.15, z, 0.5, sx, steel, dark, 0.07);
+  const slots = [];
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) slots.push(new THREE.Vector3((c - 1) * SLOT.x, 1.14 + CONTAINER.h / 2, -0.6 - SLOT.z / 2 - r * SLOT.z));
+  return slots;
+}
+
+const BUILDERS = { colibri: buildColibri, mula: buildMula, titan: buildTitan };
 
 /**
  * Nave de carga. userData.slots: posiciones locales de los contenedores (de adelante hacia atrás);
  * userData.flames: llamas de los motores (escalar en Z según el empuje); userData.cargo: grupo donde
- * van los contenedores; userData.legs: patas de aterrizaje.
+ * van los contenedores; userData.legs: patas de aterrizaje. `label` es la matrícula pintada.
  */
-export function makeShip(model) {
-  const L = shipDims(model);
+export function makeShip(model, label = 'RC') {
   const g = new THREE.Group();
-  const cabMat = mat(L.cab, { rough: 0.42, env: 1.1 });
-  const stripe = mat(L.stripe, { rough: 0.45 });
-  const trim = mat(L.trim, { rough: 0.5 });
-  const white = mat(C.white, { rough: 0.48 });
-  const light = mat(0xdde3f3, { rough: 0.55 });
-  const steel = mat(C.steel, { rough: 0.45, metal: 0.35 });
-  const dark = mat(0x2a3354, { rough: 0.5, metal: 0.2 });
-
-  const { cabW, cabL, cabH, bedL, cols, rows } = L;
-  const floor = 0.42;
-
-  // Cabina: perfil lateral (z, y) con el parabrisas inclinado y el techo redondeado, extruido de canto.
-  const cabPts = [
-    [-0.1, floor], [cabL - 0.22, floor], [cabL, floor + 0.24], [cabL, floor + 0.58],
-    [cabL * 0.68, cabH - 0.1], [cabL * 0.58, cabH], [0.12, cabH], [-0.1, cabH - 0.16]
-  ];
-  part(g, profile(`cab:${model}`, cabPts, cabW, 0.1), cabMat, 0, 0, 0);
-  // Faldón de otro color abajo (dos tonos, como un camión).
-  part(g, rbox(cabW + 0.05, 0.26, cabL + 0.12, 0.09), mat(L.skirt, { rough: 0.5 }), 0, floor + 0.11, cabL / 2 - 0.06);
-  // Parabrisas: una placa de vidrio sobre la pendiente, con un reflejo.
-  {
-    const a = new THREE.Vector2(cabL - 0.03, floor + 0.62);
-    const b = new THREE.Vector2(cabL * 0.69 + 0.05, cabH - 0.14);
-    const len = a.distanceTo(b);
-    const phi = Math.atan2(b.x - a.x, b.y - a.y);
-    const w = part(g, rbox(cabW * 0.84, len, 0.05, 0.02), glass(), 0, (a.y + b.y) / 2 + 0.03, (a.x + b.x) / 2 + 0.035, phi, 0, 0);
-    part(w, rbox(cabW * 0.5, 0.035, 0.02, 0.01), mat(0xffffff, { emissive: 0xffffff, ei: 0.4, rough: 0.3 }), -cabW * 0.1, len * 0.18, 0.03, 0, 0, 0, { shadow: false });
-  }
-  // Ventanas laterales, franja y faros.
-  for (const sx of [-1, 1]) {
-    part(g, rbox(0.05, 0.36, cabL * 0.42, 0.05), glass(), sx * (cabW / 2 + 0.005), cabH - 0.36, cabL * 0.33);
-    part(g, rbox(0.04, 0.1, cabL * 0.98, 0.03), stripe, sx * (cabW / 2 + 0.01), floor + 0.5, cabL * 0.44);
-    part(g, rbox(0.16, 0.1, 0.04, 0.03), glow(0xfff4d6, 1.8), sx * cabW * 0.32, floor + 0.38, cabL + 0.005);
-  }
-  part(g, rbox(cabW * 0.92, 0.14, 0.1, 0.05), light, 0, floor + 0.12, cabL - 0.1);
-  // Baliza y antena en el techo.
-  part(g, rbox(0.34, 0.08, 0.16, 0.04), trim, 0, cabH + 0.05, 0.35);
-  part(g, cyl(0.015, 0.015, 0.45, 6), steel, cabW * 0.3, cabH + 0.22, 0.15);
-  if (L.bridge) {
-    part(g, rbox(cabW * 0.55, 0.5, 0.9, 0.12), cabMat, 0, cabH + 0.25, 0.35);
-    part(g, rbox(cabW * 0.5, 0.18, 0.05, 0.03), glass(), 0, cabH + 0.32, 0.81);
-    for (const sx of [-1, 1]) part(g, rbox(0.04, 0.16, 0.6, 0.03), glass(), sx * cabW * 0.276, cabH + 0.32, 0.35);
-  }
-  // Logo en las puertas.
-  const logo = mat(0xffffff, { map: signTexture('RC', { bg: '#ffffff', fg: '#2f5fe8', w: 128, h: 128, size: 60, radius: 30 }), rough: 0.5 });
-  for (const sx of [-1, 1]) {
-    const p = part(g, cached('logoPlane', () => new THREE.PlaneGeometry(0.34, 0.34)), logo, sx * (cabW / 2 + 0.03), floor + 0.85, cabL * 0.62, 0, sx * Math.PI / 2, 0, { shadow: false });
-    p.receiveShadow = true;
-  }
-
-  // Chasis: viga central, piso de carga, barandas y mampara detrás de la cabina.
-  const bedW = cols * SLOT.x + 0.3;
-  part(g, rbox(Math.min(cabW * 0.55, 1.2), 0.3, bedL + 0.7, 0.1), dark, 0, 0.36, -bedL / 2 - 0.15);
-  part(g, rbox(bedW, 0.12, bedL, 0.05), mat(0xffffff, { map: bedTexture(cols, rows), rough: 0.6 }), 0, 0.58, -bedL / 2 - 0.1);
-  for (const sx of [-1, 1]) part(g, rbox(0.08, 0.1, bedL, 0.03), mat(L.rail, { rough: 0.45 }), sx * (bedW / 2 - 0.02), 0.66, -bedL / 2 - 0.1);
-  part(g, rbox(bedW + 0.1, 1.0, 0.12, 0.05), white, 0, 1.1, -0.18);
-  part(g, rbox(bedW + 0.12, 0.1, 0.14, 0.04), trim, 0, 1.58, -0.18);
-  // Poste trasero.
-  part(g, rbox(bedW * 0.7, 0.55, 0.1, 0.04), light, 0, 0.88, -bedL - 0.12);
-
-  // Motores: carcasa blanca, tobera oscura, aro de color y brillo en la salida.
-  const housing = lathe('engHousing', [[0.001, 0], [0.14, 0.02], [0.21, 0.1], [0.23, 0.32], [0.22, 0.5], [0.17, 0.56]], 28);
-  const nozzle = lathe('engNozzle', [[0.15, 0], [0.19, 0.1], [0.25, 0.26], [0.27, 0.3], [0.23, 0.3], [0.17, 0.16], [0.12, 0.08]], 28);
   const flames = [];
-  const engY = 0.62;
-  const engZ = -bedL - 0.25;
-  const n = L.engines;
-  const perRow = n <= 2 ? n : n / 2;
-  const rowsE = n <= 2 ? 1 : 2;
-  const spread = Math.max(bedW, cabW) * 0.8;
-  for (let r = 0; r < rowsE; r++) {
-    for (let i = 0; i < perRow; i++) {
-      const x = perRow === 1 ? 0 : (i / (perRow - 1) - 0.5) * spread;
-      const y = rowsE === 1 ? engY : engY - 0.12 + r * 0.5;
-      const e = new THREE.Group();
-      e.position.set(x, y, engZ);
-      e.rotation.x = -Math.PI / 2;
-      e.scale.setScalar(L.engines > 2 ? 1.15 : 1.3);
-      part(e, housing, white, 0, 0, 0);
-      part(e, cyl(0.235, 0.235, 0.08, 28), trim, 0, 0.3, 0);
-      part(e, nozzle, steel, 0, 0.5, 0);
-      part(e, cached('nozzleGlow', () => new THREE.CircleGeometry(0.15, 20).rotateX(-Math.PI / 2)), glow(0x9fe3ff, 2.4), 0, 0.62, 0, 0, 0, 0, { shadow: false });
-      const flame = new THREE.Mesh(cached('flame', () => {
-        // Ancha en la tobera (y = 0) y en punta hacia atrás (y = 1).
-        const fg = new THREE.ConeGeometry(0.17, 1, 18, 1, true);
-        fg.translate(0, 0.5, 0);
-        return fg;
-      }), flameMaterial());
-      flame.position.y = 0.66;
-      flame.userData.live = true;
-      flame.scale.set(1, 0.001, 1);
-      e.add(flame);
-      const halo = glowSprite(0x7fd0ff, 0.9);
-      halo.position.y = 0.75;
-      e.add(halo);
-      flame.userData.halo = halo;
-      flames.push(flame);
-      // Soporte que une el motor al chasis.
-      part(g, rbox(0.12, 0.12, 0.5, 0.04), dark, x * 0.85, y, engZ + 0.35);
-      g.add(e);
-    }
-  }
-
-  // Alerones traseros con punta de color y luces de navegación.
   const navLights = [];
-  for (const sx of [-1, 1]) {
-    const fin = part(g, finGeometry(sx), white, sx * (bedW / 2 - 0.05), 0.62, -bedL + 0.05, 0, 0, sx * 0.12);
-    fin.castShadow = true;
-    part(g, rbox(0.14, 0.09, 0.42, 0.04), trim, sx * (bedW / 2 + 0.72), 0.62 + 0.09, -bedL + 0.36);
-    const nl = part(g, sphere(0.05, 10, 8), glow(sx < 0 ? 0xff5a6a : 0x43e07f, 2.6), sx * (bedW / 2 + 0.8), 0.74, -bedL + 0.62, 0, 0, 0, { shadow: false });
-    nl.userData.live = true;
-    navLights.push(nl);
-  }
-
-  // Patas de aterrizaje.
   const legs = new THREE.Group();
   legs.userData.live = true;
-  const legPos = [[-1, cabL * 0.55], [1, cabL * 0.55], [-1, -bedL + 0.3], [1, -bedL + 0.3]];
-  for (const [sx, z] of legPos) {
-    const x = sx * (Math.max(bedW, cabW) / 2 - 0.15);
-    part(legs, cyl(0.04, 0.04, 0.42, 8), steel, x, 0.21, z, 0, 0, sx * 0.25);
-    part(legs, cyl(0.13, 0.15, 0.05, 16), dark, x + sx * 0.06, 0.02, z);
-  }
+  const slots = BUILDERS[model](g, label, flames, navLights, legs);
   g.add(legs);
-
   bake(g);
-
-  // Lugares para los contenedores (de adelante hacia atrás, fila por fila).
-  const slots = [];
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      slots.push(new THREE.Vector3((c - (cols - 1) / 2) * SLOT.x, 0.64 + CONTAINER.h / 2, -0.32 - SLOT.z / 2 - r * SLOT.z));
-    }
-  }
   const cargo = new THREE.Group();
   cargo.userData.live = true;
   g.add(cargo);
-  g.userData = { ...g.userData, slots, flames, cargo, legs, navLights, model, dims: L };
+  g.userData = { ...g.userData, slots, flames, cargo, legs, navLights, model, dims: shipDims(model) };
   return g;
 }
 
@@ -354,9 +414,9 @@ export const RACK = { cols: 3, deep: 2, levels: 2, pitchX: 1.38, pitchZ: 0.98, l
 /** Módulo de estantería de 12 lugares (3 de ancho, 2 de fondo, 2 niveles). userData.slots en local. */
 export function makeRack() {
   const g = new THREE.Group();
-  const blue = mat(C.blue, { rough: 0.45 });
-  const orange = mat(C.orange, { rough: 0.5 });
-  const deck = mat(0xc5cde6, { rough: 0.6, metal: 0.2 });
+  const blue = mat(0x3a4290, { rough: 0.45, metal: 0.3 });
+  const orange = mat(C.blue, { rough: 0.4, emissive: C.blue, ei: 0.35 });
+  const deck = mat(0x2a3164, { rough: 0.6, metal: 0.2 });
   const W = RACK.cols * RACK.pitchX + 0.1;
   const D = RACK.deep * RACK.pitchZ + 0.05;
   for (let i = 0; i <= RACK.cols; i++) {
@@ -370,7 +430,7 @@ export function makeRack() {
     for (const sz of [-1, 1]) part(g, rbox(W, 0.11, 0.07, 0.025), orange, 0, y, sz * D / 2);
     part(g, rbox(W - 0.1, 0.025, D - 0.04, 0.01), deck, 0, y + 0.04, 0);
   }
-  part(g, rbox(W + 0.1, 0.06, D + 0.1, 0.03), mat(0xd7ddef, { rough: 0.7 }), 0, 0.03, 0);
+  part(g, rbox(W + 0.1, 0.06, D + 0.1, 0.03), mat(0x232a58, { rough: 0.7 }), 0, 0.03, 0);
   bake(g);
   const slots = [];
   for (let lv = 0; lv < RACK.levels; lv++) {

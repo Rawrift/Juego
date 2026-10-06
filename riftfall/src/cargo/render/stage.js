@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { N8AOPass } from 'n8ao';
@@ -67,6 +68,8 @@ export function createStage(host, quality = pickQuality()) {
   let scene = null;
   let composer = null;
   let aoPass = null;
+  let bloomPass = null;
+  let smaaPass = null;
   let width = 1;
   let height = 1;
 
@@ -78,17 +81,23 @@ export function createStage(host, quality = pickQuality()) {
     cfg.aoRadius = 2.2;
     cfg.distanceFalloff = 1.2;
     cfg.intensity = 3.2;
-    cfg.color = new THREE.Color(0x1b2659);
+    cfg.color = new THREE.Color(0x02030c);
     cfg.halfRes = quality.ao === 'half';
     aoPass.setQualityMode(quality.ao === 'half' ? 'Low' : 'Medium');
     composer.addPass(aoPass);
+    // Brillo de las luces de neón (solo lo muy luminoso: tiras, motores, carteles).
+    bloomPass = new UnrealBloomPass(new THREE.Vector2(width, height), 0.5, 0.32, 1.15);
+    composer.addPass(bloomPass);
     composer.addPass(new OutputPass());
-    if (quality.smaa) composer.addPass(new SMAAPass());
+    if (quality.smaa) {
+      smaaPass = new SMAAPass();
+      composer.addPass(smaaPass);
+    }
     composer.setPixelRatio(renderer.getPixelRatio());
     composer.setSize(width, height);
   }
 
-  function setScene(s, { ao = { radius: 2.2, intensity: 3.2, falloff: 1.2 } } = {}) {
+  function setScene(s, { ao = { radius: 2.2, intensity: 3.2, falloff: 1.2 }, bloom = 0.55 } = {}) {
     scene = s;
     scene.environment = envMap;
     if (!composer) buildComposer();
@@ -96,6 +105,7 @@ export function createStage(host, quality = pickQuality()) {
     aoPass.configuration.aoRadius = ao.radius;
     aoPass.configuration.intensity = ao.intensity;
     aoPass.configuration.distanceFalloff = ao.falloff;
+    bloomPass.strength = bloom;
   }
 
   function resize() {
@@ -244,13 +254,14 @@ export function createStage(host, quality = pickQuality()) {
     if (avg < 0.025 || governor.cooldown > 0 || !composer) return;
     governor.cooldown = 3;
     governor.level++;
-    if (governor.level === 1 && composer.passes.length > 2) composer.removePass(composer.passes[2]);
+    if (governor.level === 1 && smaaPass) composer.removePass(smaaPass);
     else if (governor.level === 2) aoPass.configuration.halfRes = true;
     else if (governor.level === 3 || governor.level === 4) {
       renderer.setPixelRatio(Math.max(1, renderer.getPixelRatio() - 0.4));
       composer.setPixelRatio(renderer.getPixelRatio());
       resize();
     } else if (governor.level === 5) aoPass.setQualityMode('Performance');
+    else if (governor.level === 6 && bloomPass) bloomPass.resolution.set(width / 2, height / 2);
   }
 
   let last = performance.now();

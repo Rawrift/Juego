@@ -34,9 +34,9 @@ function paintDeck(g, px, ppu) {
     return [a, b, c - a, d - b];
   };
   // Calle principal frente a los muelles con línea central amarilla.
-  g.fillStyle = 'rgba(120,138,200,0.10)';
+  g.fillStyle = 'rgba(77,232,255,0.05)';
   g.fillRect(...rect(-27.5, 1.2 + 1.3, 27.5, 4.4));
-  g.strokeStyle = 'rgba(255,255,255,0.9)';
+  g.strokeStyle = 'rgba(77,232,255,0.6)';
   g.lineWidth = 4;
   for (const z of [2.5, 4.4]) {
     g.beginPath();
@@ -44,7 +44,7 @@ function paintDeck(g, px, ppu) {
     g.lineTo(...px(27.5, z));
     g.stroke();
   }
-  g.strokeStyle = '#f2b92f';
+  g.strokeStyle = '#ff4dd2';
   g.lineWidth = 5;
   g.setLineDash([1.2 * ppu, 0.9 * ppu]);
   g.beginPath();
@@ -53,9 +53,9 @@ function paintDeck(g, px, ppu) {
   g.stroke();
   g.setLineDash([]);
   // Patio de estanterías: piso apenas más oscuro y bordes punteados.
-  g.fillStyle = 'rgba(120,138,200,0.08)';
+  g.fillStyle = 'rgba(157,107,255,0.06)';
   g.fillRect(...rect(-27, -15.4, -9.8, -2.9));
-  g.strokeStyle = 'rgba(242,185,47,0.85)';
+  g.strokeStyle = 'rgba(157,107,255,0.75)';
   g.lineWidth = 4;
   g.setLineDash([0.5 * ppu, 0.35 * ppu]);
   g.strokeRect(...rect(-27, -15.4, -9.8, -2.9));
@@ -64,20 +64,20 @@ function paintDeck(g, px, ppu) {
   for (let i = 0; i < DRONE_PADS.count; i++) {
     const p = dronePad(i);
     const [x, y, w, h] = rect(p.x - 0.7, p.z - 0.7, p.x + 0.7, p.z + 0.7);
-    g.fillStyle = 'rgba(246,181,42,0.16)';
+    g.fillStyle = 'rgba(255,201,77,0.12)';
     roundRect(g, x, y, w, h, 0.25 * ppu);
     g.fill();
-    g.strokeStyle = 'rgba(246,181,42,0.9)';
+    g.strokeStyle = 'rgba(255,201,77,0.85)';
     g.lineWidth = 3;
     g.stroke();
-    g.strokeStyle = 'rgba(217,150,26,0.9)';
+    g.strokeStyle = 'rgba(255,201,77,0.9)';
     drawIcon(g, 'zap', ...px(p.x, p.z), 0.8 * ppu, 2);
   }
   // Senda peatonal hacia la torre.
-  g.fillStyle = 'rgba(255,255,255,0.75)';
+  g.fillStyle = 'rgba(77,232,255,0.35)';
   for (let i = 0; i < 6; i++) g.fillRect(...rect(-9.4 + i * 0.6, -9.2, -9.1 + i * 0.6, -7.4));
   // Flechas de circulación sobre la calle.
-  g.fillStyle = 'rgba(255,255,255,0.85)';
+  g.fillStyle = 'rgba(77,232,255,0.7)';
   for (const x of [-20, -6, 8, 22]) {
     const [ax, az] = px(x, 3.0);
     g.beginPath();
@@ -121,11 +121,11 @@ function buildDeck(root) {
   topMesh.receiveShadow = true;
   // Casco inferior y propulsores.
   part(root, rbox(w - 7, 2.6, d - 7, 1.0), mat(C.deckDark, { rough: 0.6 }), 0, -2.2, 0);
-  part(root, rbox(w - 16, 2.2, d - 14, 0.9), mat(0x9eaad3, { rough: 0.6 }), 0, -4.2, 0);
+  part(root, rbox(w - 16, 2.2, d - 14, 0.9), mat(0x1d2350, { rough: 0.6 }), 0, -4.2, 0);
   for (const [x, z] of [[-20, -9], [20, -9], [-20, 9], [20, 9]]) {
     part(root, cyl(1.2, 1.5, 1.4, 28), mat(C.white, { rough: 0.5 }), x, -3.4, z);
     part(root, cyl(0.9, 1.2, 0.8, 28), mat(C.steel, { rough: 0.4, metal: 0.4 }), x, -4.4, z);
-    part(root, cached('thrGlow', () => new THREE.CircleGeometry(0.85, 24).rotateX(Math.PI / 2)), glow(0x9fe3ff, 2), x, -4.82, z, 0, 0, 0, { shadow: false });
+    part(root, cached('thrGlow', () => new THREE.CircleGeometry(0.85, 24).rotateX(Math.PI / 2)), glow(0x4de8ff, 2.4), x, -4.82, z, 0, 0, 0, { shadow: false });
   }
   // Borde: baranda baja blanca con una línea de luz celeste.
   const edge = cached('deckEdge', () => {
@@ -135,7 +135,7 @@ function buildDeck(root) {
     g.rotateX(-Math.PI / 2);
     return g;
   });
-  part(root, edge, mat(C.white, { rough: 0.5 }), 0, 0.0, 0);
+  part(root, edge, mat(C.steelLight, { rough: 0.5, metal: 0.3 }), 0, 0.0, 0);
   const strip = cached('deckStrip', () => {
     const outer = roundedRectShape(w + 0.62, d + 0.62, 2.7);
     outer.holes.push(roundedRectShape(w + 0.3, d + 0.3, 2.5));
@@ -143,9 +143,9 @@ function buildDeck(root) {
     g.rotateX(-Math.PI / 2);
     return g;
   });
-  part(root, strip, glow(C.glow, 1.3), 0, -0.55, 0, 0, 0, 0, { shadow: false });
+  part(root, strip, glow(C.glow, 1.1), 0, -0.55, 0, 0, 0, 0, { shadow: false });
   // Postes de baranda en el frente.
-  const railMat = mat(C.white, { rough: 0.45 });
+  const railMat = mat(C.steelLight, { rough: 0.45, metal: 0.3 });
   for (let x = -26; x <= 26; x += 2) {
     if (Math.abs(x) < 1) continue;
     part(root, cyl(0.05, 0.05, 0.9, 8), railMat, x, 0.6, d / 2 - 0.15);
@@ -180,19 +180,19 @@ function buildBuilding(root) {
   // Portones de los muelles: hueco iluminado, marco azul, burletes y cortina levantada.
   for (let i = 0; i < DOCK_X.length; i++) {
     const x = DOCK_X[i];
-    part(root, rbox(3.7, 3.25, 0.4, 0.06), mat(0x33437e, { rough: 0.7, emissive: 0x23336e, ei: 0.25 }), x, 1.73, z1 - 0.05);
-    part(root, rbox(3.1, 0.06, 0.3, 0.02), glow(0xe8f1ff, 1.4), x, 3.2, z1 - 0.02);
+    part(root, rbox(3.7, 3.25, 0.4, 0.06), mat(0x1b1450, { rough: 0.7, emissive: 0x5a24c8, ei: 0.55 }), x, 1.73, z1 - 0.05);
+    part(root, rbox(3.1, 0.06, 0.3, 0.02), glow(0xff4dd2, 2.2), x, 3.2, z1 - 0.02);
     // Adentro se ve un poco del depósito: una pila de cajas iluminada.
-    part(root, rbox(1.2, 0.8, 0.8, 0.07), mat(0x5a6fb3, { rough: 0.7 }), x - 0.9, 0.82, z1 - 0.32);
-    part(root, rbox(1.2, 0.8, 0.8, 0.07), mat(0x4d61a6, { rough: 0.7 }), x - 0.9, 1.64, z1 - 0.32);
-    part(root, rbox(1.2, 0.8, 0.8, 0.07), mat(0x5a6fb3, { rough: 0.7 }), x + 0.8, 0.82, z1 - 0.32);
+    part(root, rbox(1.2, 0.8, 0.8, 0.07), mat(0x4a3aa8, { rough: 0.7 }), x - 0.9, 0.82, z1 - 0.32);
+    part(root, rbox(1.2, 0.8, 0.8, 0.07), mat(0x3c2f8f, { rough: 0.7 }), x - 0.9, 1.64, z1 - 0.32);
+    part(root, rbox(1.2, 0.8, 0.8, 0.07), mat(0x4a3aa8, { rough: 0.7 }), x + 0.8, 0.82, z1 - 0.32);
     for (const sx of [-1, 1]) {
       part(root, rbox(0.3, 3.55, 0.4, 0.08), blue, x + sx * 2.0, 1.78, z1 + 0.16);
       part(root, rbox(0.22, 3.2, 0.34, 0.08), navy, x + sx * 1.72, 1.7, z1 + 0.28);
     }
     part(root, rbox(4.3, 0.36, 0.42, 0.09), blue, x, 3.52, z1 + 0.16);
     // Cortina enrollada arriba.
-    part(root, cyl(0.22, 0.22, 3.7, 20), mat(0xdbe1f1, { rough: 0.5 }), x, 3.2, z1 + 0.1, 0, 0, Math.PI / 2);
+    part(root, cyl(0.22, 0.22, 3.7, 20), mat(C.steelLight, { rough: 0.5 }), x, 3.2, z1 + 0.1, 0, 0, Math.PI / 2);
     // Cartel con el número del muelle y luz de estado.
     const sign = part(root, cached('dockSign', () => new THREE.PlaneGeometry(1.0, 0.5)), mat(0xffffff, { map: signTexture(`D${i + 1}`, { w: 192, h: 96, size: 54, radius: 26 }), rough: 0.5 }), x - 1.0, 4.1, z1 + 0.04, 0, 0, 0, { shadow: false });
     sign.receiveShadow = true;
@@ -209,7 +209,7 @@ function buildBuilding(root) {
   for (let i = 0; i < bays; i++) {
     const vx = x0 + bw * (i + 0.5);
     part(root, vault, roof, vx, h, cz);
-    part(root, rbox(1.3, 0.12, D - 1.6, 0.05), mat(0xe6eeff, { rough: 0.15, metal: 0.1, emissive: 0xcfdcff, ei: 0.25, env: 1.5 }), vx, h + bw / 2 * 0.38 + 0.02, cz);
+    part(root, rbox(1.3, 0.12, D - 1.6, 0.05), mat(0x4de8ff, { rough: 0.2, emissive: 0x4de8ff, ei: 1.3 }), vx, h + bw / 2 * 0.38 + 0.02, cz);
     if (i > 0) part(root, rbox(0.3, 0.3, D, 0.08), mat(C.roofDark, { rough: 0.5 }), x0 + bw * i, h + 0.1, cz);
   }
   // Equipos en el techo.
@@ -276,7 +276,7 @@ function buildGhosts(root) {
 function buildWorks(root) {
   const works = [];
   const cone = lathe('cone', [[0.001, 0.62], [0.08, 0.6], [0.2, 0.12], [0.32, 0.06], [0.32, 0], [0.001, 0]], 24);
-  const orange = mat(0xff8a3d, { rough: 0.5 });
+  const orange = mat(0xffc94d, { rough: 0.5 });
   const white = mat(C.white, { rough: 0.5 });
   const stripe = mat(0xffffff, { map: stripeTexture(), rough: 0.5 });
   for (let i = 0; i < DOCK_X.length; i++) {
@@ -293,7 +293,7 @@ function buildWorks(root) {
       part(g, rbox(0.5, 0.08, 0.5, 0.04), mat(C.steel, { rough: 0.5 }), sx * 1.5, 0.04, 4.5);
     }
     // Cartel "próximamente" con el número de muelle.
-    part(g, cached('worksSign', () => new THREE.PlaneGeometry(1.6, 0.8)), mat(0xffffff, { map: signTexture(`D${i + 1}`, { bg: '#f6b52a', fg: '#1d2a55', w: 192, h: 96, size: 52, radius: 20 }), rough: 0.5 }), 0, 1.45, 4.56, 0, 0, 0, { shadow: false });
+    part(g, cached('worksSign', () => new THREE.PlaneGeometry(1.6, 0.8)), mat(0xffffff, { map: signTexture(`D${i + 1}`, { bg: '#ffc94d', fg: '#06081a', w: 192, h: 96, size: 52, radius: 20 }), rough: 0.5 }), 0, 1.45, 4.56, 0, 0, 0, { shadow: false });
     part(g, rbox(0.08, 1.0, 0.08, 0.03), white, 0, 0.6, 4.48);
     bake(g);
     root.add(g);
@@ -306,10 +306,10 @@ function buildWorks(root) {
 function makeTree(scale = 1) {
   const g = new THREE.Group();
   part(g, rbox(1.9, 0.55, 1.9, 0.2), mat(C.white, { rough: 0.5 }), 0, 0.28, 0);
-  part(g, rbox(1.6, 0.06, 1.6, 0.05), mat(0x6f8f62, { rough: 0.9 }), 0, 0.56, 0);
-  part(g, cyl(0.09, 0.13, 1.3, 10), mat(0x9a7a5c, { rough: 0.8 }), 0, 1.15, 0);
-  const leaf = mat(0x5ccf8f, { rough: 0.65 });
-  const leaf2 = mat(0x48b97c, { rough: 0.65 });
+  part(g, rbox(1.6, 0.06, 1.6, 0.05), mat(0x1f3a3a, { rough: 0.9 }), 0, 0.56, 0);
+  part(g, cyl(0.09, 0.13, 1.3, 10), mat(0x6a5a8c, { rough: 0.8 }), 0, 1.15, 0);
+  const leaf = mat(0x2fe0b0, { rough: 0.55, emissive: 0x0b6a55, ei: 0.5 });
+  const leaf2 = mat(0x21b8a0, { rough: 0.55, emissive: 0x085045, ei: 0.5 });
   part(g, sphere(0.85, 28, 20), leaf, 0, 2.25, 0);
   part(g, sphere(0.6, 24, 16), leaf2, 0.45, 1.85, 0.25);
   part(g, sphere(0.55, 24, 16), leaf, -0.4, 1.95, -0.2);
@@ -323,7 +323,7 @@ function makeLamp() {
   const g = new THREE.Group();
   part(g, cyl(0.07, 0.09, 3.2, 10), mat(C.white, { rough: 0.45 }), 0, 1.6, 0);
   part(g, rbox(0.9, 0.12, 0.3, 0.06), mat(C.white, { rough: 0.45 }), 0.3, 3.2, 0);
-  part(g, rbox(0.6, 0.04, 0.2, 0.02), glow(0xfff6dc, 1.4), 0.4, 3.13, 0, 0, 0, 0, { shadow: false });
+  part(g, rbox(0.6, 0.04, 0.2, 0.02), glow(0xbff6ff, 2.2), 0.4, 3.13, 0, 0, 0, 0, { shadow: false });
   part(g, cyl(0.22, 0.26, 0.12, 16), mat(C.steel, { rough: 0.5 }), 0, 0.06, 0);
   bake(g);
   return g;
@@ -373,7 +373,7 @@ function buildTower(root) {
 }
 
 function buildSolarWings(root) {
-  const truss = mat(0xb8c1dc, { rough: 0.45, metal: 0.4 });
+  const truss = mat(C.steelLight, { rough: 0.45, metal: 0.4 });
   const panel = mat(0xffffff, { map: solarTexture(), rough: 0.28, metal: 0.25, env: 1.3 });
   const frame = mat(C.white, { rough: 0.5 });
   for (const side of [-1, 1]) {
@@ -403,8 +403,8 @@ function buildSolarWings(root) {
 function buildTanks(root) {
   const g = new THREE.Group();
   g.position.set(21.6, 0, 9.6);
-  const white = mat(C.white, { rough: 0.45 });
-  const orange = mat(C.orange, { rough: 0.45 });
+  const white = mat(C.steelLight, { rough: 0.4, metal: 0.35 });
+  const orange = mat(C.magenta, { rough: 0.4, emissive: C.magenta, ei: 0.4 });
   const steel = mat(C.steel, { rough: 0.45, metal: 0.4 });
   const tank = cached('tank', () => new THREE.CapsuleGeometry(0.9, 4.2, 10, 28).rotateZ(Math.PI / 2));
   for (let i = 0; i < 3; i++) {
@@ -430,7 +430,7 @@ function buildTanks(root) {
 function buildClouds(root) {
   const geo = new THREE.PlaneGeometry(3000, 3000, 1, 1).rotateX(-Math.PI / 2);
   const m = new THREE.ShaderMaterial({
-    uniforms: { uTime: { value: 0 }, uSky: { value: new THREE.Color(0xcfd9f4) }, uCloud: { value: new THREE.Color(0xf7f9ff) }, uShade: { value: new THREE.Color(0xbfcaec) } },
+    uniforms: { uTime: { value: 0 }, uSky: { value: new THREE.Color(C.sky) }, uCloud: { value: new THREE.Color(C.cloud) }, uShade: { value: new THREE.Color(C.cloudShade) } },
     vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
     fragmentShader: `
       uniform float uTime; uniform vec3 uSky; uniform vec3 uCloud; uniform vec3 uShade; varying vec3 vW;
@@ -447,6 +447,10 @@ function buildClouds(root) {
         float cover = smoothstep(0.46, 0.66, c);
         vec3 col = mix(uSky, uCloud, cover);
         col = mix(col, uShade, clamp((c2 - c) * 6.0, 0.0, 1.0) * cover * 0.55);
+        // Auroras de la grieta: bandas suaves magenta y cian que se mueven despacio.
+        float band = fbm(vec2(p.x * 0.35 + uTime * 0.01, p.y * 1.6));
+        float aur = smoothstep(0.58, 0.8, band) * (1.0 - cover * 0.6);
+        col += aur * mix(vec3(1.0, 0.3, 0.82), vec3(0.3, 0.9, 1.0), fbm(p * 0.6)) * 0.22;
         gl_FragColor = vec4(col, 1.0);
         #include <colorspace_fragment>
       }`
@@ -460,13 +464,13 @@ function buildClouds(root) {
 
 export function buildStationScene({ docks = 1, shadow = 4096 } = {}) {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xd6dff6);
+  scene.background = new THREE.Color(0x070a1c);
   const root = new THREE.Group();
   scene.add(root);
 
   // Luz: cielo/suelo suave + sol con sombras suaves + relleno frío.
-  scene.add(new THREE.HemisphereLight(0xffffff, 0xb9c4ea, 1.55));
-  const sun = new THREE.DirectionalLight(0xfff8ef, 2.6);
+  scene.add(new THREE.HemisphereLight(0x9fb0ff, 0x1c1240, 0.75));
+  const sun = new THREE.DirectionalLight(0xf4f6ff, 1.55);
   sun.position.set(-26, 52, 30);
   sun.castShadow = true;
   const s = sun.shadow;
@@ -477,9 +481,12 @@ export function buildStationScene({ docks = 1, shadow = 4096 } = {}) {
   s.normalBias = 0.03;
   s.radius = 5;
   scene.add(sun, sun.target);
-  const fill = new THREE.DirectionalLight(0xdfe7ff, 0.6);
-  fill.position.set(30, 20, -10);
-  scene.add(fill);
+  // Luces de color de la grieta: magenta de un lado y cian del otro (los bordes brillan).
+  const fill = new THREE.DirectionalLight(0xff4dd2, 0.5);
+  fill.position.set(30, 18, -10);
+  const rim = new THREE.DirectionalLight(0x4de8ff, 0.45);
+  rim.position.set(-30, 14, -25);
+  scene.add(fill, rim);
 
   buildDeck(root);
   buildBuilding(root);

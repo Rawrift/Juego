@@ -65,7 +65,7 @@ export function createUI({ state, actions, isMap }) {
   function shell() {
     return `
     <header class="topbar card">
-      <div class="brand"><span class="brand-cube">${logoSvg()}</span><span class="brand-name">Rift Cargo</span></div>
+      <div class="brand"><span class="brand-cube">${logoSvg()}</span><span class="brand-name">Rift <b>Cargo</b></span></div>
       <div class="views seg" role="tablist">
         <button class="seg-btn on" data-act="view" data-v="station">${icon('station')}<span data-t="view.station"></span></button>
         <button class="seg-btn" data-act="view" data-v="map" id="mapToggle">${icon('orbit')}<span data-t="view.map"></span></button>
@@ -855,5 +855,5 @@ export function createUI({ state, actions, isMap }) {
 }
 
 function logoSvg() {
-  return `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 4 56 18 32 32 8 18z" fill="#7d9bff"/><path d="M8 18 32 32v28L8 46z" fill="#2f5fe8"/><path d="M56 18 32 32v28l24-14z" fill="#1f43b8"/><path d="M22 47 28 37l8 6" stroke="#fff" stroke-width="3.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  return `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 4 56 18 32 32 8 18z" fill="#4de8ff"/><path d="M8 18 32 32v28L8 46z" fill="#9d6bff"/><path d="M56 18 32 32v28l24-14z" fill="#ff4dd2"/><path d="M22 47 28 37l8 6" stroke="#fff" stroke-width="3.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }

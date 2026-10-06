@@ -24,10 +24,12 @@ function shoot(object, { w = 240, h = 160, view = 6, az = 0.8, el = 0.5, target 
   rr.setSize(w, h, false);
   const scene = new THREE.Scene();
   scene.environment = env;
-  scene.add(new THREE.HemisphereLight(0xffffff, 0xb9c4ea, 1.7));
+  scene.add(new THREE.HemisphereLight(0xc4ceff, 0x2a1a50, 1.6));
   const sun = new THREE.DirectionalLight(0xffffff, 2.4);
   sun.position.set(-4, 8, 6);
-  scene.add(sun);
+  const rim = new THREE.DirectionalLight(0xff4dd2, 0.9);
+  rim.position.set(6, 3, -6);
+  scene.add(sun, rim);
   scene.add(object);
   const aspect = w / h;
   const cam = new THREE.OrthographicCamera((-view * aspect) / 2, (view * aspect) / 2, view / 2, -view / 2, 0.1, 200);
@@ -44,11 +46,11 @@ function shoot(object, { w = 240, h = 160, view = 6, az = 0.8, el = 0.5, target 
 export function shipThumb(model, cargo = 'agua') {
   const key = `ship:${model}:${cargo}`;
   if (!cache.has(key)) {
-    const ship = makeShip(model);
+    const ship = makeShip(model, model === 'colibri' ? 'RC' : 'RIFT CARGO');
     setShipCargo(ship, cargo, ship.userData.slots.length);
     const d = shipDims(model);
-    const center = new THREE.Vector3(0, 0.9, (d.cabL - d.bedL - 0.9) / 2);
-    cache.set(key, shoot(ship, { view: Math.max(4.4, d.length * 0.62), target: center, az: 0.95, el: 0.42 }));
+    const center = new THREE.Vector3(0, d.height * 0.45, (d.front - d.back) / 2);
+    cache.set(key, shoot(ship, { view: Math.max(3.6, d.length * 0.58), target: center, az: 0.95, el: 0.42 }));
   }
   return cache.get(key);
 }

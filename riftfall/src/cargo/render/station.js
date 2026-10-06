@@ -23,12 +23,12 @@ const FAR = 75;
 /** Pose (posición + giro) de una nave estacionada o en un muelle: centrada en su lugar, mirando a +Z. */
 function spotPose(model, center, isDock) {
   const d = shipDims(model);
-  const back = d.bedL + 0.9;
+  const back = d.back;
   if (isDock) {
     // La cola de la nave queda cerca del portón.
     return { p: new THREE.Vector3(center.x, 0.06, PAD.z0 + 0.7 + back), yaw: 0 };
   }
-  return { p: new THREE.Vector3(center.x, 0.06, center.z + (back - d.cabL) / 2), yaw: 0 };
+  return { p: new THREE.Vector3(center.x, 0.06, center.z + (back - d.front) / 2), yaw: 0 };
 }
 
 export function createStation(stage, state) {
@@ -124,7 +124,7 @@ export function createStation(stage, state) {
   function shipObj(s) {
     let o = ships.get(s.id);
     if (!o) {
-      o = { mesh: makeShip(s.model), shown: 0, cargo: null };
+      o = { mesh: makeShip(s.model, s.name), shown: 0, cargo: null };
       o.mesh.userData.shipId = s.id;
       scene.add(o.mesh);
       ships.set(s.id, o);
@@ -439,7 +439,7 @@ export function createStation(stage, state) {
       pin.visible = !!sp?.mesh.visible;
       if (pin.visible) {
         const d = shipDims(sp.mesh.userData.model);
-        pin.position.copy(sp.mesh.position).add(new THREE.Vector3(0, d.cabH + 1.6 + Math.sin(t * 2.4) * 0.18, 0));
+        pin.position.copy(sp.mesh.position).add(new THREE.Vector3(0, d.height + 1.4 + Math.sin(t * 2.4) * 0.18, 0));
         pin.userData.head.rotation.y = stage.rig.azimuth;
       }
     }
