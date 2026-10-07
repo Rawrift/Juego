@@ -18,6 +18,7 @@ import * as style from '../style.js';
 import { account as rgAccount, claimPurchase, onAccount, isAdmin } from '../../rift/account.js';
 import { openInMetaMask } from '../../rift/open-in-metamask.js';
 import { remoteWallet } from '../../rift/wallet.js';
+import { fiatLabel, openFiatPay } from '../../rift/fiat-ui.js';
 import { TO_CARGO, nextStep as bridgeNext } from '../../rift/bridge.js';
 
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -704,7 +705,7 @@ export function createUI({ state, actions, isMap }) {
     return `<div class="pay-row">
       <button class="btn primary sm" data-act="styBuy" data-v="${item}" data-m="usdt" ${busy ? 'disabled' : ''}>${icon('wallet')}${label('usdt', t('style.payUsdt', { n: usd }))}</button>
       <button class="btn line sm" data-act="styBuy" data-v="${item}" data-m="bnb" ${busy || !bnb ? 'disabled' : ''}>${label('bnb', bnb ? t('style.payBnb', { n: fmtBnb(bnb) }) : sty.price === 0 ? t('style.noPrice') : '…')}</button>
-    </div>`;
+    </div>${fiatLabel('style', item, lang) ? `<div class="pay-row"><button class="btn line sm" data-act="styFiat" data-v="${item}">${fiatLabel('style', item, lang)}</button></div>` : ''}`;
   }
 
   /** Caja de compra de lo que se está probando y no es tuyo (o el aviso del Pase Fundador). */
@@ -1168,6 +1169,9 @@ export function createUI({ state, actions, isMap }) {
         break;
       case 'styBuy':
         if (!sty.busy) buyItem(v, el.dataset.m);
+        break;
+      case 'styFiat':
+        openFiatPay({ kind: 'style', item: v, name: itemName(v) });
         break;
       case 'styPlate': {
         const s = shipById(state, sty.shipId);

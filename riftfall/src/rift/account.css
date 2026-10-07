@@ -146,3 +146,21 @@
   .ra-row { grid-template-columns: 64px 1fr 1fr 18px; }
   .ra-row span:nth-of-type(3) { display: none; }
 }
+
+/* Pago en pesos (comprador y dueño) */
+.ra-fiat .ra-card { width: min(440px, 100%); }
+.ra-fiat .ra-btn { width: 100%; margin-top: 8px; }
+.ra-fiat-data { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0 0 12px; padding: 12px 14px; border-radius: 13px; background: rgba(5, 6, 15, .7); border: 1px solid rgba(120, 200, 255, .22); }
+.ra-fiat-data dt { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--ra-ink3); align-self: center; }
+.ra-fiat-data dd { margin: 0; font-weight: 800; color: var(--ra-ink); text-align: right; overflow-wrap: anywhere; }
+.ra-fiat-data.big dd { font-family: 'Orbitron', system-ui, sans-serif; font-size: 17px; letter-spacing: .06em; color: var(--ra-cyan); }
+.ra-fiat-steps { margin: 0 0 6px; padding-left: 20px; font-size: 13.5px; line-height: 1.5; color: var(--ra-ink2); }
+.ra-fiat-state { display: grid; gap: 2px; margin: 14px 0 0; padding: 10px 12px; border-radius: 11px; font-size: 13px; line-height: 1.4; color: var(--ra-ink2); background: rgba(255, 201, 77, .08); border: 1px solid rgba(255, 201, 77, .35); }
+.ra-fiat-state b { color: var(--ra-gold); }
+.ra-fiat-state.ok { color: var(--ra-ink); background: rgba(77, 232, 255, .08); border-color: rgba(77, 232, 255, .4); }
+.ra-fiat-warn { margin: 0 0 6px; font-size: 13.5px; line-height: 1.5; color: var(--ra-ink2); }
+.ra-fiat-list { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 6px; max-height: 190px; overflow: auto; }
+.ra-fiat-list button { display: grid; gap: 2px; width: 100%; padding: 9px 12px; text-align: left; border-radius: 11px; border: 1px solid rgba(120, 200, 255, .22); background: rgba(5, 6, 15, .6); color: var(--ra-ink); font: inherit; cursor: pointer; }
+.ra-fiat-list button:hover { border-color: var(--ra-cyan); }
+.ra-fiat-list b { font-family: 'Orbitron', system-ui, sans-serif; font-size: 13px; letter-spacing: .06em; }
+.ra-fiat-list span { font-size: 12px; color: var(--ra-ink3); }

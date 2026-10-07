@@ -9,6 +9,7 @@ import { injected } from '../client/injected.js';
 import { openInMetaMask, setWalletFallback } from './open-in-metamask.js';
 import { remoteWallet, walletProvider } from './wallet.js';
 import { STYLE_ITEMS } from '../shared/cargo-style.js';
+import { fiatOn, fiatOwnerLabel, openFiatOwner } from './fiat-ui.js';
 
 const REVIEW = {
   es: { title: 'Reconocer una compra anterior', sub: 'Para pagos BNB sin pedido previo o pedidos BNB/USDT confirmados tarde. Revisá el comprobante: el pagador debe tener su wallet vinculada. Confirmás con una firma gratuita y queda registrado.',
@@ -432,6 +433,7 @@ export function createAccountUI({ game, lang = () => 'es', toast = () => {}, onC
       ${admin && tools.length ? `<section class="ra-owner"><h3 class="ra-h3">${icon('crown')}${L.owner}</h3><p class="ra-note">${L.ownerHint}</p>
         ${btn('stats', 'chart', L.st.open, 'primary')}
         ${btn('review', 'wallet', (REVIEW[lang()] ?? REVIEW.es).title)}
+        ${fiatOn() ? btn('fiatOwner', 'wallet', fiatOwnerLabel(lang())) : ''}
         <div class="ra-tools">${tools.map((k) => btn(`owner:${k}`, 'star', L.tools[k] ?? k)).join('')}</div></section>` : ''}
       <label class="ra-label">${L.name}</label>
       <div class="ra-field"><input id="raName" maxlength="16" autocomplete="nickname" value="${esc(a.player.name)}" /><button class="ra-btn ghost sm" data-ra="name">${L.save}</button></div>
@@ -483,6 +485,10 @@ export function createAccountUI({ game, lang = () => 'es', toast = () => {}, onC
     const el = ev.target.closest('[data-ra]');
     if (!el || el.disabled) return;
     const act = el.dataset.ra;
+    if (act === 'fiatOwner' && account()?.player?.admin) {
+      const L = tx();
+      return openFiatOwner({ itemName: (kind, item) => (kind === 'founder' ? fill(L.founder, { tier: L.tiers[item] ?? item }) : item) });
+    }
     if (act === 'review' && account()?.player?.admin) {
       view = 'review';
       return render();

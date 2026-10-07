@@ -14,6 +14,7 @@ import { moveIfOldHost, receiveMove } from '../rift/move.js';
 import { applyTransfer } from '../client/transfer.js';
 import { start as startAccount, createSync, syncPurchases, isReloading } from '../rift/account.js';
 import { createAccountUI } from '../rift/account-ui.js';
+import { configureFiat, loadFiat } from '../rift/fiat-ui.js';
 import { setStationSign } from './render/stationScene.js';
 import { step, acceptOffer, buyCargo, buyUpgrade, buyShip, evolveShip, setAuto, fastForward, newGame, ownerBoost } from './sim/sim.js';
 import { OFFLINE_MAX } from './sim/data.js';
@@ -214,6 +215,9 @@ const accountUI = createAccountUI({
     return metamaskLink();
   }
 });
+// Pago en pesos: solo aparece si el servidor lo tiene configurado.
+configureFiat({ lang: () => lang, toast: (msg, kind) => ui.toast(`<span>${msg.replace(/[<>&]/g, '')}</span>`, kind === 'err' ? 'err' : 'ok', 4200), openAccount: () => accountUI.open() });
+loadFiat().then((c) => c.enabled && ui.renderAll(true));
 
 let saveT = 0;
 stage.onFrame((dt, now, raw) => {
