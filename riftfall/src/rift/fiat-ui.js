@@ -5,7 +5,7 @@
 // Si el servidor no tiene la configuración completa, nada de esto aparece: `fiatPrice` devuelve null.
 
 import './account.css';
-import { account, api, start, sessionToken } from './account.js';
+import { account, api, start, sessionToken, syncPurchases } from './account.js';
 import { walletProvider } from './wallet.js';
 import { FIAT_HOSTS, fiatKey, fiatCodeLabel, parseFiatCode, parseFiatRef } from '../shared/fiat.js';
 
@@ -18,9 +18,9 @@ const T = {
     protectBtn: 'Proteger mi cuenta',
     amount: 'Importe',
     code: 'Tu código',
-    step1: '1. Pagá exactamente {ars}.',
-    step2: '2. En el mensaje o concepto del pago escribí tu código.',
-    step3: '3. Listo. Revisamos los pagos a mano: puede tardar unas horas.',
+    step1: 'Pagá exactamente {ars}.',
+    step2: 'En el mensaje o concepto del pago escribí tu código.',
+    step3: 'Listo. Revisamos los pagos a mano: puede tardar unas horas.',
     open: 'Abrir el link de pago',
     alias: 'Alias',
     holder: 'Titular',
@@ -28,10 +28,14 @@ const T = {
     copyAlias: 'Copiar alias',
     copied: 'Copiado',
     pending: 'Pago en revisión',
-    pendingSub: 'Todavía no está acreditado. Cuando lo esté, aparece solo en tu cuenta.',
-    expired: 'Este pedido venció. Si ya pagaste, no hace falta hacer nada: se puede acreditar igual.',
+    pendingSub: 'Todavía no está acreditado. Con esta ventana abierta te avisamos acá; si la cerrás, lo vas a ver en tu cuenta la próxima vez que entres.',
+    expiredTitle: 'Pedido vencido',
+    expired: 'Si ya pagaste, no vuelvas a pagar: lo acreditamos igual cuando veamos el pago. Si no pagaste, cancelalo y hacé uno nuevo.',
     paid: 'Pago acreditado. Ya lo tenés en tu cuenta.',
     cancel: 'Cancelar pedido',
+    cancelWarn: 'Cancelá solo si no enviaste plata. Si ya pagaste, dejalo abierto: cancelar no devuelve el pago ni lo acredita.',
+    cancelYes: 'No pagué: cancelar el pedido',
+    cancelNo: 'Volver',
     cancelled: 'Pedido cancelado.',
     close: 'Cerrar',
     wait: 'Preparando…',
@@ -76,9 +80,9 @@ const T = {
     protectBtn: 'Protect my account',
     amount: 'Amount',
     code: 'Your code',
-    step1: '1. Pay exactly {ars}.',
-    step2: '2. Write your code in the payment message.',
-    step3: '3. Done. Payments are checked by hand: it can take a few hours.',
+    step1: 'Pay exactly {ars}.',
+    step2: 'Write your code in the payment message.',
+    step3: 'Done. Payments are checked by hand: it can take a few hours.',
     open: 'Open the payment link',
     alias: 'Alias',
     holder: 'Account holder',
@@ -86,10 +90,14 @@ const T = {
     copyAlias: 'Copy alias',
     copied: 'Copied',
     pending: 'Payment under review',
-    pendingSub: 'Not credited yet. When it is, it shows up in your account by itself.',
-    expired: 'This order expired. If you already paid, you do not need to do anything: it can still be credited.',
+    pendingSub: 'Not credited yet. With this window open we will tell you here; if you close it, you will see it in your account next time you come in.',
+    expiredTitle: 'Order expired',
+    expired: 'If you already paid, do not pay again: we will still credit it when we see the payment. If you did not pay, cancel it and make a new one.',
     paid: 'Payment credited. It is in your account.',
     cancel: 'Cancel order',
+    cancelWarn: 'Cancel only if you did not send money. If you already paid, leave it open: cancelling does not refund or credit the payment.',
+    cancelYes: 'I did not pay: cancel the order',
+    cancelNo: 'Back',
     cancelled: 'Order cancelled.',
     close: 'Close',
     wait: 'Getting ready…',
@@ -134,9 +142,9 @@ const T = {
     protectBtn: 'Proteger minha conta',
     amount: 'Valor',
     code: 'Seu código',
-    step1: '1. Pague exatamente {ars}.',
-    step2: '2. Na mensagem do pagamento, escreva seu código.',
-    step3: '3. Pronto. Conferimos os pagamentos à mão: pode levar algumas horas.',
+    step1: 'Pague exatamente {ars}.',
+    step2: 'Na mensagem do pagamento, escreva seu código.',
+    step3: 'Pronto. Conferimos os pagamentos à mão: pode levar algumas horas.',
     open: 'Abrir o link de pagamento',
     alias: 'Alias',
     holder: 'Titular',
@@ -144,10 +152,14 @@ const T = {
     copyAlias: 'Copiar alias',
     copied: 'Copiado',
     pending: 'Pagamento em revisão',
-    pendingSub: 'Ainda não foi creditado. Quando for, aparece sozinho na sua conta.',
-    expired: 'Este pedido venceu. Se você já pagou, não precisa fazer nada: ainda pode ser creditado.',
+    pendingSub: 'Ainda não foi creditado. Com esta janela aberta avisamos aqui; se você fechar, vai ver na sua conta na próxima vez que entrar.',
+    expiredTitle: 'Pedido vencido',
+    expired: 'Se você já pagou, não pague de novo: creditamos mesmo assim quando virmos o pagamento. Se não pagou, cancele e faça um novo.',
     paid: 'Pagamento creditado. Já está na sua conta.',
     cancel: 'Cancelar pedido',
+    cancelWarn: 'Cancele só se você não enviou dinheiro. Se já pagou, deixe aberto: cancelar não devolve nem credita o pagamento.',
+    cancelYes: 'Não paguei: cancelar o pedido',
+    cancelNo: 'Voltar',
     cancelled: 'Pedido cancelado.',
     close: 'Fechar',
     wait: 'Preparando…',
@@ -193,7 +205,7 @@ export const fmtArs = (n) => `$ ${Number(n).toLocaleString('es-AR')}`;
 const X = '<svg class="ra-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18 M6 6l12 12"/></svg>';
 
 let config = { enabled: false, prices: {} };
-let host = { lang: () => 'es', toast: () => {}, openAccount: () => {} };
+let host = { lang: () => 'es', toast: () => {}, openAccount: () => {}, onPaid: () => {} };
 let root = null;
 
 /** Cada juego dice cómo avisar, en qué idioma y cómo abrir la ventana de la cuenta. */
@@ -288,9 +300,8 @@ export async function openFiatPay({ kind, item, name }) {
   const box = mount(`${head(L.title, sub, L)}<p class="ra-note">${esc(L.wait)}</p>`, L.title);
   let order;
   try {
-    const mine = (await api('GET', '/api/rift/fiat/orders')).orders;
-    order = mine.find((o) => o.kind === kind && o.item === item && o.status === 'pending' && !o.expired)
-      ?? (await api('POST', '/api/rift/fiat/order', { kind, item })).order;
+    // Si ya había un pedido abierto de este artículo (aunque haya vencido), el servidor devuelve ese.
+    order = (await api('POST', '/api/rift/fiat/order', { kind, item })).order;
   } catch (err) {
     box.remove();
     return host.toast(L.err[err.code] ?? L.err.generic, 'err');
@@ -299,40 +310,96 @@ export async function openFiatPay({ kind, item, name }) {
   renderOrder(box, order, sub, L);
 }
 
+/** Cada cuánto se pregunta por el pedido mientras la ventana está abierta. */
+const POLL_MS = 8000;
+
 function renderOrder(box, order, sub, L) {
   const code = fiatCodeLabel(order.code);
   const amount = fmtArs(order.ars);
-  const target = config.payUrl
-    ? `<a class="ra-btn primary" href="${esc(config.payUrl)}" target="_blank" rel="noopener noreferrer">${esc(L.open)}</a>`
-    : `<dl class="ra-fiat-data"><dt>${esc(L.alias)}</dt><dd>${esc(config.alias)}</dd><dt>${esc(L.holder)}</dt><dd>${esc(config.holder)}</dd></dl>
-       <button class="ra-btn ghost" data-fx="copyAlias">${esc(L.copyAlias)}</button>`;
-  const state = order.status === 'paid' ? `<p class="ra-fiat-state ok">${esc(L.paid)}</p>`
-    : `<p class="ra-fiat-state"><b>${esc(L.pending)}</b><span>${esc(order.expired ? L.expired : L.pendingSub)}</span></p>`;
-  box.querySelector('.ra-card').innerHTML = `${head(L.title, sub, L)}
-    <dl class="ra-fiat-data big"><dt>${esc(L.amount)}</dt><dd>${esc(amount)}</dd><dt>${esc(L.code)}</dt><dd data-fx="code">${esc(code)}</dd></dl>
-    <ol class="ra-fiat-steps"><li>${esc(fill(L.step1, { ars: amount }).replace(/^1\. /, ''))}</li><li>${esc(L.step2.replace(/^2\. /, ''))}</li><li>${esc(L.step3.replace(/^3\. /, ''))}</li></ol>
-    ${target}
+  const card = box.querySelector('.ra-card');
+  const data = `<dl class="ra-fiat-data big"><dt>${esc(L.amount)}</dt><dd>${esc(amount)}</dd><dt>${esc(L.code)}</dt><dd data-fx="code">${esc(code)}</dd></dl>`;
+  if (order.status === 'paid') {
+    // Acreditado: ya no hay nada que pagar ni que cancelar.
+    card.innerHTML = `${head(L.title, sub, L)}${data}<p class="ra-fiat-state ok" data-fx="state">${esc(L.paid)}</p>
+      <button class="ra-btn primary" data-fx="close">${esc(L.close)}</button>`;
+    return;
+  }
+  // El destino es el que quedó fijado en el pedido, no el de la configuración de hoy.
+  const to = safeTarget(order.target ?? {}) ? order.target : null;
+  const target = !to || order.expired ? ''
+    : to.payUrl
+      ? `<a class="ra-btn primary" href="${esc(to.payUrl)}" target="_blank" rel="noopener noreferrer">${esc(L.open)}</a>`
+      : `<dl class="ra-fiat-data"><dt>${esc(L.alias)}</dt><dd>${esc(to.alias)}</dd><dt>${esc(L.holder)}</dt><dd>${esc(to.holder)}</dd></dl>
+         <button class="ra-btn ghost" data-fx="copyAlias">${esc(L.copyAlias)}</button>`;
+  const steps = order.expired ? '' : `<ol class="ra-fiat-steps"><li>${esc(fill(L.step1, { ars: amount }))}</li><li>${esc(L.step2)}</li><li>${esc(L.step3)}</li></ol>`;
+  card.innerHTML = `${head(L.title, sub, L)}${data}${steps}${target}
     <button class="ra-btn ghost" data-fx="copyCode">${esc(L.copyCode)}</button>
-    ${state}
-    ${order.status === 'pending' ? `<button class="ra-btn ghost sm" data-fx="cancel">${esc(L.cancel)}</button>` : ''}
+    <p class="ra-fiat-state" data-fx="state"><b>${esc(order.expired ? L.expiredTitle : L.pending)}</b><span>${esc(order.expired ? L.expired : L.pendingSub)}</span></p>
+    <div data-fx="cancelBox"><button class="ra-btn ghost sm" data-fx="cancel">${esc(L.cancel)}</button></div>
     <p class="ra-note">${esc(L.legal)}</p>`;
   const copy = (sel, text) => {
     const btn = box.querySelector(sel);
     btn?.addEventListener('click', () => copyText(text).then(() => (btn.textContent = L.copied)).catch(() => {}));
   };
   copy('[data-fx="copyCode"]', code);
-  copy('[data-fx="copyAlias"]', config.alias ?? '');
-  const cancel = box.querySelector('[data-fx="cancel"]');
-  cancel?.addEventListener('click', async () => {
-    cancel.disabled = true;
-    try {
-      await api('POST', '/api/rift/fiat/cancel', { id: order.id });
-      host.toast(L.cancelled, 'ok');
-    } catch {
-      /* ya no estaba pendiente */
-    }
-    box.remove();
+  copy('[data-fx="copyAlias"]', to?.alias ?? '');
+  // Cancelar pide confirmación: solo si no se envió plata. Cancelar no devuelve ningún pago.
+  const cancelBox = box.querySelector('[data-fx="cancelBox"]');
+  cancelBox.querySelector('[data-fx="cancel"]').addEventListener('click', () => {
+    cancelBox.innerHTML = `<p class="ra-fiat-warn">${esc(L.cancelWarn)}</p>
+      <button class="ra-btn ghost sm" data-fx="cancelYes">${esc(L.cancelYes)}</button>
+      <button class="ra-btn ghost sm" data-fx="cancelNo">${esc(L.cancelNo)}</button>`;
+    cancelBox.querySelector('[data-fx="cancelNo"]').addEventListener('click', () => renderOrder(box, order, sub, L));
+    const yes = cancelBox.querySelector('[data-fx="cancelYes"]');
+    yes.addEventListener('click', async () => {
+      yes.disabled = true;
+      try {
+        await api('POST', '/api/rift/fiat/cancel', { id: order.id });
+        host.toast(L.cancelled, 'ok');
+        box.remove();
+      } catch {
+        // Ya no estaba pendiente (por ejemplo, se acreditó recién): se vuelve a mirar.
+        check(box, order, sub, L);
+      }
+    });
   });
+  watch(box, order, sub, L);
+}
+
+/** Pregunta por el pedido; si pasó a pagado, trae la compra a este dispositivo y lo muestra. */
+async function check(box, order, sub, L) {
+  if (!box.isConnected) return true;
+  let fresh;
+  try {
+    fresh = (await api('GET', '/api/rift/fiat/orders')).orders.find((o) => o.id === order.id);
+  } catch {
+    return false; // sin conexión: se vuelve a intentar
+  }
+  if (!box.isConnected) return true;
+  if (!fresh || fresh.status === 'cancelled') {
+    box.remove();
+    return true;
+  }
+  if (fresh.status === 'paid') {
+    // La cuenta ya tiene la compra: se trae y se aplica acá, sin recargar.
+    await start().catch(() => null);
+    await syncPurchases().catch(() => false);
+    host.onPaid?.(fresh);
+    if (box.isConnected) renderOrder(box, fresh, sub, L);
+    return true;
+  }
+  if (fresh.expired !== order.expired) {
+    renderOrder(box, fresh, sub, L);
+    return true; // el nuevo render sigue mirando
+  }
+  return false;
+}
+
+function watch(box, order, sub, L) {
+  clearInterval(box.fiatTimer);
+  box.fiatTimer = setInterval(async () => {
+    if (!box.isConnected || (await check(box, order, sub, L))) clearInterval(box.fiatTimer);
+  }, POLL_MS);
 }
 
 // ---------- Dueño ----------

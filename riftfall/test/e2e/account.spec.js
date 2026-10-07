@@ -619,10 +619,21 @@ test('pago en pesos: el jugador pide el Pase Piloto, queda en revisión y recié
     expect(code).toMatch(/^RIFT-[A-Z2-9]{5}-[A-Z2-9]{5}$/);
     await page.click('.ra-fiat [data-fx="close"]');
     expect(await page.evaluate(() => localStorage.getItem('riftfall.founder'))).toBeNull();
-    // Volver a tocar no crea otro pedido: muestra el mismo.
+    // El dueño cambia el link de cobro y el precio después del pedido: el pedido conserva los suyos.
+    site.env.FIAT_PAY_URL = 'https://mpago.la/otro-link';
+    site.env.FIAT_PRICES = JSON.stringify({ 'founder:pilot': 6000 });
+    // Volver a tocar no crea otro pedido: muestra el mismo, con su importe y su destino.
     await pesos.click();
     await expect(page.locator('.ra-fiat [data-fx="code"]')).toHaveText(code);
-    await page.click('.ra-fiat [data-fx="close"]');
+    await expect(box).toContainText('$ 4.500');
+    await expect(box.locator('a.ra-btn')).toHaveAttribute('href', 'https://cafecito.app/riftgames');
+    // Cancelar avisa que es solo si no se envió plata, y se puede volver atrás.
+    await box.locator('[data-fx="cancel"]').click();
+    await expect(box).toContainText('Cancelá solo si no enviaste plata');
+    await expect(box).toContainText('cancelar no devuelve el pago');
+    await box.locator('[data-fx="cancelNo"]').click();
+    await expect(box).toContainText('Pago en revisión');
+    // La ventana queda abierta mientras el dueño revisa.
     expect((await site.env.DB.prepare('SELECT COUNT(*) AS n FROM fiat_orders').first()).n).toBe(1);
     expect((await site.env.DB.prepare('SELECT COUNT(*) AS n FROM purchases').first()).n).toBe(0);
 
@@ -653,7 +664,19 @@ test('pago en pesos: el jugador pide el Pase Piloto, queda en revisión y recié
     expect([row.kind, row.item, row.method]).toEqual(['founder', 'pilot', 'ars-manual']);
     expect((await site.env.DB.prepare('SELECT payment_ref, ars FROM fiat_reviews').first())).toEqual({ payment_ref: 'op-778899', ars: 4500 });
 
-    // El comprador vuelve a abrir el juego: ya es Fundador Piloto.
+    // El comprador tenía la ventana abierta: pasa sola a "acreditado", sin recargar, y ya no ofrece
+    // pagar ni cancelar. El Pase queda aplicado en este dispositivo.
+    await expect(box.locator('[data-fx="state"]')).toContainText('Pago acreditado', { timeout: 40_000 });
+    await expect(box.locator('a.ra-btn')).toHaveCount(0);
+    await expect(box.locator('[data-fx="cancel"]')).toHaveCount(0);
+    await expect(box.locator('.ra-fiat-steps')).toHaveCount(0);
+    expect(JSON.parse(await page.evaluate(() => localStorage.getItem('riftfall.founder'))).tier).toBe('pilot');
+    await expect(page.locator('#founderChip')).not.toHaveClass(/hidden/);
+    await box.locator('.ra-btn[data-fx="close"]').click();
+    // Volver a pedirlo ya no se puede: lo tiene.
+    await pesos.click();
+    await expect(page.locator('.toast').last()).toContainText('ya lo tenés');
+    // Al volver a abrir el juego sigue siendo Fundador Piloto.
     await page.reload();
     await expect(page.locator('#founderChip')).toBeVisible({ timeout: 30_000 });
     expect(JSON.parse(await page.evaluate(() => localStorage.getItem('riftfall.founder'))).tier).toBe('pilot');

@@ -656,11 +656,22 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
       // La compra queda en la cuenta: tiene que poder volver a entrar (huella o wallet) antes de pagar.
       if (!(await ctx.store.hasCredentials(s.player.id))) throw new HttpError(403, 'protect');
       if (await ctx.store.hasPurchase(s.player.id, kind, item)) throw new HttpError(409, 'owned');
-      const order = { id: randomHex(16), code: fiatCode(randomBytes(10)), playerId: s.player.id, kind, item, ars, now: ctx.t, expires: ctx.t + FIAT_ORDER_TTL };
+      // Si ya hay un pedido abierto de este artículo (aunque haya vencido), es ese: puede estar pagado y
+      // esperando al dueño. No se arma otro para que nadie pague dos veces.
+      const open = await ctx.store.openFiatOrder(s.player.id, kind, item, ctx.t);
+      if (open) return json({ ok: true, existing: true, order: fiatOrderView(open, ctx.t) });
+      // El destino del cobro queda fijado en el pedido, igual que el importe y el artículo.
+      const order = {
+        id: randomHex(16), code: fiatCode(randomBytes(10)), playerId: s.player.id, kind, item, ars, now: ctx.t, expires: ctx.t + FIAT_ORDER_TTL,
+        payUrl: cfg.payUrl ?? null, alias: cfg.alias ?? null, holder: cfg.holder ?? null
+      };
       try {
         await ctx.store.addFiatOrder(order);
       } catch (err) {
         if (!(err instanceof Conflict)) throw err;
+        // Dos pedidos a la vez del mismo artículo: queda el que entró primero.
+        const first = await ctx.store.openFiatOrder(s.player.id, kind, item, ctx.t);
+        if (first) return json({ ok: true, existing: true, order: fiatOrderView(first, ctx.t) });
         throw new HttpError(429, 'tooManyOrders');
       }
       return json({ ok: true, order: fiatOrderView(await ctx.store.fiatOrder(order.id), ctx.t) });
@@ -808,6 +819,8 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
       id: o.id, code: o.code, kind: o.kind, item: o.item, ars: o.ars,
       status: o.status ?? 'pending', createdAt: o.created_at, expiresAt: o.expires_at,
       expired: (o.status ?? 'pending') === 'pending' && o.expires_at <= now,
+      // A dónde había que pagar cuando se hizo el pedido (no cambia aunque después cambie la configuración).
+      target: o.pay_url ? { payUrl: o.pay_url } : { alias: o.pay_alias ?? null, holder: o.pay_holder ?? null },
       ...(o.paid_at ? { paidAt: o.paid_at } : {})
     };
   }

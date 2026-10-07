@@ -28,7 +28,13 @@ los Pases Oro y Leyenda (traen planos de naves, y el Leyenda promete una nave NF
 2. Si es invitado, primero protege la cuenta con huella, Face ID o wallet: la compra queda en la cuenta.
 3. Ve el importe, a dónde pagar y su código (`RIFT-XXXXX-XXXXX`), que escribe en el mensaje del pago.
 4. Queda **"Pago en revisión"**. No recibe nada hasta que el dueño reconoce el pago.
-5. Cuando se acredita, la compra aparece sola en su cuenta, en todos sus dispositivos.
+5. Con la ventana abierta, el juego pregunta cada 8 segundos: cuando se acredita, la ventana pasa a "Pago
+   acreditado", deja de ofrecer pagar o cancelar y la compra se aplica en ese momento. Si la cerró, la compra
+   aparece la próxima vez que entre, en cualquiera de sus dispositivos.
+6. Volver a tocar el botón muestra el mismo pedido (no arma otro). Si venció, avisa que **no vuelva a pagar**:
+   un pago ya hecho se acredita igual.
+7. Cancelar pide confirmación y avisa que es solo para quien no envió plata: cancelar no devuelve ni acredita
+   ningún pago.
 
 ## Qué hace el dueño
 
@@ -42,6 +48,8 @@ su wallet. La firma es gratis y no mueve fondos: solo registra el derecho.
 |---|---|
 | Código del pedido | Al azar (50 bits), lo genera el servidor |
 | Importe y artículo | Los fija el servidor al crear el pedido; el jugador no elige ninguno |
+| Destino del cobro | Queda fijado en el pedido. Si el dueño cambia después el link, el alias o el precio, los pedidos ya hechos conservan los suyos |
+| Pedidos abiertos por artículo | Uno solo por cuenta, aunque haya vencido (puede estar pagado y esperando al dueño) |
 | Pedidos por cuenta | 3 pendientes a la vez y 10 por día |
 | Vencimiento | 72 horas para el jugador; el dueño puede reconocer un pago tardío hasta 30 días |
 | Importe al reconocer | Tiene que ser exactamente el del pedido |
@@ -63,7 +71,9 @@ motivo no hay que escribir datos de la persona. El panel del dueño no muestra d
 
 - Pedidos sin reconocer: Panel del dueño → Pagos en pesos (los vencidos figuran como "vencido").
 - Pagos reconocidos: `SELECT order_id, payment_ref, ars, reason, at FROM fiat_reviews ORDER BY at DESC`.
-- Si llega un pago sin código o con otro importe, no se puede acreditar: se devuelve por fuera del juego.
+- Si llega un pago sin código o con otro importe, no se puede acreditar desde el panel. Qué hacer con esa
+  plata lo resuelve el dueño con la persona, por fuera del juego: el juego no devuelve pagos.
+- Un pedido cancelado no se puede reconocer. Si alguien canceló después de pagar, se arregla por fuera.
 - Un reconocimiento hecho por error no se deshace desde el panel; hay que corregirlo en la base y dejar nota.
 
 ## Límites conocidos

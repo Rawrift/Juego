@@ -216,7 +216,7 @@ const accountUI = createAccountUI({
   }
 });
 // Pago en pesos: solo aparece si el servidor lo tiene configurado.
-configureFiat({ lang: () => lang, toast: (msg, kind) => ui.toast(`<span>${msg.replace(/[<>&]/g, '')}</span>`, kind === 'err' ? 'err' : 'ok', 4200), openAccount: () => accountUI.open() });
+configureFiat({ lang: () => lang, toast: (msg, kind) => ui.toast(`<span>${msg.replace(/[<>&]/g, '')}</span>`, kind === 'err' ? 'err' : 'ok', 4200), openAccount: () => accountUI.open(), onPaid: () => ui.renderAll(true) });
 loadFiat().then((c) => c.enabled && ui.renderAll(true));
 
 let saveT = 0;

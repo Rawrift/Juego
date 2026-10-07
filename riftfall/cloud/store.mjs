@@ -38,7 +38,8 @@ const SCHEMA = [
   // Pedidos de pago en pesos (el dueño los reconoce a mano) y el registro de cada reconocimiento.
   `CREATE TABLE IF NOT EXISTS fiat_orders (
     id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, player_id TEXT NOT NULL, kind TEXT NOT NULL, item TEXT NOT NULL,
-    ars INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, paid_at INTEGER)`,
+    ars INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, paid_at INTEGER,
+    pay_url TEXT, pay_alias TEXT, pay_holder TEXT)`,
   `CREATE INDEX IF NOT EXISTS fiat_orders_player ON fiat_orders (player_id, created_at)`,
   `CREATE INDEX IF NOT EXISTS fiat_orders_status ON fiat_orders (status, created_at)`,
   `CREATE TABLE IF NOT EXISTS fiat_reviews (
@@ -223,24 +224,29 @@ export function createStore(db) {
     },
     // ---------- Pago en pesos ----------
     /** Crea el pedido si la cuenta no pasó el límite de pendientes ni el de pedidos por día (en una sola operación). */
-    async addFiatOrder({ id, code, playerId, kind, item, ars, now, expires }) {
-      const r = await run(`INSERT INTO fiat_orders (id, code, player_id, kind, item, ars, created_at, expires_at)
-        SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE
+    async addFiatOrder({ id, code, playerId, kind, item, ars, now, expires, payUrl = null, alias = null, holder = null }) {
+      const r = await run(`INSERT INTO fiat_orders (id, code, player_id, kind, item, ars, created_at, expires_at, pay_url, pay_alias, pay_holder)
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE
+        NOT EXISTS (SELECT 1 FROM fiat_orders WHERE player_id = ? AND kind = ? AND item = ? AND status = 'pending' AND created_at > ?) AND
         (SELECT COUNT(*) FROM fiat_orders WHERE player_id = ? AND status = 'pending' AND expires_at > ?) < ?
         AND (SELECT COUNT(*) FROM fiat_orders WHERE player_id = ? AND created_at > ?) < ?`,
-      id, code, playerId, kind, item, ars, now, expires,
+      id, code, playerId, kind, item, ars, now, expires, payUrl, alias, holder,
+      playerId, kind, item, now - FIAT_REVIEW_WINDOW,
       playerId, now, FIAT_MAX_PENDING, playerId, now - 86_400_000, FIAT_MAX_PER_DAY);
       if (!changes(r)) throw new Conflict();
     },
     fiatOrder: (id) => one('SELECT * FROM fiat_orders WHERE id = ?', id),
     fiatOrderByCode: (code) => one('SELECT * FROM fiat_orders WHERE code = ?', code),
-    fiatOrders: (playerId) => all('SELECT id, code, kind, item, ars, status, created_at, expires_at, paid_at FROM fiat_orders WHERE player_id = ? ORDER BY created_at DESC LIMIT 12', playerId),
+    /** El pedido abierto de un artículo (aunque haya vencido: puede estar pagado y esperando al dueño). */
+    openFiatOrder: (playerId, kind, item, now) =>
+      one("SELECT * FROM fiat_orders WHERE player_id = ? AND kind = ? AND item = ? AND status = 'pending' AND created_at > ? ORDER BY created_at DESC LIMIT 1", playerId, kind, item, now - FIAT_REVIEW_WINDOW),
+    fiatOrders: (playerId) => all('SELECT * FROM fiat_orders WHERE player_id = ? ORDER BY created_at DESC LIMIT 12', playerId),
     async cancelFiatOrder(id, playerId) {
       return changes(await run("UPDATE fiat_orders SET status = 'cancelled' WHERE id = ? AND player_id = ? AND status = 'pending'", id, playerId)) > 0;
     },
     /** Pendientes que el dueño todavía puede reconocer (incluye los vencidos hace poco: el pago puede llegar tarde). */
     pendingFiatOrders: (now, limit = 50) =>
-      all("SELECT id, code, kind, item, ars, created_at, expires_at FROM fiat_orders WHERE status = 'pending' AND created_at > ? ORDER BY created_at DESC LIMIT ?", now - FIAT_REVIEW_WINDOW, limit),
+      all("SELECT id, code, kind, item, ars, created_at, expires_at, pay_url, pay_alias, pay_holder FROM fiat_orders WHERE status = 'pending' AND created_at > ? ORDER BY created_at DESC LIMIT ?", now - FIAT_REVIEW_WINDOW, limit),
     fiatRefUsed: async (ref) => !!(await one('SELECT 1 AS x FROM fiat_reviews WHERE payment_ref = ?', ref)),
     /**
      * Acredita un pedido en pesos: la compra, el registro del reconocimiento y el pedido pagado, todo

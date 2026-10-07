@@ -1574,7 +1574,16 @@ function setupAccount() {
   });
   $('#accountBtn').addEventListener('click', () => accountUI.open());
   // Pago en pesos: solo aparece si el servidor lo tiene configurado.
-  configureFiat({ lang: () => lang, toast, openAccount: () => accountUI.open() });
+  configureFiat({
+    lang: () => lang,
+    toast,
+    openAccount: () => accountUI.open(),
+    // Se acreditó con la ventana abierta: el Pase ya está en este dispositivo.
+    onPaid: () => {
+      applyCosmetics();
+      updateMenu();
+    }
+  });
   loadFiat();
   const sync = createSync('riftfall', {
     get: () => loadProgress(),

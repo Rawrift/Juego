@@ -124,27 +124,78 @@ test('pedido: precio y artículo los fija el servidor; hace falta cuenta protegi
 });
 
 test('límites: 3 pendientes y 10 pedidos por día por cuenta, también con pedidos a la vez', async () => {
-  const { call, withWallet, advance } = setup();
+  const items = ['liv-carbono', 'liv-aurora', 'liv-solar', 'trail-magenta', 'trail-verde', 'trail-violeta', 'trail-dorado', 'plates', 'sign', 'pack'];
+  const { call, withWallet, advance } = setup({ FIAT_PRICES: JSON.stringify(Object.fromEntries(items.map((i) => [`style:${i}`, 1500]))) });
   const p = await withWallet();
   const order = (item) => call('POST', '/api/rift/fiat/order', { body: { kind: 'style', item }, token: p.token });
-  const burst = await Promise.all([order('pack'), order('pack'), order('pack'), order('pack'), order('pack')]);
+  const burst = await Promise.all(items.slice(0, 5).map(order));
   assert.deepEqual(burst.map((r) => r.status).sort(), [200, 200, 200, 429, 429]);
   assert.equal(new Set(burst.filter((r) => r.ok).map((r) => r.order.code)).size, 3, 'códigos distintos');
   // Cancelar libera el cupo de pendientes, pero no el del día.
-  let made = 3;
-  for (let i = 0; i < 12; i++) {
+  const cancelOne = async () => {
     const open = (await call('GET', '/api/rift/fiat/orders', { token: p.token })).orders.find((o) => o.status === 'pending');
     await call('POST', '/api/rift/fiat/cancel', { body: { id: open.id }, token: p.token });
-    const r = await order('trail-magenta');
-    if (r.status === 200) made++;
-    else {
+  };
+  let made = 3;
+  for (let i = 0; i < 12; i++) {
+    await cancelOne();
+    const r = await order(items[(i + 5) % items.length]);
+    if (r.status === 200 && !r.existing) made++;
+    else if (r.status === 429) {
       assert.equal(r.error, 'tooManyOrders');
       break;
     }
   }
   assert.equal(made, 10);
   advance(86_400_001);
-  assert.equal((await order('trail-magenta')).status, 200, 'al otro día se puede de nuevo');
+  await cancelOne();
+  const next = await order('sign');
+  assert.equal(next.status, 200, 'al otro día se puede de nuevo');
+});
+
+test('un solo pedido abierto por artículo: volver a pedir devuelve el mismo, también vencido y con pedidos a la vez', async () => {
+  const { call, withWallet, recognize, owner, advance, env } = setup();
+  const admin = await withWallet(owner);
+  const p = await withWallet();
+  const order = () => call('POST', '/api/rift/fiat/order', { body: { kind: 'founder', item: 'pilot' }, token: p.token });
+  const burst = await Promise.all([order(), order(), order()]);
+  assert.deepEqual(burst.map((r) => r.status), [200, 200, 200]);
+  assert.equal(new Set(burst.map((r) => r.order.code)).size, 1, 'el mismo pedido');
+  assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM fiat_orders').first()).n, 1);
+  // Vencido: puede estar pagado y esperando al dueño. No se arma otro (nadie paga dos veces).
+  advance(FIAT_ORDER_TTL + 1);
+  const again = await order();
+  assert.deepEqual([again.status, again.existing, again.order.code, again.order.expired], [200, true, burst[0].order.code, true]);
+  assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM fiat_orders').first()).n, 1);
+  // El dueño ve el pago tardío y lo reconoce: el jugador lo recupera sin volver a pagar.
+  assert.equal((await recognize(admin, owner, { code: again.order.code, ars: 4500, ref: 'op-4001' })).status, 200);
+  const mine = (await call('GET', '/api/rift/fiat/orders', { token: p.token })).orders;
+  assert.deepEqual(mine.map((o) => [o.status, o.expired]), [['paid', false]]);
+  assert.equal((await call('GET', '/api/rift/me', { token: p.token })).account.purchases.length, 1);
+  assert.equal((await order()).error, 'owned');
+});
+
+test('el destino del cobro queda fijado en el pedido: cambiar la configuración después no lo cambia', async () => {
+  const { call, withWallet, env } = setup();
+  const p = await withWallet();
+  const first = (await call('POST', '/api/rift/fiat/order', { body: { kind: 'founder', item: 'pilot' }, token: p.token })).order;
+  assert.deepEqual(first.target, { payUrl: CONFIG.FIAT_PAY_URL });
+  // El dueño cambia el link por un alias y sube el precio.
+  env.FIAT_PAY_URL = '';
+  env.FIAT_ALIAS = 'rift.juegos.mp';
+  env.FIAT_HOLDER = 'Nombre Apellido';
+  env.FIAT_PRICES = JSON.stringify({ 'founder:pilot': 6000, 'style:pack': 9000 });
+  assert.equal((await call('GET', '/api/rift/fiat')).alias, 'rift.juegos.mp');
+  const reopened = (await call('POST', '/api/rift/fiat/order', { body: { kind: 'founder', item: 'pilot' }, token: p.token })).order;
+  assert.deepEqual([reopened.code, reopened.ars, reopened.target], [first.code, 4500, { payUrl: CONFIG.FIAT_PAY_URL }]);
+  assert.deepEqual((await call('GET', '/api/rift/fiat/orders', { token: p.token })).orders[0].target, { payUrl: CONFIG.FIAT_PAY_URL });
+  // Un pedido nuevo de otro artículo sí usa lo nuevo.
+  const pack = (await call('POST', '/api/rift/fiat/order', { body: { kind: 'style', item: 'pack' }, token: p.token })).order;
+  assert.deepEqual(pack.target, { alias: 'rift.juegos.mp', holder: 'Nombre Apellido' });
+  // Aunque después se apague todo, el pedido abierto se sigue viendo con su destino.
+  env.FIAT_PRICES = '';
+  assert.equal((await call('GET', '/api/rift/fiat')).enabled, false);
+  assert.deepEqual((await call('GET', '/api/rift/fiat/orders', { token: p.token })).orders.map((o) => o.target), [pack.target, first.target]);
 });
 
 test('reconocimiento: solo el dueño, con su firma; importe exacto; la compra aparece recién ahí', async () => {
