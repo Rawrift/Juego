@@ -87,6 +87,7 @@ test('mapa del sistema y mejoras', async ({ page }) => {
 });
 
 test('Hangar Rift: naves exclusivas con plano, construir con créditos y evolucionar a Mk II', async ({ page }) => {
+  test.setTimeout(240_000); // El render 3D por software del CI necesita más tiempo que una GPU.
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   // El jugador ya tiene el plano de la Raya (comprado antes en este navegador).
@@ -113,7 +114,6 @@ test('Hangar Rift: naves exclusivas con plano, construir con créditos y evoluci
   await page.locator('[data-act="hgModel"][data-v="raya"]').click();
   await page.locator('.modal-card.hangar [data-act="buyShip"]').click();
   await expect.poll(() => page.evaluate(() => window.__CARGO__.state.ships.filter((x) => x.model === 'raya').length)).toBe(1);
-  await page.screenshot({ path: 'test-results/cargo-hangar.png' });
   await page.locator('.modal-card.hangar [data-act="closeModal"]').click();
   // Evolucionar la nave desde su tarjeta.
   const id = await page.evaluate(() => window.__CARGO__.state.ships.find((x) => x.model === 'raya').id);
@@ -122,6 +122,7 @@ test('Hangar Rift: naves exclusivas con plano, construir con créditos y evoluci
   await expect.poll(() => page.evaluate((i) => window.__CARGO__.state.ships.find((x) => x.id === i).evo, id)).toBe(1);
   await expect(page.locator('#detail')).toContainText('Mk 2');
   expect(errors).toEqual([]);
+  await page.screenshot({ path: 'test-results/cargo-hangar.png', animations: 'disabled' });
 });
 
 test('Ruta Rift: quien ya jugó RIFTFALL recibe créditos en Rift Cargo (una sola vez)', async ({ page }) => {

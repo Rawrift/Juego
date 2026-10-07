@@ -5,6 +5,7 @@ import path from 'node:path';
 import { Wallet } from 'ethers';
 import { createApi } from '../../cloud/api.mjs';
 import { createD1 } from '../../cloud/d1-node.mjs';
+import { ensureSchema } from '../../cloud/store.mjs';
 
 // Cuenta Rift de punta a punta: el sitio publicado (dist-e2e) con el mismo servidor que corre en
 // Cloudflare (cloud/api.mjs) y una base SQLite en memoria. Se usa "localhost" porque las passkeys
@@ -519,6 +520,8 @@ test('mudanza: quien abre otra dirección (Vercel o Cloudflare) pasa al link de 
   const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg' };
   const api = createApi({ chain: { payment: async () => ({ kind: null, reason: 'notFound' }) } });
   const env = { DB: createD1() };
+  // La consulta directa del test no debe adelantarse a la primera petición que crea las tablas.
+  await ensureSchema(env.DB);
   const ctx = await browser.newContext(phone);
   // Las tres direcciones se sirven desde el build de prueba (sin red); duckdns es la de siempre.
   await ctx.route(/^https?:\/\/(riftfall-chi\.vercel\.app|riftgames\.pages\.dev|riftfall\.duckdns\.org)\//, async (route) => {
