@@ -19,3 +19,7 @@ dist-itch/
 riftfall-itch.zip
 .wrangler/
 .vercel-proxy/
+
+# Videos del kit de redes (pesados: se comparten aparte)
+marketing/**/*.mp4
+marketing/*.mp4
