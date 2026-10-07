@@ -279,3 +279,29 @@ test('pago tardío y pedidos cerrados: vencido se reconoce hasta 30 días; cance
   assert.deepEqual([o.status, o.error], [404, 'noOrder']);
   assert.deepEqual((await call('GET', '/api/rift/fiat/pending', { token: admin.token })).orders, []);
 });
+
+test('con el cobro apagado: los pedidos ya hechos se ven, se cancelan y el dueño los puede reconocer; no se arman nuevos', async () => {
+  const { call, withWallet, recognize, owner, env } = setup();
+  const admin = await withWallet(owner);
+  const a = await withWallet();
+  const b = await withWallet();
+  const orderA = (await call('POST', '/api/rift/fiat/order', { body: { kind: 'founder', item: 'pilot' }, token: a.token })).order;
+  const orderB = (await call('POST', '/api/rift/fiat/order', { body: { kind: 'style', item: 'pack' }, token: b.token })).order;
+  // El dueño apaga todo.
+  env.FIAT_PRICES = '';
+  env.FIAT_PAY_URL = '';
+  assert.deepEqual(await call('GET', '/api/rift/fiat'), { status: 200, ok: true, enabled: false, prices: {} });
+  // No se arman pedidos nuevos (ni se "reabre" por la ruta de compra).
+  assert.equal((await call('POST', '/api/rift/fiat/order', { body: { kind: 'founder', item: 'pilot' }, token: a.token })).status, 404);
+  // El historial de cada cuenta sigue mostrando su pedido, con su importe y su destino.
+  const mine = (await call('GET', '/api/rift/fiat/orders', { token: a.token })).orders;
+  assert.deepEqual(mine.map((o) => [o.code, o.ars, o.status, o.target.payUrl]), [[orderA.code, 4500, 'pending', CONFIG.FIAT_PAY_URL]]);
+  // El dueño los ve y los reconoce igual.
+  assert.deepEqual((await call('GET', '/api/rift/fiat/pending', { token: admin.token })).orders.map((o) => o.code).sort(), [orderA.code, orderB.code].sort());
+  assert.equal((await recognize(admin, owner, { code: orderA.code, ars: 4500, ref: 'op-5001' })).status, 200);
+  assert.equal((await call('GET', '/api/rift/me', { token: a.token })).account.purchases.length, 1);
+  assert.equal((await call('GET', '/api/rift/fiat/orders', { token: a.token })).orders[0].status, 'paid');
+  // Y el que no pagó puede cancelar el suyo.
+  assert.equal((await call('POST', '/api/rift/fiat/cancel', { body: { id: orderB.id }, token: b.token })).status, 200);
+  assert.deepEqual((await call('GET', '/api/rift/fiat/pending', { token: admin.token })).orders, []);
+});
