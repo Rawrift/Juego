@@ -27,6 +27,9 @@ const T = {
     apOpen: 'Abrir MetaMask',
     apWait: 'Esperando a MetaMask… Cuando apruebes, volvé a esta pestaña.',
     apInside: 'Si no funciona, abrí el juego dentro de MetaMask',
+    apAlt: '¿No aparece el pedido en MetaMask? Probá con este:',
+    apAltBtn: 'Abrir MetaMask (otra forma)',
+    apStuck: '¿No te apareció nada en MetaMask? Fijate que la app esté actualizada (App Store o Play Store) y probá "Abrir MetaMask (otra forma)". Si sigue sin andar, abrí el juego dentro de MetaMask: con hacerlo una vez la wallet queda en tu cuenta.',
     cancel: 'Cancelar'
   },
   en: {
@@ -48,6 +51,9 @@ const T = {
     apOpen: 'Open MetaMask',
     apWait: 'Waiting for MetaMask… Once you approve, come back to this tab.',
     apInside: 'If it does not work, open the game inside MetaMask',
+    apAlt: 'No request showing up in MetaMask? Try this one:',
+    apAltBtn: 'Open MetaMask (another way)',
+    apStuck: 'Nothing showed up in MetaMask? Make sure the app is up to date (App Store or Play Store) and try "Open MetaMask (another way)". If it still fails, open the game inside MetaMask: doing it once links the wallet to your account.',
     cancel: 'Cancel'
   },
   pt: {
@@ -69,6 +75,9 @@ const T = {
     apOpen: 'Abrir o MetaMask',
     apWait: 'Esperando o MetaMask… Quando aprovar, volte para esta aba.',
     apInside: 'Se não funcionar, abra o jogo dentro do MetaMask',
+    apAlt: 'O pedido não aparece no MetaMask? Tente este:',
+    apAltBtn: 'Abrir o MetaMask (outro jeito)',
+    apStuck: 'Não apareceu nada no MetaMask? Veja se o app está atualizado (App Store ou Play Store) e tente "Abrir o MetaMask (outro jeito)". Se continuar sem funcionar, abra o jogo dentro do MetaMask: fazendo isso uma vez, a carteira fica na sua conta.',
     cancel: 'Cancelar'
   }
 };
@@ -157,8 +166,9 @@ export function openInMetaMask(makeLink = fallbackLink ?? plainLink, { lang = pa
 // ---------- "Aprobá en MetaMask" (Chrome o Safari en el celular, con MetaMask Connect) ----------
 
 let approveBox = null;
-/** Convierte el link de la app (metamask://…) en el universal (https://metamask.app.link/…). */
+/** Link universal (https://metamask.app.link/…) y directo a la app (metamask://…) del mismo pedido. */
 const universal = (link) => (link.startsWith('metamask://') ? `https://metamask.app.link/${link.slice('metamask://'.length)}` : link);
+const direct = (link) => (link.startsWith('https://metamask.app.link/') ? `metamask://${link.slice('https://metamask.app.link/'.length)}` : link);
 
 /**
  * Muestra el botón para abrir MetaMask y aprobar un pedido (conectar, firmar o pagar). Lo llama
@@ -173,15 +183,37 @@ export function showApprove(link, { onCancel = () => {}, lang = pageLang() } = {
   box.className = 'ra-overlay ra-mm';
   box.innerHTML = `<div class="ra-card" role="dialog" aria-modal="true" aria-label="${L.apTitle}">
     <header class="ra-head"><span class="ra-mm-fox" aria-hidden="true">🦊</span><div><h2>${L.apTitle}</h2><p data-mm="msg">${L.apText}</p></div></header>
-    <a class="ra-btn primary" data-mm="approve" href="${universal(link)}">${L.apOpen}</a>
-    <p class="ra-note">${L.alt}</p>
-    <a class="ra-btn ghost" data-mm="approve" href="${link.startsWith('metamask://') ? link : link.replace('https://metamask.app.link/', 'metamask://')}">${L.direct}</a>
+    <a class="ra-btn primary" data-mm="approve" href="${direct(link)}">${L.apOpen}</a>
+    <p class="ra-note">${L.apAlt}</p>
+    <a class="ra-btn ghost" data-mm="approve" href="${universal(link)}">${L.apAltBtn}</a>
     <button class="ra-link ra-mm-inside" data-mm="inside">${L.apInside}</button>
     <button class="ra-btn ghost" data-mm="cancel">${L.cancel}</button>
   </div>`;
   document.body.appendChild(box);
+  // El pedido directo a la app es lo que usa MetaMask por defecto. Si el jugador vuelve a la pestaña y a
+  // los pocos segundos el pedido sigue sin respuesta, se le dice qué probar.
+  let tapped = false;
+  let stuck = null;
+  const onBack = () => {
+    if (document.visibilityState !== 'visible' || !tapped) return;
+    clearTimeout(stuck);
+    stuck = setTimeout(() => {
+      if (box.isConnected) box.querySelector('[data-mm="msg"]').textContent = L.apStuck;
+    }, 8000);
+  };
+  document.addEventListener('visibilitychange', onBack);
+  const observer = new MutationObserver(() => {
+    if (box.isConnected) return;
+    clearTimeout(stuck);
+    document.removeEventListener('visibilitychange', onBack);
+    observer.disconnect();
+  });
+  observer.observe(document.body, { childList: true });
   box.addEventListener('click', (ev) => {
-    if (ev.target.closest('[data-mm="approve"]')) box.querySelector('[data-mm="msg"]').textContent = L.apWait;
+    if (ev.target.closest('[data-mm="approve"]')) {
+      tapped = true;
+      box.querySelector('[data-mm="msg"]').textContent = L.apWait;
+    }
     if (ev.target.closest('[data-mm="cancel"]')) {
       box.remove();
       onCancel();

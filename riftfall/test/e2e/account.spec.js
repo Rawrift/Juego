@@ -346,8 +346,9 @@ test('celular con Chrome: conecta MetaMask sin salir de Chrome (se aprueba en la
     // "Conectar wallet" de arriba: aparece el botón para aprobar en la app (un link que toca el jugador).
     await page.click('#walletBtn');
     const approve = page.locator('.ra-mm [data-mm="approve"]');
-    await expect(approve.first()).toHaveAttribute('href', 'https://metamask.app.link/connect/mwp?p=prueba');
-    await expect(approve.nth(1)).toHaveAttribute('href', 'metamask://connect/mwp?p=prueba');
+    // Primero el pedido directo a la app (lo que usa MetaMask por defecto), después el link universal.
+    await expect(approve.first()).toHaveAttribute('href', 'metamask://connect/mwp?p=prueba');
+    await expect(approve.nth(1)).toHaveAttribute('href', 'https://metamask.app.link/connect/mwp?p=prueba');
     // Aprueba en MetaMask (conectar y firmar en un solo paso) y vuelve a Chrome.
     await page.evaluate(() => window.__mmApprove());
     await expect(page.locator('.ra-mm')).toHaveCount(0);
@@ -376,6 +377,18 @@ test('celular con Chrome: cancelar, y si la conexión no anda, abrir el juego de
     const token = await page.evaluate(() => localStorage.getItem('rift.session'));
     await page.click('#accountBtn');
     await page.click('[data-ra="wallet"]');
+    // Toca "Abrir MetaMask", vuelve a la pestaña y no llegó respuesta: la ventana dice qué probar.
+    // (En la prueba no hay app que abra metamask://: se toca el botón sin seguir el link.)
+    await page.evaluate(() => document.addEventListener('click', (e) => e.target.closest('a[href^="metamask:"]') && e.preventDefault(), { once: true }));
+    await page.locator('.ra-mm [data-mm="approve"]').first().click();
+    await expect(page.locator('.ra-mm [data-mm="msg"]')).toContainText('Esperando a MetaMask');
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+      Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await expect(page.locator('.ra-mm [data-mm="msg"]')).toContainText('¿No te apareció nada en MetaMask?', { timeout: 15_000 });
     await page.click('.ra-mm [data-mm="cancel"]');
     await expect(page.locator('.ra-mm')).toHaveCount(0);
     await expect(page.locator('.toast').last()).toContainText('Se canceló');

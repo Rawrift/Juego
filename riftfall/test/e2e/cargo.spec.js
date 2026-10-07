@@ -256,7 +256,7 @@ test('celular sin wallet: pagar pide aprobar en MetaMask y, si no anda, abre el 
   await phone.locator('[data-act="styTrail"][data-v="magenta"]').tap();
   await phone.locator('.sty-buy').first().locator('text=Pagar US$ 1 en USDT').tap();
   // Se pide aprobar en la app de MetaMask; si no anda, el plan B abre el juego dentro de MetaMask.
-  await expect(phone.locator('.ra-mm [data-mm="approve"]').first()).toHaveAttribute('href', 'https://metamask.app.link/connect/mwp?p=prueba');
+  await expect(phone.locator('.ra-mm [data-mm="approve"]').first()).toHaveAttribute('href', 'metamask://connect/mwp?p=prueba');
   await phone.locator('.ra-mm [data-mm="inside"]').tap();
   // Ventana "Abrir en MetaMask": el jugador toca el link (así iOS abre la app y no la App Store).
   const open = phone.locator('.ra-mm [data-mm="open"]');
