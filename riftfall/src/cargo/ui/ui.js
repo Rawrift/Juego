@@ -16,6 +16,7 @@ import { LIVERY_IDS, TRAIL_IDS, LIVERIES, TRAILS, STYLE_ITEMS } from '../../shar
 import { C, LIVERY, LIVERY_LOOKS, TRAIL_COLORS, hex } from '../render/palette.js';
 import * as style from '../style.js';
 import { account as rgAccount, claimPurchase, onAccount } from '../../rift/account.js';
+import { openInMetaMask } from '../../rift/open-in-metamask.js';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const shipName = (s) => s.name;
@@ -735,12 +736,8 @@ export function createUI({ state, actions, isMap }) {
 
   async function buyItem(item, method) {
     if (!style.hasWallet()) {
-      if (isMobile()) {
-        toast(`${icon('wallet')}<span>${t('style.openMetaMask')}</span>`, 'info');
-        actions.persist?.();
-        const link = await style.metamaskLink();
-        setTimeout(() => (location.href = link), 700);
-      } else toast(`${icon('wallet')}<span>${t('style.noWallet')}</span>`, 'err', 4200);
+      actions.persist?.();
+      openInMetaMask(style.metamaskLink, { lang });
       return;
     }
     sty.busy = { item, method, stage: 'wallet' };

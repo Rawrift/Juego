@@ -97,3 +97,9 @@
 .ra-tools .ra-btn:hover:not(:disabled) { border-color: var(--ra-gold); color: var(--ra-gold); }
 .ra-tools .ra-btn .ra-ic { width: 15px; height: 15px; color: var(--ra-gold); }
 @media (max-width: 380px) { .ra-tools { grid-template-columns: 1fr; } }
+/* Ventana "Abrir en MetaMask" */
+.ra-mm .ra-card { width: min(420px, 100%); }
+.ra-mm-fox { width: 42px; height: 42px; flex: none; display: grid; place-items: center; font-size: 30px; filter: drop-shadow(0 0 12px rgba(255, 160, 60, .35)); }
+.ra-mm .ra-btn { display: flex; width: 100%; box-sizing: border-box; text-decoration: none; }
+.ra-mm .ra-btn[aria-disabled="true"] { opacity: .5; }
+.ra-mm .ra-note { margin: 14px 2px 6px; line-height: 1.45; color: var(--ra-ink2); }

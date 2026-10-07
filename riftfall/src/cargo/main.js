@@ -9,7 +9,7 @@ import { createUI } from './ui/ui.js';
 import { createAudio } from './audio.js';
 import { t, lang } from './i18n.js';
 import { load, save, clear } from './save.js';
-import { receiveCargoTransfer, applyCargoTransfer, owned, signText, setSign } from './style.js';
+import { receiveCargoTransfer, applyCargoTransfer, owned, signText, setSign, metamaskLink } from './style.js';
 import { moveIfOldHost, receiveMove } from '../rift/move.js';
 import { applyTransfer } from '../client/transfer.js';
 import { start as startAccount, createSync, syncPurchases, isReloading } from '../rift/account.js';
@@ -205,7 +205,12 @@ const accountUI = createAccountUI({
   lang: () => lang,
   toast: (msg, kind) => ui.toast(`<span>${msg.replace(/[<>&]/g, '')}</span>`, kind === 'err' ? 'err' : 'ok', 4200),
   onChange: () => ui.renderAll(true),
-  owner: { credits: boost('credits'), level: boost('level'), upgrades: boost('upgrades') }
+  owner: { credits: boost('credits'), level: boost('level'), upgrades: boost('upgrades') },
+  // En el celular sin wallet: Rift Cargo se abre en MetaMask con tu cuenta y tu partida.
+  walletLink: () => {
+    save(state);
+    return metamaskLink();
+  }
 });
 
 let saveT = 0;

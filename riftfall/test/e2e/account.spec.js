@@ -295,6 +295,39 @@ test('dueño: con la wallet del dueño tiene todo desbloqueado y el Panel del du
   }
 });
 
+test('celular sin wallet (Safari): "Conectar wallet" ofrece abrir el juego en MetaMask con la cuenta', async ({ browser }) => {
+  const site = await riftSite(4194);
+  const ctx = await browser.newContext(phone);
+  try {
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto(`${site.url}/`);
+    await expect(page.locator('#accountBtn')).toBeVisible();
+    const token = await page.evaluate(() => localStorage.getItem('rift.session'));
+    await page.click('#accountBtn');
+    await page.click('[data-ra="wallet"]');
+    const open = page.locator('.ra-mm [data-mm="open"]');
+    await expect(open).toHaveText('Abrir en MetaMask');
+    const href = await open.getAttribute('href');
+    expect(href).toMatch(/^https:\/\/metamask\.app\.link\/dapp\/localhost:4194\/\?rf=/);
+    // En el navegador de MetaMask (memoria vacía) el link trae la misma cuenta.
+    const mm = await browser.newContext(phone);
+    const p2 = await mm.newPage();
+    await p2.goto(`http://${href.split('/dapp/')[1]}`);
+    await expect(p2.locator('#accountBtn')).toBeVisible();
+    expect(await p2.evaluate(() => localStorage.getItem('rift.session'))).toBe(token);
+    await mm.close();
+    // Cerrar la ventana vuelve a la cuenta.
+    await page.click('.ra-mm [data-mm="close"]');
+    await expect(page.locator('.ra-mm')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  } finally {
+    await ctx.close();
+    site.close();
+  }
+});
+
 test('mudanza: quien abre otra dirección (Vercel o Cloudflare) pasa al link de siempre (duckdns) con su progreso', async ({ browser }) => {
   test.setTimeout(240_000);
   const DIST = path.resolve('dist-e2e');

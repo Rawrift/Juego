@@ -5,6 +5,8 @@ import './account.css';
 import {
   account, isOnline, start, loginWallet, addPasskey, loginPasskey, setName, logout, passkeysSupported, onAccount, syncPurchases, reloadForAccount
 } from './account.js';
+import { injected } from '../client/injected.js';
+import { openInMetaMask } from './open-in-metamask.js';
 
 const T = {
   es: {
@@ -232,8 +234,10 @@ function cube() {
  * Monta la ventana. `game` = 'riftfall' | 'cargo' (para marcar dónde estás); `lang()` da el idioma;
  * `toast(texto, tipo)` muestra avisos con el estilo del juego. `owner` = herramientas del Panel del
  * dueño de este juego ({ cores: fn, talents: fn, … }): solo se ven si la cuenta es del dueño.
+ * `walletLink()` = link para abrir el juego dentro de MetaMask con la cuenta y el progreso (cuando
+ * en este navegador no hay wallet, por ejemplo Safari o Chrome en el celular).
  */
-export function createAccountUI({ game, lang = () => 'es', toast = () => {}, onChange = () => {}, owner = {} }) {
+export function createAccountUI({ game, lang = () => 'es', toast = () => {}, onChange = () => {}, owner = {}, walletLink }) {
   const root = document.createElement('div');
   root.className = 'ra-overlay';
   root.hidden = true;
@@ -354,6 +358,8 @@ export function createAccountUI({ game, lang = () => 'es', toast = () => {}, onC
       const r = await loginPasskey();
       if (r.switched) reloadSoon();
     });
+    // Sin wallet en este navegador (Safari o Chrome en el celular): el juego se abre dentro de MetaMask.
+    if (act === 'wallet' && !injected()) return openInMetaMask(walletLink, { lang: lang() });
     if (act === 'wallet') return run(act, async () => {
       const r = await loginWallet();
       if (r.switched) return reloadSoon();

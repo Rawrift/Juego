@@ -247,6 +247,11 @@ test('celular sin wallet: pagar abre MetaMask llevando la partida y los estétic
   await phone.locator('.sty-cta').tap();
   await phone.locator('[data-act="styTrail"][data-v="magenta"]').tap();
   await phone.locator('.sty-buy').first().locator('text=Pagar US$ 1 en USDT').tap();
+  // Ventana "Abrir en MetaMask": el jugador toca el link (así iOS abre la app y no la App Store).
+  const open = phone.locator('.ra-mm [data-mm="open"]');
+  await expect(open).toHaveText('Abrir en MetaMask');
+  expect(link).toBeNull();
+  await open.tap();
   await expect.poll(() => link, { timeout: 20_000 }).toBeTruthy();
   const url = new URL(link);
   expect(url.pathname).toMatch(/^\/dapp\/127\.0\.0\.1:\d+\/cargo\/$/);

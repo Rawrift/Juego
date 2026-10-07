@@ -1173,6 +1173,13 @@ test('MetaMask en el celular: al conectar la wallet el progreso viaja al navegad
     await page.goto('http://127.0.0.1:4187/');
     await expect(page.locator('#menuCores')).toHaveText('250');
     await page.click('#walletBtn');
+    // Se abre la ventana con el link: en iPhone la app de MetaMask solo se abre si el jugador lo toca.
+    const open = page.locator('.ra-mm [data-mm="open"]');
+    await expect(open).toHaveText('Abrir en MetaMask');
+    await expect(page.locator('.ra-mm [data-mm="direct"]')).toHaveAttribute('href', /^metamask:\/\/dapp\/127\.0\.0\.1:4187\/\?rf=/);
+    await expect(page.locator('.ra-mm [data-mm="copy"]')).toBeEnabled();
+    expect(opened).toBeNull();
+    await open.click();
     await expect.poll(() => opened, { timeout: 15_000 }).not.toBeNull();
     expect(opened).toContain('/dapp/127.0.0.1:4187/?rf=');
 

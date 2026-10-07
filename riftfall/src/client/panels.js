@@ -24,7 +24,8 @@ import { claimPurchase } from '../rift/account.js';
 import { WORLD, myPublicId, fetchRunBoard, fetchWorldDaily } from './world.js';
 import { dailyNumber } from '../shared/daily.js';
 import { $, el, toast, fmtTime, fmtNum, shortAddr, fmtRift, brandText } from './dom.js';
-import { t, tx, locale } from './i18n.js';
+import { t, tx, locale, lang } from './i18n.js';
+import { openInMetaMask } from '../rift/open-in-metamask.js';
 
 /** Ícono de cada talento (reutiliza los de las mejoras parecidas). */
 const TALENT_ICON = { hull: 'hull', power: 'might', reflex: 'haste', engines: 'thrust', magnet: 'magnet', memory: 'growth' };
@@ -302,9 +303,7 @@ export function createPanels(app) {
               const bnb = el('button', { class: 'btn ghost small', disabled: !bnbAmt }, bnbAmt ? t('f.payBnb', { n: bnbAmt }) : t('f.priceErr'));
               const buy = (btn, method) => async () => {
                 if (!injected()) {
-                  toast(t('toast.openMetaMask'));
-                  const link = await metamaskLink();
-                  setTimeout(() => (location.href = link), 600);
+                  openInMetaMask(metamaskLink, { lang });
                   return;
                 }
                 const prev = btn.textContent;

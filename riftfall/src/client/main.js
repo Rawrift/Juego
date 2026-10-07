@@ -57,6 +57,7 @@ import { moveIfOldHost, receiveMove } from '../rift/move.js';
 import { applyCargoTransfer } from '../cargo/style.js';
 import { start as startAccount, createSync, onAccount, account as rgAccount, setName as setAccountName, syncPurchases } from '../rift/account.js';
 import { createAccountUI } from '../rift/account-ui.js';
+import { openInMetaMask, isTouch } from '../rift/open-in-metamask.js';
 import { dailyNumber, dailySeed, DAILY_RULES, msToNextDaily } from '../shared/daily.js';
 import { DUEL_RULES, decodeDuel, duelUrl, cleanName } from '../shared/duel.js';
 import { WORLD, fetchWorldDaily, submitWorldDaily, myPublicId, defaultName, fetchRunBoard, submitRunBoard } from './world.js';
@@ -622,11 +623,9 @@ async function connectWallet() {
   }
   // En el celular, fuera del navegador de una wallet, abrimos el juego dentro de MetaMask. Ese
   // navegador tiene otra memoria: el progreso viaja en el link para que no se pierda nada.
-  if (!injected() && matchMedia('(pointer: coarse)').matches) {
-    toast(t('toast.openMetaMask'));
+  if (!injected() && isTouch()) {
     saveProgress(app.progress);
-    const link = await metamaskLink();
-    setTimeout(() => (location.href = link), 600);
+    openInMetaMask(metamaskLink, { lang });
     return false;
   }
   const wb = $('#walletBtn');
@@ -1487,7 +1486,12 @@ function setupAccount() {
       applyCosmetics();
       updateMenu();
     },
-    owner: { cores: boost('cores'), talents: boost('talents'), rift: boost('rift'), parts: boost('parts') }
+    owner: { cores: boost('cores'), talents: boost('talents'), rift: boost('rift'), parts: boost('parts') },
+    // En el celular sin wallet: el juego se abre en MetaMask con tu cuenta y tu progreso.
+    walletLink: () => {
+      saveProgress(app.progress);
+      return metamaskLink();
+    }
   });
   $('#accountBtn').addEventListener('click', () => accountUI.open());
   const sync = createSync('riftfall', {
