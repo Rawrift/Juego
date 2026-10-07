@@ -62,42 +62,45 @@ async function withWallet(ctx, w) {
   }, w.address);
 }
 
+const WC_URI = 'wc:prueba@2?relay-protocol=irn&symKey=abc';
+
 /**
- * App de MetaMask simulada para Chrome o Safari del celular (MetaMask Connect): pide aprobar con un
- * link y responde cuando la prueba llama a window.__mmApprove() (como si el jugador aprobara en la app).
+ * WalletConnect simulado (Chrome o Safari del celular, o la compu sin extensión): muestra el código para
+ * conectar y responde cuando la prueba llama a window.__wcApprove() (como si el jugador aprobara en la
+ * app de su wallet). Firma de verdad con `w`.
  */
-async function withMetaMaskApp(ctx, w) {
+async function withWalletApp(ctx, w) {
   await ctx.exposeBinding('testSign', async (_src, msg) => w.signMessage(msg));
-  await ctx.addInitScript((address) => {
-    window.__mmConnectFake = (opts) => {
-      const wait = () => {
-        opts.mobile.preferredOpenLink('metamask://connect/mwp?p=prueba');
-        return new Promise((ok) => (window.__mmApprove = ok));
-      };
-      const client = {
-        status: 'disconnected',
-        async connectAndSign({ message }) {
-          await wait();
-          client.status = 'connected';
-          return { accounts: [address], chainId: '0x38', signature: await window.testSign(message) };
-        },
-        async connect() {
-          await wait();
-          client.status = 'connected';
-          return { accounts: [address], chainId: '0x38' };
-        },
-        getProvider: () => ({
-          async request({ method }) {
-            if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [address];
-            if (method === 'eth_chainId') return '0x38';
-            throw Object.assign(new Error(`no soportado: ${method}`), { code: 4200 });
-          }
-        })
-      };
-      return client;
+  await ctx.addInitScript(({ address, uri }) => {
+    const hex2str = (h) => new TextDecoder().decode(Uint8Array.from(h.slice(2).match(/../g).map((b) => parseInt(b, 16))));
+    const on = {};
+    const wait = () => new Promise((ok) => (window.__wcApprove = ok));
+    window.__wcFake = {
+      session: null,
+      on(ev, fn) {
+        on[ev] = fn;
+      },
+      async connect() {
+        on.display_uri?.(uri);
+        await wait();
+        this.session = { namespaces: { eip155: { accounts: [`eip155:56:${address}`] } } };
+        return this.session;
+      },
+      async request({ method, params }) {
+        if (method !== 'personal_sign') throw Object.assign(new Error(`no soportado: ${method}`), { code: 4200 });
+        await wait();
+        return window.testSign(hex2str(params[0]));
+      }
     };
-  }, w.address);
+  }, { address: w.address, uri: WC_URI });
 }
+
+/** En la prueba no hay apps instaladas: los botones que abren una app (metamask://, trust://) se tocan sin seguir el link. */
+const noAppLinks = (page) =>
+  page.evaluate(() => document.addEventListener('click', (e) => {
+    const a = e.target.closest('a[href]');
+    if (a && !/^https?:/.test(a.getAttribute('href'))) e.preventDefault();
+  }, true));
 
 /** Lector de huella simulado (como el de un celular). */
 async function authenticator(page) {
@@ -332,28 +335,34 @@ test('dueño: con la wallet del dueño tiene todo desbloqueado y el Panel del du
   }
 });
 
-test('celular con Chrome: conecta MetaMask sin salir de Chrome (se aprueba en la app) y el dueño tiene su panel', async ({ browser }) => {
+test('celular con Chrome: conecta la wallet por WalletConnect sin salir de Chrome y el dueño tiene su panel', async ({ browser }) => {
   const boss = Wallet.createRandom();
   const site = await riftSite(4196, { ADMIN_WALLETS: boss.address });
   const ctx = await browser.newContext(phone);
-  await withMetaMaskApp(ctx, boss);
+  await withWalletApp(ctx, boss);
   try {
     const page = await ctx.newPage();
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto(`${site.url}/`);
     await expect(page.locator('#accountBtn')).toBeVisible();
-    // "Conectar wallet" de arriba: aparece el botón para aprobar en la app (un link que toca el jugador).
+    await noAppLinks(page);
+    // "Conectar wallet" de arriba: un botón por app, con el código de WalletConnect en el link.
     await page.click('#walletBtn');
-    const approve = page.locator('.ra-mm [data-mm="approve"]');
-    // Primero el pedido directo a la app (lo que usa MetaMask por defecto), después el link universal.
-    await expect(approve.first()).toHaveAttribute('href', 'metamask://connect/mwp?p=prueba');
-    await expect(approve.nth(1)).toHaveAttribute('href', 'https://metamask.app.link/connect/mwp?p=prueba');
-    // Aprueba en MetaMask (conectar y firmar en un solo paso) y vuelve a Chrome.
-    await page.evaluate(() => window.__mmApprove());
+    await expect(page.locator('.ra-mm h2')).toHaveText('Conectá tu wallet');
+    const mm = page.locator('.ra-mm [data-app="metamask"]').first();
+    await expect(mm).toHaveAttribute('href', `metamask://wc?uri=${encodeURIComponent(WC_URI)}`);
+    await expect(page.locator('.ra-mm [data-app="trust"]')).toHaveAttribute('href', `trust://wc?uri=${encodeURIComponent(WC_URI)}`);
+    // Elige MetaMask, aprueba la conexión en la app y vuelve.
+    await mm.click();
+    await page.evaluate(() => window.__wcApprove());
+    // Ahora pide firmar (gratis): el botón abre la misma app.
+    await expect(page.locator('.ra-mm h2')).toHaveText('Aprobá en tu wallet');
+    await expect(page.locator('.ra-mm [data-app]')).toHaveAttribute('href', 'metamask://');
+    await page.evaluate(() => window.__wcApprove());
     await expect(page.locator('.ra-mm')).toHaveCount(0);
     await expect(page.locator('#walletBtn')).toHaveText(boss.address.slice(0, 6).toLowerCase() + '…' + boss.address.slice(-4).toLowerCase());
-    // La wallet quedó en la Cuenta Rift: es el dueño, con su panel, sin haber abierto el juego en MetaMask.
+    // La wallet quedó en la Cuenta Rift: es el dueño, con su panel.
     await page.click('#accountBtn');
     await expect(page.locator('.ra-status')).toContainText('Dueño');
     await expect(page.locator('.ra-owner')).toBeVisible();
@@ -364,31 +373,57 @@ test('celular con Chrome: conecta MetaMask sin salir de Chrome (se aprueba en la
   }
 });
 
-test('celular con Chrome: cancelar, y si la conexión no anda, abrir el juego dentro de MetaMask con la misma cuenta', async ({ browser }) => {
-  const site = await riftSite(4194);
-  const ctx = await browser.newContext(phone);
-  await withMetaMaskApp(ctx, Wallet.createRandom());
+test('compu sin MetaMask: se conecta escaneando el código QR con la wallet del celular', async ({ browser }) => {
+  const site = await riftSite(4197);
+  const ctx = await browser.newContext(desktop);
+  const w = Wallet.createRandom();
+  await withWalletApp(ctx, w);
   try {
     const page = await ctx.newPage();
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto(`${site.url}/`);
     await expect(page.locator('#accountBtn')).toBeVisible();
+    await page.click('#accountBtn');
+    await page.click('[data-ra="wallet"]');
+    await expect(page.locator('.ra-mm [data-mm="msg"]')).toContainText('Escaneá este código');
+    await expect(page.locator('.ra-mm-qr svg')).toBeVisible();
+    await page.evaluate(() => window.__wcApprove());
+    await expect(page.locator('.ra-mm [data-mm="msg"]')).toContainText('Abrí la wallet en tu celular');
+    await page.evaluate(() => window.__wcApprove());
+    await expect(page.locator('.ra-mm')).toHaveCount(0);
+    await expect(page.locator('.ra-cred')).toContainText(w.address.slice(0, 6).toLowerCase());
+    expect(errors).toEqual([]);
+  } finally {
+    await ctx.close();
+    site.close();
+  }
+});
+
+test('celular con Chrome: cancelar, y si la conexión no anda, abrir el juego dentro de MetaMask con la misma cuenta', async ({ browser }) => {
+  const site = await riftSite(4194);
+  const ctx = await browser.newContext(phone);
+  await withWalletApp(ctx, Wallet.createRandom());
+  try {
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto(`${site.url}/`);
+    await expect(page.locator('#accountBtn')).toBeVisible();
+    await noAppLinks(page);
     const token = await page.evaluate(() => localStorage.getItem('rift.session'));
     await page.click('#accountBtn');
     await page.click('[data-ra="wallet"]');
-    // Toca "Abrir MetaMask", vuelve a la pestaña y no llegó respuesta: la ventana dice qué probar.
-    // (En la prueba no hay app que abra metamask://: se toca el botón sin seguir el link.)
-    await page.evaluate(() => document.addEventListener('click', (e) => e.target.closest('a[href^="metamask:"]') && e.preventDefault(), { once: true }));
-    await page.locator('.ra-mm [data-mm="approve"]').first().click();
-    await expect(page.locator('.ra-mm [data-mm="msg"]')).toContainText('Esperando a MetaMask');
+    // Toca MetaMask, vuelve a la pestaña y no llegó respuesta: la ventana dice qué probar.
+    await page.locator('.ra-mm [data-app="metamask"]').first().click();
+    await expect(page.locator('.ra-mm [data-mm="msg"]')).toContainText('Esperando tu wallet');
     await page.evaluate(() => {
       Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
       document.dispatchEvent(new Event('visibilitychange'));
       Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
       document.dispatchEvent(new Event('visibilitychange'));
     });
-    await expect(page.locator('.ra-mm [data-mm="msg"]')).toContainText('¿No te apareció nada en MetaMask?', { timeout: 15_000 });
+    await expect(page.locator('.ra-mm [data-mm="msg"]')).toContainText('¿No te apareció nada en la wallet?', { timeout: 15_000 });
     await page.click('.ra-mm [data-mm="cancel"]');
     await expect(page.locator('.ra-mm')).toHaveCount(0);
     await expect(page.locator('.toast').last()).toContainText('Se canceló');

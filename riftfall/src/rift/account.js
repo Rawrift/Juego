@@ -4,7 +4,7 @@
 // Si no hay conexión o el sitio no tiene servidor, el juego sigue igual con lo guardado en el dispositivo.
 
 import { injected } from '../client/injected.js';
-import { remoteWallet, remoteSign } from './wallet.js';
+import { remoteWallet, remoteAddress, remoteSign } from './wallet.js';
 
 const TOKEN = 'rift.session';
 const CACHE = 'rift.account';
@@ -149,16 +149,19 @@ export async function loginWallet(provider = eth()) {
   return afterLogin(await api('POST', '/api/rift/wallet/login', { id: n.id, signature }));
 }
 
-/** Chrome o Safari en el celular: se conecta con la app de MetaMask y se firma en el mismo paso. */
+/**
+ * Sin wallet en el navegador (Chrome o Safari en el celular, o la compu sin la extensión): se conecta
+ * la wallet por WalletConnect y se firma el mensaje (gratis).
+ */
 async function loginRemote() {
-  const n = await api('POST', '/api/rift/wallet/nonce', { origin: location.origin });
-  let signature;
-  try {
-    ({ signature } = await remoteSign(n.message));
-  } catch (err) {
-    // "Cancelar" en la ventana del juego, "Rechazar" en MetaMask, o la conexión que no anduvo.
-    throw fail(err?.message === 'cancelled' ? 'cancelled' : err?.code === 4001 ? 'rejected' : 'mmconnect');
-  }
+  // "Cancelar" en la ventana del juego, "Rechazar" en la wallet, o la conexión que no anduvo.
+  const mapped = (p) =>
+    p.catch((err) => {
+      throw fail(err?.message === 'cancelled' ? 'cancelled' : err?.code === 4001 ? 'rejected' : 'mmconnect');
+    });
+  const address = await mapped(remoteAddress());
+  const n = await api('POST', '/api/rift/wallet/nonce', { address, origin: location.origin });
+  const { signature } = await mapped(remoteSign(n.message));
   return afterLogin(await api('POST', '/api/rift/wallet/login', { id: n.id, signature }));
 }
 

@@ -58,6 +58,7 @@ import { applyCargoTransfer } from '../cargo/style.js';
 import { start as startAccount, createSync, onAccount, account as rgAccount, setName as setAccountName, syncPurchases, loginWallet, reloadForAccount, isOnline as isAccountOnline } from '../rift/account.js';
 import { createAccountUI } from '../rift/account-ui.js';
 import { openInMetaMask, isTouch } from '../rift/open-in-metamask.js';
+import { remoteWallet } from '../rift/wallet.js';
 import { dailyNumber, dailySeed, DAILY_RULES, msToNextDaily } from '../shared/daily.js';
 import { DUEL_RULES, decodeDuel, duelUrl, cleanName } from '../shared/duel.js';
 import { WORLD, fetchWorldDaily, submitWorldDaily, myPublicId, defaultName, fetchRunBoard, submitRunBoard } from './world.js';
@@ -555,7 +556,7 @@ function updateMenu() {
     $('#menuRift').textContent = fmtRift(app.balances.rift);
   }
   const wb = $('#walletBtn');
-  const walletAddr = p?.wallet ?? (app.wallet?.connected ? app.wallet.address : null) ?? (!injected() && isTouch() ? rgAccount()?.wallets?.[0] : null) ?? null;
+  const walletAddr = p?.wallet ?? (app.wallet?.connected ? app.wallet.address : null) ?? (!injected() ? rgAccount()?.wallets?.[0] : null) ?? null;
   // Sin token lanzado la wallet no sirve para nada: mejor no mostrar el botón.
   wb.classList.toggle('hidden', !app.config?.chain && !walletAddr);
   if (walletAddr) {
@@ -644,16 +645,14 @@ async function connectWallet() {
     toast(t('toast.noChain'), 'err');
     return false;
   }
-  // Chrome o Safari en el celular: se conecta con la app de MetaMask (MetaMask Connect) y la wallet
-  // queda en tu Cuenta Rift. Si eso falla, queda abrir el juego dentro de MetaMask.
+  // Sin wallet en el navegador: se conecta por WalletConnect (celular o QR en la compu) y la wallet
+  // queda en tu Cuenta Rift. Sin WalletConnect o sin servidor de cuentas, en el celular queda abrir el
+  // juego dentro de MetaMask.
+  if (!injected() && remoteWallet() && isAccountOnline()) return connectRemoteWallet();
   if (!injected() && isTouch()) {
-    // Sin servidor de cuentas (por ejemplo, un sitio sin la nube) queda abrir el juego dentro de MetaMask.
-    if (!isAccountOnline()) {
-      saveProgress(app.progress);
-      openInMetaMask(metamaskLink, { lang });
-      return false;
-    }
-    return connectRemoteWallet();
+    saveProgress(app.progress);
+    openInMetaMask(metamaskLink, { lang });
+    return false;
   }
   const wb = $('#walletBtn');
   wb.disabled = true;
@@ -1356,8 +1355,8 @@ $('#quitBtn').addEventListener('click', () => {
 $('#walletBtn').addEventListener('click', async () => {
   audio.unlock();
   if (app.wallet?.connected) panels.open(app.config?.staticMode ? 'hangar' : 'profile');
-  // En el celular la wallet conectada queda en la Cuenta Rift: el botón la muestra.
-  else if (accountUI && !injected() && isTouch() && rgAccount()?.wallets?.length) accountUI.open();
+  // Sin wallet en el navegador, la wallet conectada queda en la Cuenta Rift: el botón la muestra.
+  else if (accountUI && !injected() && rgAccount()?.wallets?.length) accountUI.open();
   else await connectWallet();
 });
 $('#muteBtn').addEventListener('click', () => {
