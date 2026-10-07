@@ -58,7 +58,7 @@ import { applyCargoTransfer } from '../cargo/style.js';
 import { start as startAccount, createSync, onAccount, account as rgAccount, setName as setAccountName, syncPurchases, loginWallet, reloadForAccount, isOnline as isAccountOnline } from '../rift/account.js';
 import { createAccountUI } from '../rift/account-ui.js';
 import { openInMetaMask, isTouch } from '../rift/open-in-metamask.js';
-import { remoteWallet } from '../rift/wallet.js';
+import { remoteWallet, remoteAddress } from '../rift/wallet.js';
 import { dailyNumber, dailySeed, DAILY_RULES, msToNextDaily } from '../shared/daily.js';
 import { DUEL_RULES, decodeDuel, duelUrl, cleanName } from '../shared/duel.js';
 import { WORLD, fetchWorldDaily, submitWorldDaily, myPublicId, defaultName, fetchRunBoard, submitRunBoard } from './world.js';
@@ -617,18 +617,40 @@ function offerWatchToken(address) {
   app.wallet.watchToken().catch(() => {});
 }
 
+/**
+ * Sin wallet en el navegador: una sola conexión de WalletConnect para todo. La primera vez la wallet se
+ * suma a tu Cuenta Rift (firma gratis); el Hangar, el token y las compras usan esa misma conexión, que
+ * queda guardada para la próxima vez.
+ */
 async function connectRemoteWallet() {
   const wb = $('#walletBtn');
   saveProgress(app.progress);
   wb.disabled = true;
   wb.textContent = t('menu.connecting');
   try {
-    const r = await loginWallet();
-    const wallets = r.account?.wallets ?? [];
-    toast(t('toast.walletConnected', { a: shortAddr(wallets[wallets.length - 1] ?? '') }), 'ok');
-    // Esa wallet ya era de otra cuenta tuya: se entra a esa y se recarga con su progreso.
-    if (r.switched) reloadForAccount();
-    else if (await syncPurchases()) applyCosmetics();
+    let address;
+    try {
+      address = await remoteAddress();
+    } catch (err) {
+      if (err?.code === 4001) return false; // canceló o rechazó en la wallet
+      const e = new Error(err?.message ?? 'wc');
+      e.code = 'mmconnect';
+      throw e;
+    }
+    if (isAccountOnline() && !(rgAccount()?.wallets ?? []).includes(address)) {
+      const r = await loginWallet();
+      if (r.switched) {
+        // Esa wallet ya era de otra cuenta tuya: se entra a esa y se recarga con su progreso.
+        toast(t('toast.walletConnected', { a: shortAddr(address) }), 'ok');
+        reloadForAccount();
+        return true;
+      }
+      if (await syncPurchases()) applyCosmetics();
+    }
+    await app.wallet?.connect();
+    toast(t('toast.walletConnected', { a: shortAddr(address) }), 'ok');
+    updateMenu();
+    app.balances = (await app.wallet?.balances().catch(() => null)) ?? null;
     return true;
   } catch (err) {
     if (err?.code === 'mmconnect') openInMetaMask(metamaskLink, { lang });
@@ -636,6 +658,15 @@ async function connectRemoteWallet() {
     return false;
   } finally {
     wb.disabled = false;
+    updateMenu();
+  }
+}
+
+/** Después de sumar la wallet desde la Cuenta Rift: el Hangar y el token usan la misma conexión. */
+async function attachRemoteWallet() {
+  if (!app.wallet || app.wallet.connected || injected() || !remoteWallet()) return;
+  if (await app.wallet.reconnect().catch(() => null)) {
+    app.balances = await app.wallet.balances().catch(() => null);
     updateMenu();
   }
 }
@@ -648,7 +679,7 @@ async function connectWallet() {
   // Sin wallet en el navegador: se conecta por WalletConnect (celular o QR en la compu) y la wallet
   // queda en tu Cuenta Rift. Sin WalletConnect o sin servidor de cuentas, en el celular queda abrir el
   // juego dentro de MetaMask.
-  if (!injected() && remoteWallet() && isAccountOnline()) return connectRemoteWallet();
+  if (!injected() && remoteWallet()) return connectRemoteWallet();
   if (!injected() && isTouch()) {
     saveProgress(app.progress);
     openInMetaMask(metamaskLink, { lang });
@@ -703,7 +734,7 @@ async function startRun(mode = 'normal') {
   runsThisSession++;
   // Nave NFT elegida: hace falta la wallet conectada (y que la nave siga siendo suya) para volarla.
   if (mode === 'normal' && app.config?.staticMode && app.ship.tokenId) {
-    if (!app.wallet?.connected && (!injected() || !(await connectWallet()))) toast(t('toast.sparkFallback', { name: SHIPS[app.ship.key].name }));
+    if (!app.wallet?.connected && (!(injected() || remoteWallet()) || !(await connectWallet()))) toast(t('toast.sparkFallback', { name: SHIPS[app.ship.key].name }));
     else if (app.wallet?.connected) {
       const owned = await app.wallet.myShips().catch(() => null);
       const mine = owned?.find((s) => s.tokenId === app.ship.tokenId);
@@ -1355,8 +1386,6 @@ $('#quitBtn').addEventListener('click', () => {
 $('#walletBtn').addEventListener('click', async () => {
   audio.unlock();
   if (app.wallet?.connected) panels.open(app.config?.staticMode ? 'hangar' : 'profile');
-  // Sin wallet en el navegador, la wallet conectada queda en la Cuenta Rift: el botón la muestra.
-  else if (accountUI && !injected() && rgAccount()?.wallets?.length) accountUI.open();
   else await connectWallet();
 });
 $('#muteBtn').addEventListener('click', () => {
@@ -1513,6 +1542,7 @@ function setupAccount() {
     onChange: () => {
       applyCosmetics();
       updateMenu();
+      attachRemoteWallet();
     },
     owner: { cores: boost('cores'), talents: boost('talents'), rift: boost('rift'), parts: boost('parts') },
     // En el celular sin wallet: el juego se abre en MetaMask con tu cuenta y tu progreso.

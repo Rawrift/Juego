@@ -375,8 +375,10 @@ export function createAccountUI({ game, lang = () => 'es', toast = () => {}, onC
       });
       if (r.switched) return reloadSoon();
       toast(tx().ok.wallet, 'ok');
-      // Las compras hechas con esa wallet en este dispositivo pasan a la cuenta.
-      if (await syncPurchases()) onChange();
+      // Las compras hechas con esa wallet en este dispositivo pasan a la cuenta, y el juego se entera
+      // de la wallet (por ejemplo, el Hangar usa la misma conexión).
+      await syncPurchases();
+      onChange();
     });
     if (act === 'logout') {
       if (!confirm(tx().logoutConfirm)) return;

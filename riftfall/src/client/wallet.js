@@ -5,6 +5,7 @@ import { BrowserProvider, JsonRpcProvider, Contract, formatEther } from 'ethers'
 import { TOKEN_ABI, VAULT_ABI, SHIPS_ABI, MARKET_ABI, ARENA_ABI } from '../shared/abis.js';
 import { t } from './i18n.js';
 import { injected } from './injected.js';
+import { remoteWallet, walletProvider, connectedProvider } from '../rift/wallet.js';
 
 const ETH = { name: 'Ether', symbol: 'ETH', decimals: 18 };
 const CHAINS = {
@@ -128,13 +129,14 @@ export function createWallet(chainCfg) {
     get connected() {
       return !!signer;
     },
-    available: () => typeof window !== 'undefined' && !!injected(),
+    available: () => typeof window !== 'undefined' && (!!injected() || remoteWallet()),
     onChange(fn) {
       listeners.add(fn);
     },
 
     async connect() {
-      provider = injected();
+      // La wallet del navegador o, si no hay, la misma conexión de WalletConnect de la Cuenta Rift.
+      provider = injected() ?? (await walletProvider({ chainId: chainCfg.chainId }));
       if (!provider) throw new Error(t('err.noWallet'));
       browser = new BrowserProvider(provider, 'any');
       await browser.send('eth_requestAccounts', []);
@@ -145,7 +147,13 @@ export function createWallet(chainCfg) {
     /** Recupera en silencio una conexión ya autorizada en la red del juego (sin abrir la wallet). */
     async reconnect() {
       provider = injected();
-      if (!provider) return null;
+      if (!provider) {
+        // Conectada antes por WalletConnect: sigue conectada sin pedir nada.
+        provider = await connectedProvider({ chainId: chainCfg.chainId });
+        if (!provider) return null;
+        browser = new BrowserProvider(provider, 'any');
+        return attach();
+      }
       const [accounts, chainId] = await Promise.all([provider.request({ method: 'eth_accounts' }), provider.request({ method: 'eth_chainId' })]);
       if (!accounts?.length || Number(chainId) !== chainCfg.chainId) return null;
       browser = new BrowserProvider(provider, 'any');

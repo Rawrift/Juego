@@ -75,8 +75,9 @@ async function withWalletApp(ctx, w) {
     const hex2str = (h) => new TextDecoder().decode(Uint8Array.from(h.slice(2).match(/../g).map((b) => parseInt(b, 16))));
     const on = {};
     const wait = () => new Promise((ok) => (window.__wcApprove = ok));
+    // La conexión queda guardada en el navegador (como hace WalletConnect): al recargar sigue.
     window.__wcFake = {
-      session: null,
+      session: JSON.parse(localStorage.getItem('fake.wc') ?? 'null'),
       on(ev, fn) {
         on[ev] = fn;
       },
@@ -84,7 +85,12 @@ async function withWalletApp(ctx, w) {
         on.display_uri?.(uri);
         await wait();
         this.session = { namespaces: { eip155: { accounts: [`eip155:56:${address}`] } } };
+        localStorage.setItem('fake.wc', JSON.stringify(this.session));
         return this.session;
+      },
+      async disconnect() {
+        this.session = null;
+        localStorage.removeItem('fake.wc');
       },
       async request({ method, params }) {
         if (method !== 'personal_sign') throw Object.assign(new Error(`no soportado: ${method}`), { code: 4200 });
@@ -361,11 +367,22 @@ test('celular con Chrome: conecta la wallet por WalletConnect sin salir de Chrom
     await expect(page.locator('.ra-mm [data-app]')).toHaveAttribute('href', 'metamask://');
     await page.evaluate(() => window.__wcApprove());
     await expect(page.locator('.ra-mm')).toHaveCount(0);
-    await expect(page.locator('#walletBtn')).toHaveText(boss.address.slice(0, 6).toLowerCase() + '…' + boss.address.slice(-4).toLowerCase());
+    await expect(page.locator('#walletBtn')).toHaveText(new RegExp(`^${boss.address.slice(0, 6)}…${boss.address.slice(-4)}$`, 'i'));
     // La wallet quedó en la Cuenta Rift: es el dueño, con su panel.
     await page.click('#accountBtn');
     await expect(page.locator('.ra-status')).toContainText('Dueño');
     await expect(page.locator('.ra-owner')).toBeVisible();
+    await page.click('[data-ra="close"]');
+    // Una sola conexión para todo: el Hangar y el token usan la misma, sin conectar ni firmar de nuevo.
+    expect(await page.evaluate(() => window.__RIFTFALL__.app.wallet.connected)).toBe(true);
+    // Al recargar sigue conectada, sin pedir nada.
+    await page.reload();
+    await expect(page.locator('#accountBtn')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.__RIFTFALL__?.app?.wallet?.connected ?? false), { timeout: 15_000 }).toBe(true);
+    await expect(page.locator('.ra-mm')).toHaveCount(0);
+    // "Conectar wallet" en cualquier lado (por ejemplo, el Hangar) no vuelve a pedir nada.
+    expect(await page.evaluate(() => window.__RIFTFALL__.app.connectWallet?.() ?? true)).toBeTruthy();
+    await expect(page.locator('.ra-mm')).toHaveCount(0);
     expect(errors).toEqual([]);
   } finally {
     await ctx.close();
@@ -393,6 +410,8 @@ test('compu sin MetaMask: se conecta escaneando el código QR con la wallet del 
     await page.evaluate(() => window.__wcApprove());
     await expect(page.locator('.ra-mm')).toHaveCount(0);
     await expect(page.locator('.ra-cred')).toContainText(w.address.slice(0, 6).toLowerCase());
+    // El juego (Hangar, token) quedó conectado con la misma wallet.
+    await expect.poll(() => page.evaluate(() => window.__RIFTFALL__.app.wallet.connected)).toBe(true);
     expect(errors).toEqual([]);
   } finally {
     await ctx.close();

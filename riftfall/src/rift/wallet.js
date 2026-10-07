@@ -13,6 +13,8 @@ const PROJECT_ID = import.meta.env.VITE_WC_PROJECT_ID ?? '';
 const CHAIN = 'eip155:56';
 const METHODS = ['personal_sign', 'eth_sendTransaction', 'wallet_switchEthereumChain', 'wallet_addEthereumChain'];
 const APP_KEY = 'rift.wcApp';
+/** Marca de que este navegador tiene una conexión de WalletConnect (así no se carga la librería en vano). */
+const SESSION_KEY = 'rift.wc';
 
 // En el build de pruebas (`npm run build:e2e`) se puede simular WalletConnect; en producción no.
 const fake = () => (import.meta.env.MODE === 'e2e' && typeof window !== 'undefined' ? window.__wcFake : null);
@@ -25,20 +27,23 @@ let upP = null;
 const pending = new Set();
 const cancelAll = () => [...pending].forEach((stop) => stop());
 
-function readApp() {
+function read(key) {
   try {
-    return localStorage.getItem(APP_KEY);
+    return localStorage.getItem(key);
   } catch {
     return null;
   }
 }
-function saveApp(id) {
+function write(key, v) {
   try {
-    localStorage.setItem(APP_KEY, id);
+    if (v == null) localStorage.removeItem(key);
+    else localStorage.setItem(key, v);
   } catch {
     /* sin almacenamiento */
   }
 }
+const readApp = () => read(APP_KEY);
+const saveApp = (id) => write(APP_KEY, id);
 
 function load() {
   upP ??= (fake()
@@ -58,6 +63,8 @@ function load() {
     .then((up) => {
       // El código para conectar: botones por app en el celular, QR en la compu.
       up.on('display_uri', (uri) => showConnect(uri, { onCancel: cancelAll, onPick: saveApp }));
+      // Si el jugador desconecta el sitio desde su wallet, la próxima vez se pide conectar de nuevo.
+      up.on('session_delete', () => write(SESSION_KEY, null));
       return up;
     })
     .catch((err) => {
@@ -102,17 +109,24 @@ async function session() {
       })
     );
   }
-  const accounts = up.session?.namespaces?.eip155?.accounts ?? [];
+  const address = addressOf(up);
+  if (!address) throw new Error('noAccount');
+  write(SESSION_KEY, '1');
+  return { up, address };
+}
+
+const accountsOf = (up) => up.session?.namespaces?.eip155?.accounts ?? [];
+function addressOf(up) {
+  const accounts = accountsOf(up);
   const account = accounts.find((a) => a.startsWith(`${CHAIN}:`)) ?? accounts[0];
-  if (!account) throw new Error('noAccount');
-  return { up, address: account.split(':')[2].toLowerCase() };
+  return account ? account.split(':')[2].toLowerCase() : null;
 }
 
 /** Un pedido que se aprueba en la wallet (firmar, pagar): la ventana tiene el botón para abrir la app. */
-function ask(up, method, params) {
+function ask(up, method, params, chain = CHAIN) {
   return waitFor(() => {
     showApprove(readApp(), { onCancel: cancelAll });
-    return up.request({ method, params }, CHAIN);
+    return up.request({ method, params }, chain);
   });
 }
 
@@ -132,27 +146,68 @@ export async function remoteSign(message) {
 /** Pedidos que se aprueban en la wallet (los de lectura, como un saldo, van directo a la red). */
 const NEEDS_APPROVAL = /^(eth_sendTransaction|eth_sign|personal_sign)/;
 
+const NOT_APPROVED = {
+  es: 'Tu wallet no tiene habilitada esta red para el juego. Agregala en la wallet y volvé a conectar.',
+  en: 'Your wallet has not enabled this network for the game. Add it in your wallet and connect again.',
+  pt: 'Sua carteira não habilitou esta rede para o jogo. Adicione-a na carteira e conecte de novo.'
+};
+
 /**
- * Proveedor EIP-1193 para pagar: la wallet del navegador o, si no hay, la conectada por WalletConnect
- * (siempre en BNB Chain). null si no hay forma de conectar una wallet.
+ * Proveedor EIP-1193 sobre la conexión de WalletConnect, fijo en la red `chainId` (por defecto BNB
+ * Chain). Nunca manda un pago a otra red: si la wallet no aprobó esa red, avisa en vez de enviarlo.
  */
-export async function walletProvider() {
-  const local = injected();
-  if (local) return local;
-  if (!remoteWallet()) return null;
-  const { up, address } = await session();
+function wrap(up, address, chainId) {
+  const chain = `eip155:${chainId}`;
   return {
     isWalletConnect: true,
     async request({ method, params = [] }) {
       if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [address];
-      if (method === 'eth_chainId') return '0x38';
-      if (method === 'net_version') return '56';
-      // La sesión ya es en BNB Chain.
+      if (method === 'eth_chainId') return `0x${chainId.toString(16)}`;
+      if (method === 'net_version') return String(chainId);
+      // La conexión ya es en esta red: no hay que cambiar nada en la wallet.
       if (method === 'wallet_switchEthereumChain' || method === 'wallet_addEthereumChain') return null;
-      if (NEEDS_APPROVAL.test(method)) return ask(up, method, params);
-      return up.request({ method, params }, CHAIN);
+      if (NEEDS_APPROVAL.test(method)) {
+        if (!accountsOf(up).some((a) => a.startsWith(`${chain}:`))) {
+          const lang = (typeof document !== 'undefined' && document.documentElement.lang) || 'es';
+          throw Object.assign(new Error(NOT_APPROVED[lang] ?? NOT_APPROVED.es), { code: 4902 });
+        }
+        return ask(up, method, params, chain);
+      }
+      return up.request({ method, params }, chain);
     },
     on() {},
     removeListener() {}
   };
+}
+
+/**
+ * Proveedor EIP-1193 para pagar o usar el token: la wallet del navegador o, si no hay, la conectada
+ * por WalletConnect (si todavía no hay conexión, se pide). null si no hay forma de conectar una wallet.
+ */
+export async function walletProvider({ chainId = 56 } = {}) {
+  const local = injected();
+  if (local) return local;
+  if (!remoteWallet()) return null;
+  const { up, address } = await session();
+  return wrap(up, address, chainId);
+}
+
+/** La conexión de WalletConnect que ya tenía este navegador, sin pedir nada (null si no hay). */
+export async function connectedProvider({ chainId = 56 } = {}) {
+  if (injected() || !remoteWallet() || !read(SESSION_KEY)) return null;
+  try {
+    const up = await load();
+    const address = up.session && addressOf(up);
+    return address ? wrap(up, address, chainId) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Cierra la conexión de WalletConnect de este navegador (al cerrar la sesión de la cuenta). */
+export async function disconnectRemote() {
+  if (!read(SESSION_KEY)) return;
+  write(SESSION_KEY, null);
+  const up = await load().catch(() => null);
+  await up?.disconnect?.().catch(() => {});
 }

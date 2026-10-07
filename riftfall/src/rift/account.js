@@ -4,7 +4,7 @@
 // Si no hay conexión o el sitio no tiene servidor, el juego sigue igual con lo guardado en el dispositivo.
 
 import { injected } from '../client/injected.js';
-import { remoteWallet, remoteAddress, remoteSign } from './wallet.js';
+import { remoteWallet, remoteAddress, remoteSign, disconnectRemote } from './wallet.js';
 
 const TOKEN = 'rift.session';
 const CACHE = 'rift.account';
@@ -213,6 +213,8 @@ export async function setName(name) {
 /** Cierra la sesión en este dispositivo y lo deja como nuevo (el progreso queda en la cuenta). */
 export async function logout() {
   await api('POST', '/api/rift/logout').catch(() => {});
+  // La conexión de WalletConnect de este dispositivo también se cierra.
+  await disconnectRemote().catch(() => {});
   for (const k of [TOKEN, CACHE, 'riftfall.pid', ...GAME_KEYS]) write(k, null);
   current = null;
 }
