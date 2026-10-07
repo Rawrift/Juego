@@ -254,7 +254,7 @@ export function createUI({ state, actions, isMap }) {
   }
 
   function renderOrders() {
-    const list = [...state.offers].sort((a, b) => (b.tutorial - a.tutorial) || (b.urgent - a.urgent) || (a.expires - b.expires));
+    const list = [...state.offers].sort((a, b) => (Number(!!b.tutorial) - Number(!!a.tutorial)) || (b.urgent - a.urgent) || (a.expires - b.expires));
     return `<h3 class="ph">${t('orders.title')}</h3>
       ${list.length ? list.map(offerCard).join('') : `<p class="empty">${icon('clock')}${t('orders.empty')}</p>`}`;
   }
@@ -944,6 +944,13 @@ export function createUI({ state, actions, isMap }) {
     if (step >= 99) return ($('#coach', root).hidden = true);
     if (step === 0) {
       ui.tab = 'orders';
+      // En el celular el panel arranca escondido y el primer pedido quedaba fuera de la pantalla: se
+      // abre una vez para que "Enviar" se vea. Si el jugador lo cierra, no se vuelve a abrir solo.
+      if (isMobile() && !ui.tutSheet) {
+        ui.tutSheet = true;
+        setSheet(true);
+        renderPanel(true);
+      }
       coach(`<b>${t('tut.1')}</b><p>${t('tut.1b')}</p>`, '.tut-target .btn.primary', []);
     } else if (step === 1) coach(`<p>${t('tut.2')}</p>`, null, [{ act: 'tutNext', label: t('tut.next') }]);
     else if (step === 2) coach(`<p>${t('tut.3')}</p>`, isMobile() ? '.mtab-map' : '#mapToggle', []);
