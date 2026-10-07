@@ -121,6 +121,23 @@ export function walletMessage(address, code, host, at) {
   ].join('\n');
 }
 
+/** Red de la que vino alguien, a partir de `?ref=` / `utm_source` o de la página que lo trajo. */
+export function sourceOf(ref) {
+  const r = String(ref ?? '').trim().toLowerCase().replace(/^www\./, '').slice(0, 60);
+  if (!r) return null;
+  const known = [['tiktok', /tiktok|^tt$/], ['instagram', /instagram|^ig$/], ['facebook', /facebook|fb\.|^fb$/], ['x', /^t\.co$|twitter|^x\.com$|^x$/],
+    ['youtube', /youtube|youtu\.be|^yt$/], ['whatsapp', /whatsapp|^wa$/], ['telegram', /telegram|^t\.me$|^tg$/], ['reddit', /reddit/],
+    ['google', /google/], ['itch', /itch\.io|^itch$/], ['crazygames', /crazygames/], ['discord', /discord/]];
+  for (const [name, re] of known) if (re.test(r)) return name;
+  return r.replace(/[^a-z0-9._-]/g, '').slice(0, 40) || null;
+}
+
+/** Dispositivo según el navegador: celular, compu o robot (vistas previas de links, buscadores). */
+export function deviceKind(ua = '') {
+  if (/bot|crawl|spider|slurp|headless|lighthouse|preview|facebookexternalhit|whatsapp|telegram|discord|embedly/i.test(ua)) return 'bot';
+  return /Mobi|Android|iPhone|iPad/i.test(ua) ? 'mobile' : 'desktop';
+}
+
 // ---------- Servidor ----------
 
 export function createApi({ now = () => Date.now(), chain = createChain() } = {}) {
@@ -205,6 +222,33 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
     return { ok: true, token, switched: current?.player.id !== targetId, prevGuest, account: await account(ctx, player) };
   }
 
+  /**
+   * Guarda de dónde llegó un jugador nuevo: la red (link con ?ref= o la página que lo trajo), el país
+   * (lo dice Vercel o Cloudflare según por dónde entró), la zona horaria, el idioma, el dispositivo y
+   * el juego. No guarda la IP. Si algo falla, la cuenta se crea igual.
+   */
+  async function recordOrigin(ctx, playerId, o = {}) {
+    try {
+      const h = ctx.request.headers;
+      const clip = (v, n) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, n) : null);
+      // Entrando por Vercel (el link de siempre), el país de Cloudflare sería el del servidor de Vercel.
+      const viaVercel = h.has('x-vercel-id') || h.has('x-vercel-ip-country');
+      const country = clip(h.get('x-vercel-ip-country'), 2) ?? (viaVercel ? null : clip(ctx.request.cf?.country, 2));
+      await ctx.store.addOrigin({
+        playerId,
+        src: sourceOf(o?.ref),
+        country: country?.toUpperCase() ?? null,
+        tz: clip(o?.tz, 40),
+        lang: clip(o?.lang, 12),
+        device: deviceKind(h.get('user-agent') ?? ''),
+        game: GAMES.includes(o?.game) ? o.game : null,
+        now: ctx.t
+      });
+    } catch (err) {
+      console.error('origin', err);
+    }
+  }
+
   async function createPlayer(ctx, { pid = null, name = '' } = {}) {
     let usePid = /^[a-f0-9]{32}$/.test(pid ?? '') && !(await ctx.store.playerByPid(pid)) ? pid : randomHex(16);
     return ctx.store.createPlayer({ id: randomHex(16), pid: usePid, name: cleanName(name), now: ctx.t });
@@ -278,7 +322,17 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
       if (current) return json({ ok: true, account: await account(ctx, current.player) });
       const player = await createPlayer(ctx, body);
       const token = await newSession(ctx, player.id);
+      await recordOrigin(ctx, player.id, body.origin);
       return json({ ok: true, token, account: await account(ctx, player) });
+    },
+
+    // ---------- Estadísticas (solo el dueño) ----------
+    'GET /api/rift/stats': async (ctx) => {
+      const s = await needSession(ctx);
+      const admins = adminWallets(ctx.env);
+      if (!(await ctx.store.wallets(s.player.id)).some((w) => admins.has(w))) throw new HttpError(404, 'not-found');
+      const offset = Math.max(-14, Math.min(14, Number(ctx.url.searchParams.get('tz')) || 0)) * 3600;
+      return json({ ok: true, stats: await ctx.store.stats(ctx.t, offset) });
     },
 
     'POST /api/rift/name': async (ctx) => {

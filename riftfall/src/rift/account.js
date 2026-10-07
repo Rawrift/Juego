@@ -89,6 +89,35 @@ export async function api(method, path, body, { keepalive = false } = {}) {
 }
 
 /**
+ * De dónde llegó este jugador, para las estadísticas del dueño: la red (los links con `?ref=tiktok` o
+ * `utm_source`, o la página que lo trajo), la zona horaria, el idioma y el juego. Nada personal.
+ */
+function origin() {
+  try {
+    const q = new URLSearchParams(location.search);
+    let ref = q.get('ref') || q.get('utm_source') || '';
+    if (!ref && document.referrer) {
+      const host = new URL(document.referrer).hostname;
+      if (host && host !== location.hostname) ref = host;
+    }
+    return {
+      ref,
+      tz: Intl.DateTimeFormat().resolvedOptions().timeZone ?? '',
+      lang: navigator.language ?? '',
+      game: location.pathname.startsWith('/cargo') ? 'cargo' : 'riftfall'
+    };
+  } catch {
+    return {};
+  }
+}
+
+/** Estadísticas de los jugadores (solo para la cuenta del dueño). */
+export async function fetchStats() {
+  const tz = -new Date().getTimezoneOffset() / 60;
+  return (await api('GET', `/api/rift/stats?tz=${tz}`)).stats;
+}
+
+/**
  * Arranca la sesión: si no hay, crea un invitado (con el id y el nombre que ya tenía este navegador).
  * Devuelve la cuenta o null si no hay servidor.
  */
@@ -105,7 +134,7 @@ export async function start({ pid = read('riftfall.pid'), name = read('riftfall.
         write(TOKEN, null); // sesión vencida o borrada: se arranca un invitado nuevo
       }
     }
-    const g = await api('POST', '/api/rift/guest', { pid, name });
+    const g = await api('POST', '/api/rift/guest', { pid, name, origin: origin() });
     write(TOKEN, g.token);
     online = true;
     setAccount(g.account);

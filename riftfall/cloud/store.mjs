@@ -28,7 +28,11 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT, board TEXT NOT NULL, player_pid TEXT NOT NULL, body TEXT NOT NULL,
     claimed TEXT, status TEXT NOT NULL DEFAULT 'pending', at INTEGER NOT NULL)`,
-  `CREATE INDEX IF NOT EXISTS runs_status ON runs (status)`
+  `CREATE INDEX IF NOT EXISTS runs_status ON runs (status)`,
+  // De dónde llegó cada jugador nuevo (para las estadísticas del dueño). Sin IP ni datos personales.
+  `CREATE TABLE IF NOT EXISTS origins (
+    player_id TEXT PRIMARY KEY, src TEXT, country TEXT, tz TEXT, lang TEXT, device TEXT, game TEXT, at INTEGER NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS origins_at ON origins (at)`
 ];
 
 const ready = new WeakMap();
@@ -92,6 +96,38 @@ export function createStore(db) {
       return row.expires_at > now ? row : null;
     },
     sweep: (now) => run('DELETE FROM challenges WHERE expires_at < ?', now),
+
+    // ---------- Origen de los jugadores y estadísticas del dueño ----------
+    addOrigin: ({ playerId, src, country, tz, lang, device, game, now }) =>
+      run('INSERT OR IGNORE INTO origins (player_id, src, country, tz, lang, device, game, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        playerId, src, country, tz, lang, device, game, now),
+    /**
+     * Resumen para el Panel del dueño. "Jugó" = tiene una partida guardada con contenido de verdad.
+     * `offset` = segundos que se suman a UTC para contar los días en la hora del dueño.
+     */
+    async stats(now, offset = 0) {
+      const PLAYED = `EXISTS (SELECT 1 FROM saves s WHERE s.player_id = p.id AND length(s.data) > 400)`;
+      const day = `strftime('%Y-%m-%d', p.created_at / 1000 + ${Number(offset) | 0}, 'unixepoch')`;
+      const since = now - 14 * 86_400_000;
+      const month = now - 30 * 86_400_000;
+      // Sin país (entró por un camino que no lo dice), se agrupa por la zona horaria del navegador.
+      const group = (col, fallback) => all(`SELECT COALESCE(${col === 'country' ? 'o.country, o.tz' : `o.${col}`}, '${fallback}') AS k, COUNT(*) AS n, SUM(CASE WHEN ${PLAYED} THEN 1 ELSE 0 END) AS played
+        FROM players p LEFT JOIN origins o ON o.player_id = p.id WHERE p.created_at >= ? GROUP BY k ORDER BY n DESC LIMIT 12`, month);
+      const [totals, days, sources, countries, devices, games, recent, purchases] = await Promise.all([
+        one(`SELECT COUNT(*) AS players, SUM(CASE WHEN ${PLAYED} THEN 1 ELSE 0 END) AS played,
+          (SELECT COUNT(*) FROM wallets) AS wallets, (SELECT COUNT(*) FROM purchases) AS purchases,
+          (SELECT COALESCE(SUM(usd), 0) FROM purchases) AS usd FROM players p`),
+        all(`SELECT ${day} AS d, COUNT(*) AS n, SUM(CASE WHEN ${PLAYED} THEN 1 ELSE 0 END) AS played FROM players p WHERE p.created_at >= ? GROUP BY d ORDER BY d`, since),
+        group('src', 'directo'),
+        group('country', '?'),
+        group('device', '?'),
+        group('game', '?'),
+        all(`SELECT p.created_at AS at, p.name, o.src, o.country, o.tz, o.device, o.game, ${PLAYED} AS played
+          FROM players p LEFT JOIN origins o ON o.player_id = p.id ORDER BY p.created_at DESC LIMIT 20`),
+        all('SELECT kind, item, usd, method, at FROM purchases ORDER BY at DESC LIMIT 20')
+      ]);
+      return { totals, days, sources, countries, devices, games, recent, purchases };
+    },
 
     // ---------- Partidas guardadas ----------
     save: (playerId, game) => one('SELECT data, rev, updated_at FROM saves WHERE player_id = ? AND game = ?', playerId, game),

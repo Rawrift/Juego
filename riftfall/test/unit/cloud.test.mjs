@@ -229,3 +229,45 @@ test('wallet sin decir la dirección antes (celular: conectar y firmar en un pas
   assert.equal((await call('POST', '/api/rift/wallet/login', { body: { id: n2.id, signature: '0x1234' } })).status, 401);
   assert.equal((await call('POST', '/api/rift/wallet/nonce', { body: { address: 'hola' } })).status, 400);
 });
+
+test('estadísticas del dueño: guarda de dónde llega cada jugador nuevo y solo el dueño las ve', async () => {
+  const boss = Wallet.createRandom();
+  const { call } = setup({ env: { ADMIN_WALLETS: boss.address } });
+  const { sourceOf, deviceKind } = await import('../../cloud/api.mjs');
+  assert.equal(sourceOf('tiktok'), 'tiktok');
+  assert.equal(sourceOf('www.instagram.com'), 'instagram');
+  assert.equal(sourceOf('l.instagram.com'), 'instagram');
+  assert.equal(sourceOf('t.co'), 'x');
+  assert.equal(sourceOf('wa'), 'whatsapp');
+  assert.equal(sourceOf(''), null);
+  assert.equal(sourceOf('Mi Grupo <script>'), 'migruposcript');
+  assert.equal(deviceKind('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)'), 'mobile');
+  assert.equal(deviceKind('Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120'), 'desktop');
+  assert.equal(deviceKind('WhatsApp/2.23'), 'bot');
+
+  await call('POST', '/api/rift/guest', { body: { origin: { ref: 'tiktok', tz: 'America/Argentina/Buenos_Aires', lang: 'es-AR', game: 'cargo' } } });
+  await call('POST', '/api/rift/guest', { body: { origin: { ref: 'l.instagram.com', tz: 'America/Mexico_City', lang: 'es-MX', game: 'riftfall' } } });
+  const nobody = await call('POST', '/api/rift/guest', { body: {} });
+  // Alguien que jugó de verdad (partida guardada con contenido).
+  assert.equal((await call('PUT', '/api/rift/save', { token: nobody.token, body: { game: 'riftfall', rev: 0, data: { runs: 3, filler: 'x'.repeat(600) } } })).status, 200);
+  // Un jugador común no ve las estadísticas (ni sabe que existen).
+  assert.equal((await call('GET', '/api/rift/stats', { token: nobody.token })).status, 404);
+  assert.equal((await call('GET', '/api/rift/stats')).status, 401);
+  const g = await call('POST', '/api/rift/guest', {});
+  await walletLogin(call, boss, g.token);
+  const r = await call('GET', '/api/rift/stats?tz=-3', { token: g.token });
+  assert.equal(r.status, 200);
+  const st = r.stats;
+  assert.equal(st.totals.players, 4);
+  assert.equal(st.totals.played, 1);
+  assert.equal(st.recent.filter((x) => x.played).length, 1);
+  const src = Object.fromEntries(st.sources.map((x) => [x.k, x.n]));
+  assert.equal(src.tiktok, 1);
+  assert.equal(src.instagram, 1);
+  assert.equal(src.directo, 2);
+  assert.ok(st.countries.some((x) => x.k === 'America/Argentina/Buenos_Aires'));
+  assert.deepEqual(st.games.map((x) => x.k).sort(), ['?', 'cargo', 'riftfall']);
+  assert.equal(st.recent.length, 4);
+  assert.equal(st.days.reduce((a, d) => a + d.n, 0), 4);
+  assert.ok(Array.isArray(st.purchases));
+});

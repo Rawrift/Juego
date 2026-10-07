@@ -308,6 +308,13 @@ test('dueño: con la wallet del dueño tiene todo desbloqueado y el Panel del du
     // La corona de la barra de arriba abre directo el Panel del dueño (y también está en el menú).
     await page.click('#ownerBtn');
     await expect(page.locator('.ra-owner')).toBeInViewport();
+    // Estadísticas de jugadores: cuántos entraron, de dónde y si jugaron.
+    await page.click('[data-ra="stats"]');
+    await expect(page.locator('.ra-stats .ra-kpi')).toHaveCount(4);
+    await expect(page.locator('.ra-stats')).toContainText('De dónde vienen');
+    await expect(page.locator('.ra-stats .ra-row').first()).toBeVisible();
+    await page.click('[data-ra="statsBack"]');
+    await expect(page.locator('.ra-owner')).toBeVisible();
     await page.click('[data-ra="close"]');
     await page.locator('.profile').click();
     await expect(page.locator('#menu [data-act="owner"]')).toContainText('Panel del dueño');
