@@ -226,3 +226,54 @@ test('panel del dueño: la flota evoluciona entera', async () => {
   assert.ok(ownerBoost(s, 'evolve').ok);
   assert.ok(s.ships.every((x) => x.evo === 2));
 });
+
+test('otros sistemas: la nave vuela al portal, salta, entrega y vuelve; la estimación coincide', async () => {
+  const { PORTS, SYSTEMS, sysOf } = await import('../../src/cargo/sim/data.js');
+  const { unlockedPorts, viaGates } = await import('../../src/cargo/sim/sim.js');
+  const s = newGame(31);
+  assert.ok(!unlockedPorts(s).includes('cripta'), 'Umbra pide nivel 6');
+  s.level = 10;
+  assert.ok(['cripta', 'brasa', 'eco', 'aurea', 'cielo', 'eden'].every((p) => unlockedPorts(s).includes(p)));
+  assert.ok(!unlockedPorts(s).includes('portal'), 'los portales no comercian');
+  // El plan pasa por los dos portales.
+  const plan = viaGates([{ do: 'fly', to: 'cripta' }, { do: 'fly', to: 'aurea' }, { do: 'fly', to: 'hq' }]);
+  assert.deepEqual(plan.map((x) => x.do === 'jump' ? `${x.from}>${x.to}` : x.to), ['portal', 'portal>umbraGate', 'cripta', 'umbraGate', 'umbraGate>heliosGate', 'aurea', 'heliosGate', 'heliosGate>portal', 'hq']);
+  // Las posiciones están alrededor de la estrella de cada sistema.
+  const c = position('cripta', 0);
+  assert.ok(Math.abs(Math.hypot(c.x - SYSTEMS.umbra.x, c.z - SYSTEMS.umbra.z) - PORTS.cripta.orbit) < 1e-9);
+  assert.equal(sysOf('cripta'), 'umbra');
+
+  s.stock.alimentos = 60;
+  const offer = { id: s.nextId++, kind: 'order', cargo: 'alimentos', tons: 20, to: 'cripta', reward: 9000, urgent: false, deadline: s.t + 9999, expires: s.t + 999, at: s.t };
+  s.offers.push(offer);
+  const ship = s.ships[0];
+  const est = estimate(s, ship, 'order', offer);
+  assert.ok(acceptOffer(s, offer.id, ship.id).ok);
+  const seen = new Set();
+  let deliveredAt = null;
+  run(s, 900, (st) => {
+    seen.add(ship.status);
+    if (st.events.some((e) => e.type === 'delivered' && e.port === 'cripta')) deliveredAt ??= st.t;
+    st.events.length = 0;
+    return !ship.job;
+  });
+  assert.ok(seen.has('jump'), 'saltó por el portal');
+  assert.ok(deliveredAt != null, 'entregó en Cripta');
+  assert.equal(ship.status, 'parked');
+  assert.ok(Math.abs(deliveredAt - est.deliverAt) < 3, `${deliveredAt} vs ${est.deliverAt}`);
+  // Un pedido lejos paga más que uno cerca por la misma carga.
+  assert.ok(est.fuel > 0);
+});
+
+test('Ruta Rift: cada juego premia lo logrado en el otro, una vez por escalón y en orden', async () => {
+  const { TO_CARGO, TO_RIFTFALL, pending, nextStep } = await import('../../src/rift/bridge.js');
+  assert.deepEqual(pending(TO_CARGO, 0, null), []);
+  assert.deepEqual(pending(TO_CARGO, 0, { runs: 1 }).map((x) => x.credits), [2500]);
+  // Se cobran juntos los que ya se cumplen, pero nunca se saltea uno.
+  assert.deepEqual(pending(TO_CARGO, 0, { runs: 3, riftMax: 2, victories: 1 }).map((x) => x.index), [0, 1, 2]);
+  assert.deepEqual(pending(TO_CARGO, 0, { runs: 3, victories: 1 }).map((x) => x.index), [0]);
+  assert.deepEqual(pending(TO_CARGO, 3, { runs: 9, riftMax: 9, victories: 9 }), []);
+  assert.deepEqual(pending(TO_RIFTFALL, 1, { level: 7 }).map((x) => x.cores), [800]);
+  assert.equal(nextStep(TO_CARGO, 1).key, 'rift');
+  assert.equal(nextStep(TO_RIFTFALL, 3), null);
+});

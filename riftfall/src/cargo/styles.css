@@ -220,6 +220,15 @@ button:disabled { cursor: default; }
 .pd-vesta { background: radial-gradient(circle at 35% 35%, #c6f2d4, #49b98a 45%, #2f79c8); }
 .pd-nimbus { background: radial-gradient(circle at 35% 35%, #ffe9cf, #d8a6e8 50%, #8a6ad0); }
 .pd-forja { background: radial-gradient(circle at 35% 35%, #ffb27a, #8d4b44 50%, #3a2f4a); }
+.pd-cripta { background: radial-gradient(circle at 35% 35%, #d9f6ff, #6a4fd0 50%, #3b2a7a); }
+.pd-brasa { background: radial-gradient(circle at 35% 35%, #ffb36a, #a8382a 45%, #2a1820); }
+.pd-eco { background: radial-gradient(circle at 35% 35%, #b8ecff, #1d5fb8 50%, #0b2e6e); }
+.pd-aurea { background: radial-gradient(circle at 35% 35%, #fff0c2, #d99a45 50%, #9a5a22); }
+.pd-cielo { background: radial-gradient(circle at 35% 35%, #f4fbff, #7fb2f0 50%, #3d6fd6); }
+.pd-eden { background: radial-gradient(circle at 35% 35%, #e0fff4, #3fae5a 45%, #0f7f9a); }
+.pd-portal, .pd-umbraGate, .pd-heliosGate { background: radial-gradient(circle, #04050c 38%, #4de8ff 42%, #3a4378 60%, #1d2348 70%); }
+.pd-umbraGate { background: radial-gradient(circle, #04050c 38%, #ff6a5a 42%, #3a4378 60%, #1d2348 70%); }
+.pd-heliosGate { background: radial-gradient(circle, #04050c 38%, #8fc8ff 42%, #3a4378 60%, #1d2348 70%); }
 
 .depot { border-radius: 14px; background: var(--s2); border: 1px solid var(--line); padding: 12px; margin-bottom: 12px; }
 .depot-top { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; }
@@ -596,4 +605,33 @@ button:disabled { cursor: default; }
 @media (max-width: 760px) {
   .hg-grid { grid-template-columns: repeat(2, 1fr); }
   .hg-stat { grid-template-columns: 74px 1fr 40px; }
+}
+
+/* ---------- Universo: sistemas estelares ---------- */
+.sys-nav { position: absolute; top: 184px; left: 16px; display: flex; gap: 2px; padding: 5px; border-radius: 14px; z-index: 3; }
+.sys-nav[hidden] { display: none; }
+.sys-nav button { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 11px; border-radius: 10px; font-weight: 700; font-size: 12.5px; color: var(--ink2); }
+.sys-nav button:hover { background: var(--s3); color: var(--ink); }
+.sys-nav button.on { background: var(--s3); color: var(--blue); box-shadow: inset 0 0 0 1px rgba(77, 232, 255, .35); }
+.sys-nav button.locked { opacity: .6; }
+.sys-nav .ic { width: 14px; height: 14px; }
+.sys-dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; flex: none; }
+.sd-rift { background: radial-gradient(circle at 35% 35%, #fff4c2, #ffb347); box-shadow: 0 0 8px #ffb347; }
+.sd-umbra { background: radial-gradient(circle at 35% 35%, #ffc2a8, #ff4a3a); box-shadow: 0 0 8px #ff4a3a; }
+.sd-helios { background: radial-gradient(circle at 35% 35%, #eef8ff, #6fb8ff); box-shadow: 0 0 8px #6fb8ff; }
+.sys-lbl { flex-direction: column; gap: 0; padding: 6px 14px; background: rgba(10, 13, 34, .55); border-color: rgba(157, 107, 255, .35); }
+.sys-lbl small { font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; }
+.sys-lbl b { font-family: var(--display); font-size: 15px; letter-spacing: .12em; text-transform: uppercase; }
+.sys-lbl i { display: inline-flex; align-items: center; gap: 3px; font-style: normal; font-size: 10.5px; color: var(--ink3); }
+.sys-lbl i .ic { width: 11px; height: 11px; }
+.sys-lbl.locked { opacity: .7; }
+.map-lbl.gate { border-color: rgba(157, 107, 255, .45); }
+.gate-note { display: flex; gap: 8px; align-items: flex-start; margin: 10px 0 0; font-size: 12px; color: var(--ink2); line-height: 1.4; }
+.gate-note .ic { width: 15px; height: 15px; flex: none; color: #b38cff; }
+.sys-h { display: flex; align-items: center; gap: 7px; }
+.sys-h small { display: inline-flex; align-items: center; gap: 3px; margin-left: auto; text-transform: none; letter-spacing: 0; }
+.sys-h small .ic { width: 12px; height: 12px; }
+@media (max-width: 760px) {
+  .sys-nav { top: 142px; left: 8px; right: 8px; justify-content: space-between; }
+  .sys-nav button { padding: 0 8px; font-size: 12px; }
 }

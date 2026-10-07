@@ -93,7 +93,7 @@ export function mergeProgress(a, b) {
   const newer = (Number(b.updatedAt) || 0) > (Number(a.updatedAt) || 0) ? b : a;
   const older = newer === a ? b : a;
   const out = { ...older, ...newer };
-  for (const k of ['runs', 'bestScore', 'bestTime', 'kills', 'bosses', 'victories', 'lifetimeCores', 'riftMax']) {
+  for (const k of ['runs', 'bestScore', 'bestTime', 'kills', 'bosses', 'victories', 'lifetimeCores', 'riftMax', 'bridge']) {
     out[k] = Math.max(Number(a[k]) || 0, Number(b[k]) || 0);
   }
   out.talents = maxMap(a.talents, b.talents);

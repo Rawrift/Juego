@@ -23,9 +23,37 @@ export const PORTS = {
   hq: { kind: 'station', orbit: 37, period: 380, phase: 0.5, radius: 1.4, sells: [], buys: [], level: 1 },
   ferra: { kind: 'rocky', orbit: 50, period: 540, phase: 1.4, radius: 3.0, sells: ['mineral'], buys: ['agua', 'alimentos', 'combustible'], level: 1, portTime: 2.2 },
   vesta: { kind: 'garden', orbit: 64, period: 760, phase: 5.2, radius: 3.6, sells: ['alimentos'], buys: ['agua', 'mineral', 'piezas', 'combustible'], level: 1, portTime: 2.0 },
-  nimbus: { kind: 'gas', orbit: 92, period: 1180, phase: 3.0, radius: 6.4, sells: ['combustible'], buys: ['alimentos', 'agua', 'piezas'], level: 3, portTime: 2.6 }
+  nimbus: { kind: 'gas', orbit: 92, period: 1180, phase: 3.0, radius: 6.4, sells: ['combustible'], buys: ['alimentos', 'agua', 'piezas'], level: 3, portTime: 2.6 },
+  // Portales de salto: unen los sistemas (no compran ni venden).
+  portal: { kind: 'gate', sys: 'rift', orbit: 104, period: 2600, phase: 0.9, radius: 2.2, sells: [], buys: [], level: 6 },
+  umbraGate: { kind: 'gate', sys: 'umbra', orbit: 66, period: 2200, phase: 3.5, radius: 2.2, sells: [], buys: [], level: 6 },
+  heliosGate: { kind: 'gate', sys: 'helios', orbit: 74, period: 2400, phase: 4.6, radius: 2.2, sells: [], buys: [], level: 9 },
+  // Sistema Umbra (enana roja).
+  cripta: { kind: 'crystal', sys: 'umbra', orbit: 17, period: 170, phase: 1.0, radius: 2.4, sells: ['piezas'], buys: ['alimentos', 'agua'], level: 6, portTime: 2.4 },
+  brasa: { kind: 'lava', sys: 'umbra', orbit: 32, period: 300, phase: 4.0, radius: 2.8, sells: ['combustible'], buys: ['agua', 'piezas', 'alimentos'], level: 6, portTime: 2.4 },
+  eco: { kind: 'ocean', sys: 'umbra', orbit: 50, period: 520, phase: 2.2, radius: 3.4, sells: ['agua'], buys: ['mineral', 'combustible', 'piezas'], level: 7, portTime: 2.2 },
+  // Sistema Helios (gigante azul).
+  aurea: { kind: 'desert', sys: 'helios', orbit: 20, period: 200, phase: 0.4, radius: 2.6, sells: ['mineral'], buys: ['agua', 'alimentos'], level: 9, portTime: 2.2 },
+  cielo: { kind: 'ringed', sys: 'helios', orbit: 40, period: 430, phase: 2.6, radius: 5.4, sells: ['combustible'], buys: ['piezas', 'alimentos', 'mineral'], level: 9, portTime: 2.6 },
+  eden: { kind: 'eden', sys: 'helios', orbit: 58, period: 640, phase: 5.4, radius: 3.6, sells: ['alimentos'], buys: ['piezas', 'combustible', 'agua', 'mineral'], level: 10, portTime: 2.0 }
 };
-export const PORT_IDS = Object.keys(PORTS).filter((p) => p !== 'hq');
+/** Lugares donde se comercia (sin la estación ni los portales). */
+export const PORT_IDS = Object.keys(PORTS).filter((p) => p !== 'hq' && PORTS[p].kind !== 'gate');
+export const GATE_IDS = Object.keys(PORTS).filter((p) => PORTS[p].kind === 'gate');
+
+/**
+ * Sistemas estelares: dónde está su estrella en el mapa, de qué color es, su portal y el nivel que
+ * pide. Las naves pasan de uno a otro volando al portal y saltando (JUMP) al portal del otro sistema.
+ */
+export const SYSTEMS = {
+  rift: { x: 0, z: 0, star: 'gold', gate: 'portal', level: 1 },
+  umbra: { x: 330, z: -80, star: 'red', gate: 'umbraGate', level: 6 },
+  helios: { x: 255, z: 285, star: 'blue', gate: 'heliosGate', level: 9 }
+};
+export const SYSTEM_IDS = Object.keys(SYSTEMS);
+export const sysOf = (port) => PORTS[port]?.sys ?? 'rift';
+/** Salto entre portales: segundos, combustible (en unidades de distancia) y distancia equivalente para los precios. */
+export const JUMP = { time: 8, fuel: 30, dist: 28 };
 
 /** Cinturón de asteroides: cruzarlo sin escudos cuesta el doble de tiempo. */
 export const BELT = { inner: 74, outer: 82, slow: 0.5 };

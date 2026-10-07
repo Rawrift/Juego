@@ -63,6 +63,7 @@ import { dailyNumber, dailySeed, DAILY_RULES, msToNextDaily } from '../shared/da
 import { DUEL_RULES, decodeDuel, duelUrl, cleanName } from '../shared/duel.js';
 import { WORLD, fetchWorldDaily, submitWorldDaily, myPublicId, defaultName, fetchRunBoard, submitRunBoard } from './world.js';
 import { shareResult } from './share.js';
+import { TO_RIFTFALL, pending as bridgePending, nextStep as bridgeNext, cargoState } from '../rift/bridge.js';
 
 applyStatic();
 
@@ -1470,6 +1471,8 @@ async function boot() {
   newDemo();
   requestAnimationFrame(frame);
   applyCosmetics();
+  claimBridge();
+  addEventListener('visibilitychange', () => document.visibilityState === 'visible' && claimBridge());
   updateMenu();
   try {
     app.config = await api.config();
@@ -1520,6 +1523,22 @@ async function boot() {
     refreshWorld();
     refreshRunBoard();
   }
+  updateMenu();
+}
+
+/** Ruta Rift: lo que creció tu empresa en Rift Cargo da Núcleos acá (una vez por escalón). */
+function claimBridge() {
+  const got = bridgePending(TO_RIFTFALL, app.progress.bridge ?? 0, cargoState());
+  // El link a Rift Cargo muestra el próximo premio.
+  const nx = bridgeNext(TO_RIFTFALL, (app.progress.bridge ?? 0) + got.length);
+  const link = document.querySelector('.cargo-link');
+  if (link) link.dataset.hint = nx ? t('bridge.next', { lv: nx.level, n: fmtNum(nx.cores) }) : '';
+  if (!got.length) return;
+  const n = got.reduce((a, g) => a + g.cores, 0);
+  app.progress.cores += n;
+  app.progress.bridge = got[got.length - 1].index + 1;
+  saveProgress(app.progress);
+  setTimeout(() => toast(t('bridge.got', { n: fmtNum(n) }), 'ok'), 600);
   updateMenu();
 }
 

@@ -157,10 +157,97 @@ const STYLES = {
       return [255 * k, 120 * k, 40 * k];
     });
     return { map, emissive: lava, rough: 0.8 };
+  },
+  // ---------- Sistema Umbra ----------
+  cripta(n) {
+    // Mundo de cristal: facetas violetas y turquesas con vetas que brillan.
+    const map = paint(W2, H2, (x, y, z) => {
+      const a = fbm(n, x * 2.6, y * 2.6, z * 2.6);
+      const f = Math.floor(a * 7) / 7;
+      return ramp([[0, 0x3b2a7a], [0.4, 0x6a4fd0], [0.7, 0x58c8e6], [1, 0xd9f6ff]], f * 0.85 + a * 0.15);
+    });
+    const glowMap = paint(W2, H2, (x, y, z) => {
+      const r = Math.abs(fbm(n, x * 4 + 3, y * 4, z * 4, 4) - 0.5);
+      const k = Math.max(0, 1 - r / 0.03);
+      return [180 * k, 120 * k, 255 * k];
+    });
+    return { map, emissive: glowMap, rough: 0.35, metal: 0.3, atmo: 0xb48cff };
+  },
+  brasa(n) {
+    // Mundo de lava: corteza oscura y ríos encendidos.
+    const map = paint(W2, H2, (x, y, z) => ramp([[0, 0x1c1420], [0.55, 0x3d2630], [1, 0x6e3a34]], fbm(n, x * 3, y * 3, z * 3)));
+    const lava = paint(W2, H2, (x, y, z) => {
+      const r = Math.abs(fbm(n, x * 2.6 + 5, y * 2.6, z * 2.6, 4) - 0.5);
+      const k = Math.max(0, 1 - r / 0.07);
+      return [255 * k, 90 * k * k, 30 * k * k];
+    });
+    return { map, emissive: lava, rough: 0.8, atmo: 0xff6a3d };
+  },
+  eco(n) {
+    // Mundo océano: azul profundo, islas chicas y nubes en espiral.
+    return {
+      map: paint(W2, H2, (x, y, z) => {
+        const a = fbm(n, x * 2.2 + 2, y * 2.2, z * 2.2);
+        if (a > 0.62) return ramp([[0, 0xe9dca8], [0.3, 0x5cc48a], [1, 0x2e8d62]], (a - 0.62) / 0.15);
+        return ramp([[0, 0x0b2e6e], [0.6, 0x1d5fb8], [1, 0x4fb2e8]], a / 0.62);
+      }),
+      clouds: paint(W2, H2, (x, y, z, lat) => {
+        const sw = fbm(n, x * 3 + Math.sin(lat * 3) * 0.6 + 4, y * 4, z * 3);
+        const k = Math.max(0, Math.min(1, (sw - 0.5) / 0.14));
+        return [255, 255, 255, k * 220];
+      }),
+      rough: 0.55,
+      atmo: 0x7fc8ff
+    };
+  },
+  // ---------- Sistema Helios ----------
+  aurea(n) {
+    // Desierto dorado con dunas en bandas.
+    return {
+      map: paint(W2, H2, (x, y, z, lat) => {
+        const a = fbm(n, x * 2.4, y * 2.4, z * 2.4);
+        const dune = Math.sin((lat * 18 + a * 6)) * 0.5 + 0.5;
+        return ramp([[0, 0x9a5a22], [0.45, 0xd99a45], [0.75, 0xf3cf7a], [1, 0xfff0c2]], a * 0.7 + dune * 0.3);
+      }),
+      rough: 0.9,
+      atmo: 0xffd27a
+    };
+  },
+  cielo(n) {
+    // Gigante gaseoso helado, con anillos.
+    return {
+      map: paint(W2, H2, (x, y, z, lat) => {
+        const turb = fbm(n, x * 3, y * 3, z * 3) - 0.5;
+        const band = Math.sin((lat + turb * 0.2) * 11) * 0.5 + 0.5;
+        return ramp([[0, 0x3d6fd6], [0.35, 0x7fb2f0], [0.65, 0xcfe8ff], [1, 0xf4fbff]], band * 0.8 + fbm(n, x + 1, y * 12, z, 3) * 0.3);
+      }),
+      rough: 0.7,
+      rings: true
+    };
+  },
+  eden(n) {
+    // Jardín: continentes verdes, mares turquesa, casquetes y nubes.
+    return {
+      map: paint(W2, H2, (x, y, z, lat) => {
+        if (Math.abs(lat) > 1.2) return [240, 248, 255];
+        const a = fbm(n, x * 1.9 + 1, y * 1.9, z * 1.9);
+        if (a < 0.48) return ramp([[0, 0x0f7f9a], [0.8, 0x2fc4c8], [1, 0x7fe6e0]], a / 0.48);
+        return ramp([[0, 0x8fd46a], [0.5, 0x3fae5a], [1, 0x1f7a44]], (a - 0.48) / 0.3);
+      }),
+      clouds: paint(W2, H2, (x, y, z) => {
+        const c = fbm(n, x * 3 + 9, y * 5, z * 3);
+        const k = Math.max(0, Math.min(1, (c - 0.53) / 0.15));
+        return [255, 255, 255, k * 230];
+      }),
+      rough: 0.65,
+      atmo: 0x9ff0d8
+    };
   }
 };
 
-const SEEDS = { kepa: 11, ferra: 23, vesta: 37, nimbus: 41, forja: 53 };
+// Los planetas de los otros sistemas usan texturas un poco más chicas (se generan al abrir el mapa).
+const W2 = 384, H2 = 192;
+const SEEDS = { kepa: 11, ferra: 23, vesta: 37, nimbus: 41, forja: 53, cripta: 61, brasa: 67, eco: 71, aurea: 79, cielo: 83, eden: 89 };
 const built = new Map();
 
 /** Planeta listo para usar: grupo con la esfera (userData.body) y sus capas. */
@@ -170,7 +257,7 @@ export function makePlanet(id, radius) {
   const g = new THREE.Group();
   const geo = new THREE.SphereGeometry(radius, 72, 48);
   const body = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-    map: st.map, roughness: st.rough, metalness: 0,
+    map: st.map, roughness: st.rough, metalness: st.metal ?? 0,
     emissive: st.emissive ? 0xffffff : 0x000000, emissiveMap: st.emissive ?? null, emissiveIntensity: st.emissive ? 1.6 : 0
   }));
   body.castShadow = true;
@@ -184,7 +271,7 @@ export function makePlanet(id, radius) {
     g.userData.clouds = cl;
   }
   if (st.atmo) g.add(atmosphere(radius * 1.08, st.atmo));
-  if (st.rings) g.add(rings(radius));
+  if (st.rings) g.add(rings(radius, id === 'cielo' ? [200, 225, 255] : null));
   return g;
 }
 
@@ -201,7 +288,7 @@ function atmosphere(r, color) {
   return mesh;
 }
 
-function rings(r) {
+function rings(r, tint = null) {
   const inner = r * 1.35;
   const outer = r * 2.15;
   const geo = new THREE.RingGeometry(inner, outer, 128, 1);
@@ -216,7 +303,7 @@ function rings(r) {
     const k = x / 512;
     const a = (0.35 + 0.65 * Math.abs(Math.sin(k * 23) * Math.sin(k * 7.3 + 1))) * Math.min(1, k * 6) * Math.min(1, (1 - k) * 5);
     const gap = Math.abs(k - 0.62) < 0.035 ? 0.1 : 1;
-    g.fillStyle = `rgba(${235 - k * 40},${215 - k * 30},${240 - k * 10},${a * gap})`;
+    g.fillStyle = tint ? `rgba(${tint[0] - k * 40},${tint[1] - k * 30},${tint[2]},${a * gap})` : `rgba(${235 - k * 40},${215 - k * 30},${240 - k * 10},${a * gap})`;
     g.fillRect(x, 0, 1, 4);
   }
   const tex = new THREE.CanvasTexture(c);
@@ -228,13 +315,21 @@ function rings(r) {
   return m;
 }
 
-/** El sol: esfera animada cálida con un halo suave. */
-export function makeSun(radius) {
+/** Colores de cada tipo de estrella: centro, borde y halo (RGB 0-1 y CSS). */
+const STARS = {
+  gold: { a: [1.0, 0.93, 0.62], b: [1.0, 0.66, 0.25], halo: ['255,214,120', '255,190,110'] },
+  red: { a: [1.0, 0.62, 0.42], b: [0.95, 0.25, 0.16], halo: ['255,120,90', '255,70,60'] },
+  blue: { a: [0.86, 0.95, 1.0], b: [0.38, 0.66, 1.0], halo: ['170,215,255', '110,170,255'] }
+};
+
+/** La estrella: esfera animada con un halo suave. `kind` = 'gold' | 'red' | 'blue'. */
+export function makeSun(radius, kind = 'gold') {
+  const S = STARS[kind] ?? STARS.gold;
   const g = new THREE.Group();
   const m = new THREE.ShaderMaterial({
-    uniforms: { uTime: { value: 0 } },
+    uniforms: { uTime: { value: 0 }, uA: { value: new THREE.Vector3(...S.a) }, uB: { value: new THREE.Vector3(...S.b) } },
     vertexShader: `varying vec3 vP; varying vec3 vN; void main(){ vP = position; vN = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-    fragmentShader: `uniform float uTime; varying vec3 vP; varying vec3 vN;
+    fragmentShader: `uniform float uTime; uniform vec3 uA; uniform vec3 uB; varying vec3 vP; varying vec3 vN;
       float h(vec3 p){ return fract(sin(dot(p, vec3(127.1,311.7,74.7))) * 43758.5453); }
       float n(vec3 p){ vec3 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
         return mix(mix(mix(h(i),h(i+vec3(1,0,0)),f.x),mix(h(i+vec3(0,1,0)),h(i+vec3(1,1,0)),f.x),f.y),
@@ -243,7 +338,7 @@ export function makeSun(radius) {
         vec3 p = normalize(vP) * 3.0;
         float g = n(p + uTime * 0.15) * 0.6 + n(p * 2.3 - uTime * 0.1) * 0.4;
         float rim = pow(1.0 - abs(vN.z), 1.5);
-        vec3 col = mix(vec3(1.0, 0.93, 0.62), vec3(1.0, 0.66, 0.25), g * 0.7 + rim * 0.6);
+        vec3 col = mix(uA, uB, g * 0.7 + rim * 0.6);
         gl_FragColor = vec4(col * 1.25, 1.0);
         #include <colorspace_fragment>
       }`
@@ -255,9 +350,9 @@ export function makeSun(radius) {
   c.width = c.height = 256;
   const ctx = c.getContext('2d');
   const grd = ctx.createRadialGradient(128, 128, 30, 128, 128, 128);
-  grd.addColorStop(0, 'rgba(255,214,120,0.75)');
-  grd.addColorStop(0.35, 'rgba(255,190,110,0.32)');
-  grd.addColorStop(1, 'rgba(255,190,120,0)');
+  grd.addColorStop(0, `rgba(${S.halo[0]},0.75)`);
+  grd.addColorStop(0.35, `rgba(${S.halo[1]},0.32)`);
+  grd.addColorStop(1, `rgba(${S.halo[1]},0)`);
   ctx.fillStyle = grd;
   ctx.fillRect(0, 0, 256, 256);
   const tex = new THREE.CanvasTexture(c);

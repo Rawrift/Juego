@@ -1,12 +1,14 @@
-// Movimiento de los planetas y cálculo de rutas. Todo gira alrededor del sol (0, 0) en el plano XZ.
+// Movimiento de los planetas y cálculo de rutas. Cada sistema gira alrededor de su estrella, en el
+// plano XZ (el sistema Rift, el de la estación, está en el centro: (0, 0)).
 // Como los planetas se mueven, la nave apunta adonde VA a estar su destino cuando llegue.
 
-import { PORTS, BELT } from './data.js';
+import { PORTS, BELT, SYSTEMS, JUMP, sysOf } from './data.js';
 
 export function position(id, t) {
   const p = PORTS[id];
+  const c = SYSTEMS[p.sys ?? 'rift'];
   const a = p.phase + (t / p.period) * Math.PI * 2;
-  return { x: Math.cos(a) * p.orbit, z: Math.sin(a) * p.orbit };
+  return { x: c.x + Math.cos(a) * p.orbit, z: c.z + Math.sin(a) * p.orbit };
 }
 
 export const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -44,10 +46,18 @@ export function intercept(from, to, t0, speed, shields) {
   return { time, point };
 }
 
-/** Distancia promedio entre dos órbitas (para fijar precios justos). */
+/**
+ * Distancia promedio entre dos órbitas (para fijar precios justos). Entre sistemas distintos: hasta
+ * el portal, el salto y desde el otro portal.
+ */
 const avgCache = new Map();
 export function avgDistance(a, b) {
   const key = a < b ? `${a}|${b}` : `${b}|${a}`;
+  if (!avgCache.has(key) && sysOf(a) !== sysOf(b)) {
+    const ga = SYSTEMS[sysOf(a)].gate;
+    const gb = SYSTEMS[sysOf(b)].gate;
+    avgCache.set(key, (a === ga ? 0 : avgDistance(a, ga)) + JUMP.dist + (b === gb ? 0 : avgDistance(gb, b)));
+  }
   if (!avgCache.has(key)) {
     const r1 = PORTS[a].orbit;
     const r2 = PORTS[b].orbit;

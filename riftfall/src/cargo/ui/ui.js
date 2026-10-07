@@ -4,7 +4,7 @@
 
 import { icon } from '../icons.js';
 import { t, num, money, pct, dur, lang, setLang } from '../i18n.js';
-import { BOX, CARGO_IDS, PORTS, SHIPS, SHIP_IDS, SHIP_CLASSES, EVOS, UPGRADES, UPGRADE_IDS, LEVELS } from '../sim/data.js';
+import { BOX, CARGO_IDS, PORTS, SHIPS, SHIP_IDS, SHIP_CLASSES, EVOS, UPGRADES, UPGRADE_IDS, LEVELS, SYSTEMS, SYSTEM_IDS, sysOf } from '../sim/data.js';
 import {
   available, freeSpace, depotCap, stockTotal, incomingTotal, value, upgradeCost, estimate, buyQuote,
   buyPrice, priceTrend, isIdle, incomePerMin, onTimeRate, levelProgress, unlockedPorts, fleetCap, shipById, evolveCost
@@ -18,6 +18,7 @@ import * as style from '../style.js';
 import { account as rgAccount, claimPurchase, onAccount, isAdmin } from '../../rift/account.js';
 import { openInMetaMask } from '../../rift/open-in-metamask.js';
 import { remoteWallet } from '../../rift/wallet.js';
+import { TO_CARGO, nextStep as bridgeNext } from '../../rift/bridge.js';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const shipName = (s) => s.name;
@@ -37,11 +38,12 @@ const looks = (ship) => ({ ...ship.look, evo: ship.evo ?? 0 });
 
 const STATUS_PILL = {
   parked: 'idle', queued: 'wait', docking: 'loading', docked: 'loading', waitdrones: 'wait', working: 'loading',
-  liftoff: 'route', travel: 'route', portwork: 'port', landing: 'route'
+  liftoff: 'route', travel: 'route', jump: 'route', portwork: 'port', landing: 'route'
 };
 
 export function statusText(s) {
   if (s.status === 'travel') return t('status.travel', { to: portName(s.leg.target) });
+  if (s.status === 'jump') return t('status.jump', { to: t(`sys.${sysOf(s.jump?.to)}`) });
   if (s.status === 'portwork') return t('status.portwork', { port: portName(s.port) });
   if (s.status === 'working' && s.work?.kind === 'unload') return t('status.unloading');
   return t(`status.${s.status}`);
@@ -56,7 +58,7 @@ function pill(s) {
 /** Cuándo termina el tramo actual de una nave (en tiempo de simulación) o null. */
 function shipEta(s, state) {
   if (s.status === 'travel') return s.leg.t0 + s.leg.dur;
-  if (['portwork', 'liftoff', 'docking', 'landing'].includes(s.status)) return state.t + (s.dur - s.timer);
+  if (['portwork', 'liftoff', 'docking', 'landing', 'jump'].includes(s.status)) return state.t + (s.dur - s.timer);
   return null;
 }
 
@@ -275,7 +277,7 @@ export function createUI({ state, actions, isMap }) {
   function renderMarket() {
     const ports = Object.keys(PORTS).filter((p) => PORTS[p].sells.length);
     const idle = idleShips().sort((a, b) => SHIPS[b.model].cap - SHIPS[a.model].cap);
-    const cards = ports.map((p) => {
+    const card = (p) => {
       const locked = PORTS[p].level > state.level;
       const c = PORTS[p].sells[0];
       const price = buyPrice(p, c, state.t);
@@ -301,6 +303,12 @@ export function createUI({ state, actions, isMap }) {
         </div>
         <div class="offer-act">${act}</div>
       </article>`;
+    };
+    // Por sistema: primero el de la estación; los que todavía no se alcanzan, con su nivel.
+    const cards = SYSTEM_IDS.map((sys) => {
+      const list = ports.filter((p) => sysOf(p) === sys);
+      const locked = SYSTEMS[sys].level > state.level;
+      return `<h4 class="cls-h sys-h"><i class="sys-dot sd-${sys}"></i>${t('market.sys', { sys: t(`sys.${sys}`) })}${locked ? ` <small>${icon('lock')}${t('map.locked', { n: SYSTEMS[sys].level })}</small>` : ''}</h4>${list.map(card).join('')}`;
     }).join('');
     return `<h3 class="ph">${t('market.title')}</h3>${depotBars()}${cards}`;
   }
@@ -453,7 +461,8 @@ export function createUI({ state, actions, isMap }) {
       return;
     }
     const j = s.job;
-    const node = NODE_OF_STEP[j.kind][s.step] ?? 4;
+    // Los pasos agregados para pasar por los portales cuentan como el vuelo al que pertenecen.
+    const node = NODE_OF_STEP[j.kind][j.steps?.[s.step]?.i ?? s.step] ?? 4;
     const nodes = TRACK_NODES[j.kind].map((k, i) => {
       const cls = i < node ? 'done' : i === node ? 'now' : '';
       let sub = '';
@@ -490,7 +499,7 @@ export function createUI({ state, actions, isMap }) {
     el.hidden = !s;
     if (!s) return;
     const eta = shipEta(s, state);
-    const dest = s.status === 'travel' ? s.leg.target : s.job ? (s.job.kind === 'buy' ? s.job.from : s.job.to) : null;
+    const dest = s.status === 'travel' ? s.leg.target : s.status === 'jump' ? s.jump?.to : s.job ? (s.job.kind === 'buy' ? s.job.from : s.job.to) : null;
     const row = (k, v) => `<div class="row"><small>${k}</small><b>${v}</b></div>`;
     morph(el, `
       <div class="detail-head">
@@ -572,7 +581,8 @@ export function createUI({ state, actions, isMap }) {
 
   function showLevel(n) {
     const items = [];
-    for (const p of Object.keys(PORTS)) if (PORTS[p].level === n && p !== 'hq') items.push(`${icon('orbit')}${t('unlock.port', { port: portName(p) })}`);
+    for (const sys of SYSTEM_IDS) if (SYSTEMS[sys].level === n && n > 1) items.push(`${icon('globe')}${t('unlock.system', { sys: t(`sys.${sys}`) })}`);
+    for (const p of Object.keys(PORTS)) if (PORTS[p].level === n && p !== 'hq' && PORTS[p].kind !== 'gate') items.push(`${icon('orbit')}${t('unlock.port', { port: portName(p) })}`);
     for (const m of SHIP_IDS) if (SHIPS[m].level === n && n > 1 && !SHIPS[m].bp) items.push(`${icon('rocket')}${t('unlock.ship', { ship: t(`ship.${m}`) })}`);
     for (const id of UPGRADE_IDS) if (UPGRADES[id].some((x) => x.level === n)) items.push(`${icon(UP_ICONS[id])}${t('unlock.up', { name: t(`up.${id}`) })}`);
     items.push(`${icon('star')}${t('unlock.more')}`);
@@ -609,6 +619,12 @@ export function createUI({ state, actions, isMap }) {
   onAccount(renderAcct);
   renderAcct();
 
+  /** RIFTFALL en el menú, con el próximo premio de la Ruta Rift. */
+  function riftfallItem() {
+    const nx = bridgeNext(TO_CARGO, state.flags.bridge ?? 0);
+    return `<a class="mi acct" href="/">${icon('zap')}<span><b>${t('menu.riftfall')}</b><small>${nx ? t(`bridge.hint.${nx.key}`, { v: money(nx.credits) }) : t('bridge.done')}</small></span></a>`;
+  }
+
   function toggleMenu() {
     const m = $('#menu', root);
     if (!m.hidden) return (m.hidden = true);
@@ -619,7 +635,7 @@ export function createUI({ state, actions, isMap }) {
       <div class="seg">${['es', 'en', 'pt'].map((l) => `<button class="seg-btn ${lang === l ? 'on' : ''}" data-act="lang" data-v="${l}">${l.toUpperCase()}</button>`).join('')}</div>
       <button class="mi" data-act="style">${icon('brush')}${t('menu.style')}</button>
       <button class="mi" data-act="sound">${icon(actions.isMuted?.() ? 'mute' : 'sound')}${t('menu.sound')}</button>
-      <a class="mi" href="/">${icon('zap')}${t('menu.riftfall')}</a>
+      ${riftfallItem()}
       <button class="mi danger" data-act="reset">${icon('rotl')}${t('menu.reset')}</button>`;
     m.hidden = false;
   }

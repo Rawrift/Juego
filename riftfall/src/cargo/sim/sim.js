@@ -2,7 +2,7 @@
 // guardar en JSON, y `step(state, dt)` lo hace avanzar. La interfaz llama a las acciones (aceptar un
 // pedido, comprar carga, mejorar la estación) y lee los eventos que quedan en `state.events`.
 
-import { BOX, DRONE_CYCLE, HQ_TIMES, CARGO, CARGO_IDS, PORTS, PORT_IDS, SHIPS, EVOS, UPGRADES, UPGRADE_IDS, LEVELS, START } from './data.js';
+import { BOX, DRONE_CYCLE, HQ_TIMES, CARGO, CARGO_IDS, PORTS, PORT_IDS, SHIPS, EVOS, UPGRADES, UPGRADE_IDS, LEVELS, START, SYSTEMS, JUMP, sysOf } from './data.js';
 import { position, intercept, avgDistance, dist } from './orbit.js';
 
 export const VERSION = 1;
@@ -210,6 +210,28 @@ const STEP_PLANS = {
   freight: (j) => [{ do: 'fly', to: j.from }, { do: 'load', port: j.from }, { do: 'fly', to: j.to }, { do: 'unload', port: j.to }, { do: 'fly', to: 'hq' }, { do: 'park' }]
 };
 
+/**
+ * Los vuelos a otro sistema pasan por los portales: volar al portal, saltar al portal del otro sistema
+ * y seguir volando. Cada paso guarda `i`, el paso del plan original (para el seguimiento del envío).
+ */
+export function viaGates(steps) {
+  const out = [];
+  let at = 'rift';
+  steps.forEach((st, i) => {
+    if (st.do === 'fly' && sysOf(st.to) !== at) {
+      const from = SYSTEMS[at].gate;
+      const to = SYSTEMS[sysOf(st.to)].gate;
+      out.push({ do: 'fly', to: from, i }, { do: 'jump', from, to, i }, { ...st, i });
+      at = sysOf(st.to);
+    } else {
+      out.push({ ...st, i });
+      if (st.do === 'fly') at = sysOf(st.to);
+    }
+  });
+  return out;
+}
+const planOf = (job) => viaGates(STEP_PLANS[job.kind](job));
+
 const portWorkTime = (port, tons) => (PORTS[port].portTime ?? 2) + tons / 12;
 const droneShare = (s) => Math.max(1, Math.ceil(value(s, 'drones') / value(s, 'docks')));
 
@@ -218,7 +240,7 @@ const droneShare = (s) => Math.max(1, Math.ceil(value(s, 'drones') / value(s, 'd
  * `from` = desde dónde arranca la nave (por defecto está estacionada en la estación).
  */
 export function estimate(s, ship, kind, job) {
-  const steps = STEP_PLANS[kind](job);
+  const steps = planOf({ ...job, kind });
   const speed = shipSpeed(s, ship);
   const shields = shipShielded(s, ship);
   const rate = shipFuel(ship);
@@ -240,6 +262,10 @@ export function estimate(s, ship, kind, job) {
       t += r.time;
       pos = r.point;
       atHq = st.to === 'hq';
+    } else if (st.do === 'jump') {
+      t += JUMP.time;
+      fuel += JUMP.fuel * rate;
+      pos = position(st.to, t);
     } else if (st.do === 'load' || st.do === 'unload') {
       t += portWorkTime(st.port, job.tons);
       if (st.do === 'unload') deliverAt = t;
@@ -403,7 +429,7 @@ function gainXp(s, n) {
 // ---------- Máquina de estados de cada nave ----------
 
 function startJob(s, ship, job) {
-  ship.job = { ...job, steps: STEP_PLANS[job.kind](job), started: s.t };
+  ship.job = { ...job, steps: planOf(job), started: s.t };
   ship.step = 0;
   s.events.push({ type: 'dispatch', ship: ship.id, job: ship.job });
   beginStep(s, ship);
@@ -435,6 +461,11 @@ function beginStep(s, ship) {
         ship.dur = HQ_TIMES.liftoff;
         ship.liftTo = st.to;
       } else beginTravel(s, ship, st.to);
+      return;
+    case 'jump':
+      ship.status = 'jump';
+      ship.jump = { from: st.from, to: st.to };
+      ship.dur = JUMP.time;
       return;
     case 'load':
     case 'unload':
@@ -606,6 +637,17 @@ function stepShip(s, ship, dt) {
       if (k >= 1) {
         ship.at = L.target;
         if (L.target === 'hq') s.events.push({ type: 'arrived', ship: ship.id });
+        nextStep(s, ship);
+      }
+      return;
+    }
+    case 'jump': {
+      // Mitad del salto saliendo por un portal y mitad llegando por el otro.
+      ship.timer += dt;
+      const done = ship.timer >= ship.dur;
+      ship.pos = position(done || ship.timer > ship.dur / 2 ? ship.jump.to : ship.jump.from, s.t);
+      if (done) {
+        ship.at = ship.jump.to;
         nextStep(s, ship);
       }
       return;

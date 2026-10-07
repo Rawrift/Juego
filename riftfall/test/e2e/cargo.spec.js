@@ -121,6 +121,22 @@ test('Hangar Rift: naves exclusivas con plano, construir con créditos y evoluci
   expect(errors).toEqual([]);
 });
 
+test('Ruta Rift: quien ya jugó RIFTFALL recibe créditos en Rift Cargo (una sola vez)', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('riftfall.progress', JSON.stringify({ runs: 2, bestScore: 900 })));
+  await page.goto('/cargo/');
+  await expect(page.locator('.stage-canvas')).toBeVisible();
+  await expect(page.locator('.toast.ok').filter({ hasText: 'Ruta Rift' })).toBeVisible();
+  expect(await page.evaluate(() => window.__CARGO__.state.credits)).toBe(3000 + 2500);
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+  await page.reload();
+  await expect(page.locator('.topbar .brand')).toBeVisible();
+  expect(await page.evaluate(() => window.__CARGO__.state.credits)).toBe(5500);
+  // El menú invita al próximo escalón.
+  await page.evaluate(() => (window.__CARGO__.state.flags.tut = 99) && (document.querySelector('#coach').hidden = true));
+  await page.locator('.profile').click();
+  await expect(page.locator('#menu a[href="/"]')).toContainText('$10.000');
+});
+
 test('celular: barra de pestañas y panel deslizable', async ({ browser }) => {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'es-ES' });
   await page.goto('/cargo/');
@@ -189,7 +205,7 @@ test('Taller de estilo: se prueba la pintura, se paga en USDT verificado en la c
   const openWorkshop = async () => {
     await skipTutorial(page);
     await page.click('#tabs [data-v="fleet"]');
-    await page.click('.sty-cta');
+    await page.click('.sty-cta[data-act="style"]');
     await expect(page.locator('.modal-card.style')).toBeVisible();
   };
   await page.goto('/cargo/');
@@ -292,7 +308,7 @@ test('celular sin wallet: pagar pide conectar la wallet y, si no anda, abre el j
     await route.fulfill({ status: 200, contentType: 'text/html', body: '<p>MetaMask</p>' });
   });
   await phone.locator('.mtabs [data-v="fleet"]').tap();
-  await phone.locator('.sty-cta').tap();
+  await phone.locator('.sty-cta[data-act="style"]').tap();
   await phone.locator('[data-act="styTrail"][data-v="magenta"]').tap();
   await phone.locator('.sty-buy').first().locator('text=Pagar US$ 1 en USDT').tap();
   // Se pide conectar la wallet; si no anda, el plan B abre el juego dentro de MetaMask.

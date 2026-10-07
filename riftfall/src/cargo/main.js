@@ -7,7 +7,7 @@ import { createStation } from './render/station.js';
 import { createMap } from './render/map.js';
 import { createUI } from './ui/ui.js';
 import { createAudio } from './audio.js';
-import { t, lang } from './i18n.js';
+import { t, lang, money } from './i18n.js';
 import { load, save, clear } from './save.js';
 import { receiveCargoTransfer, applyCargoTransfer, owned, signText, setSign, metamaskLink } from './style.js';
 import { moveIfOldHost, receiveMove } from '../rift/move.js';
@@ -17,6 +17,7 @@ import { createAccountUI } from '../rift/account-ui.js';
 import { setStationSign } from './render/stationScene.js';
 import { step, acceptOffer, buyCargo, buyUpgrade, buyShip, evolveShip, setAuto, fastForward, newGame, ownerBoost } from './sim/sim.js';
 import { OFFLINE_MAX } from './sim/data.js';
+import { TO_CARGO, pending as bridgePending, riftfallProgress } from '../rift/bridge.js';
 
 await document.fonts.load('800 100px "Plus Jakarta Sans"').catch(() => {});
 
@@ -254,6 +255,20 @@ window.addEventListener('pagehide', () => {
   persist();
   cloud.flush();
 });
+
+/** Ruta Rift: lo logrado en RIFTFALL da créditos acá (una vez por escalón). */
+function claimBridge() {
+  const got = bridgePending(TO_CARGO, state.flags.bridge ?? 0, riftfallProgress());
+  if (!got.length) return;
+  const v = got.reduce((a, g) => a + g.credits, 0);
+  state.credits += v;
+  state.flags.bridge = got[got.length - 1].index + 1;
+  save(state);
+  cloud.schedule();
+  setTimeout(() => ui.toast(`${t('bridge.got', { v: money(v) })}`, 'ok', 5200), 900);
+}
+claimBridge();
+document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && claimBridge());
 
 ui.renderAll(true);
 // Los gráficos se preparan sin trabar la pantalla (si tarda más de 4 s, arranca igual).

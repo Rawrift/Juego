@@ -55,8 +55,35 @@ USDT o BNB (red principal de BNB Chain) directo a la wallet del creador. Solo ca
 - **Otro dispositivo:** se pega el hash del pago y se recupera la compra.
 - **Celular sin wallet:** pagar abre la app de MetaMask llevando la partida y las compras en el link.
 - **Pase Fundador de RIFTFALL:** Piloto regala la matrícula propia; Oro, además, la pintura Dorado Fundador
-  y la estela dorada; Leyenda, además, la pintura Prisma.
+  y la estela dorada y el plano del Vencejo; Leyenda, además, la pintura Prisma y el plano del Halcón Rift.
 - Se ven solo en tu juego. Más adelante, con un servidor, los demás jugadores podrían ver tu flota en un ranking.
+
+## Universo: tres sistemas estelares
+
+- **Rift** (estrella dorada, el de la estación), **Umbra** (enana roja, nivel 6: Cripta, Brasa y Eco) y
+  **Helios** (gigante azul, nivel 9: Áurea, Cielo y Edén). Cada sistema tiene su portal de salto.
+- Para ir a otro sistema, la nave vuela al portal de su sistema, salta (8 segundos y algo de combustible) y sale
+  por el portal del otro lado. Los pedidos lejanos pagan más. El cinturón de asteroides queda entre la estación y
+  el Portal Rift: los escudos o una nave blindada ahorran tiempo.
+- En el mapa, la botonera de arriba lleva a cada sistema o a la vista de todo el universo.
+- Código: `src/cargo/sim/data.js` (SYSTEMS, PORTS con `sys`, JUMP), `viaGates()` en `src/cargo/sim/sim.js` y el mapa en
+  `src/cargo/render/map.js`.
+
+## Naves: Hangar Rift y evolución
+
+- **9 naves de diseño exclusivo**, 3 por clase: liviana (Vencejo veloz, Libélula económica, Halcón Rift blindado),
+  mediana (Raya, Nómada, Bisonte) y pesada (Nova, Leviatán, Coloso). Cargan lo mismo que la de fábrica de su clase
+  y no son más fuertes: cambian el equilibrio entre velocidad y combustible, y las blindadas cruzan el cinturón sin frenar.
+- Se compra el **plano** una vez (US$3 / 5 / 8, o la Flota Rift con los 9 por US$29; pago verificado como los
+  estéticos) y después se construyen con créditos. Diseños 3D en `src/cargo/render/exclusive.js`.
+- **Evolución Mk II y Mk III** de cualquier nave con créditos (nivel 3 y 6): +8% / +16% de velocidad y −8% / −16% de
+  combustible. Se ve en la nave: góndolas de impulso (Mk II) y halo encendido (Mk III).
+
+## Ruta Rift (los dos juegos se premian entre sí)
+
+- Jugar RIFTFALL da créditos acá: primera partida $2.500, primer nivel del Rift $10.000, primera victoria $25.000.
+- Crecer acá da Núcleos en RIFTFALL: nivel 3, 6 y 9 (300, 800 y 1.500).
+- Cada escalón se cobra una vez. Código: `src/rift/bridge.js`.
 
 ## Próximos pasos
 
