@@ -10,6 +10,7 @@ import { injected } from '../client/injected.js';
 import { isAdmin } from '../rift/account.js';
 import { walletProvider } from '../rift/wallet.js';
 import { preparePurchase, confirmedPurchase } from '../rift/purchases.js';
+import { HANDOFF_PARAM, linkQuery, requestHandoff, redeemHandoff, takeHandoffParam } from '../rift/handoff.js';
 
 const KEY = 'riftcargo.style';
 const PARAM = 'rf';
@@ -228,23 +229,21 @@ export async function buyStyle(item, method, onStage = () => {}) {
 
 // ---------- Llevar la partida al navegador de MetaMask (celular) ----------
 
-// La sesión de la Cuenta Rift también: en MetaMask entrás a la misma cuenta.
-const CARRY = ['riftcargo.save', 'riftcargo.style', 'riftcargo.lang', 'riftfall.founder', 'rift.session'];
+// La cuenta no va en los datos: viaja con un código de un solo uso (src/rift/handoff.js).
+const CARRY = ['riftcargo.save', 'riftcargo.style', 'riftcargo.lang', 'riftfall.founder'];
 
-/** Link que abre Rift Cargo dentro de la app de MetaMask con la partida y los estéticos. */
+/**
+ * Link que abre Rift Cargo dentro de la app de MetaMask con la partida, los estéticos y, con un código
+ * de un solo uso, la misma cuenta.
+ */
 export async function metamaskLink() {
-  let pack = '';
-  try {
-    const data = {};
-    for (const k of CARRY) {
-      const v = read(k);
-      if (v != null) data[k] = v;
-    }
-    pack = await packData(data);
-  } catch {
-    pack = '';
+  const data = {};
+  for (const k of CARRY) {
+    const v = read(k);
+    if (v != null) data[k] = v;
   }
-  return `https://metamask.app.link/dapp/${location.host}${location.pathname}${pack ? `?${PARAM}=${pack}` : ''}`;
+  const [pack, code] = await Promise.all([packData(data).catch(() => ''), requestHandoff('open')]);
+  return `https://metamask.app.link/dapp/${location.host}${location.pathname}${linkQuery({ [PARAM]: pack, [HANDOFF_PARAM.open]: code })}`;
 }
 
 const parse = (s) => {
@@ -275,16 +274,19 @@ export function applyCargoTransfer(data) {
   const f = parse(data['riftfall.founder']);
   if (f && tierRank(f.tier) > tierRank(parse(read('riftfall.founder'))?.tier)) write('riftfall.founder', data['riftfall.founder']);
   if (data['riftcargo.lang'] && read('riftcargo.lang') == null) write('riftcargo.lang', data['riftcargo.lang']);
-  if (/^[A-Za-z0-9_-]{20,100}$/.test(data['rift.session'] ?? '')) write('rift.session', data['rift.session']);
 }
 
 /** Si la página se abrió con datos en el link, los aplica y limpia la dirección. */
 export async function receiveCargoTransfer() {
   const url = new URL(location.href);
   const text = url.searchParams.get(PARAM);
-  if (!text) return false;
+  const code = takeHandoffParam(url, 'open');
+  if (!text && !code) return false;
   url.searchParams.delete(PARAM);
   history.replaceState(null, '', url.pathname + url.search + url.hash);
+  // Primero la cuenta: si en este navegador había otra, lo suyo se borra antes de traer la partida.
+  const entered = code ? !!(await redeemHandoff(code, 'open')) : false;
+  if (!text) return entered;
   try {
     applyCargoTransfer(await unpackData(text));
     return true;

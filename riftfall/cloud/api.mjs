@@ -28,6 +28,9 @@ const SESSION_DAYS = 365;
 const GAMES = ['riftfall', 'cargo'];
 const MAX_SAVE = 400_000;
 const MAX_BODY = 1_500_000;
+/** Códigos para llevar la cuenta a otro navegador: de un solo uso y de vida corta. */
+const HANDOFF_TTL = 5 * 60_000;
+const HANDOFF_PURPOSES = ['open', 'move'];
 
 // ---------- Utilidades ----------
 
@@ -139,6 +142,18 @@ export function deviceKind(ua = '') {
   return /Mobi|Android|iPhone|iPad/i.test(ua) ? 'mobile' : 'desktop';
 }
 
+/**
+ * Fecha de corte de las sesiones (variable SESSIONS_NOT_BEFORE: milisegundos o una fecha ISO). Sirve
+ * para dar de baja las sesiones emitidas cuando todavía viajaban en los links. Sin la variable, no se
+ * revoca nada.
+ */
+export function sessionCutoff(env = {}) {
+  const raw = String(env.SESSIONS_NOT_BEFORE ?? '').trim();
+  if (!raw) return 0;
+  const n = /^\d+$/.test(raw) ? Number(raw) : Date.parse(raw);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 // ---------- Servidor ----------
 
 export function createApi({ now = () => Date.now(), chain = createChain() } = {}) {
@@ -170,6 +185,13 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
     const hash = await sha256hex(m[1]);
     const s = await ctx.store.session(hash, ctx.t);
     if (!s) return null;
+    // Revocación: las sesiones de antes de la fecha de corte dejan de valer para las cuentas que pueden
+    // volver a entrar (con wallet o huella). Los invitados no tienen otra forma de entrar: conservan la suya.
+    const cutoff = sessionCutoff(ctx.env);
+    if (cutoff && s.created_at < cutoff && (await ctx.store.hasCredentials(s.player_id))) {
+      await ctx.store.dropSession(hash);
+      return null;
+    }
     const player = await ctx.store.player(s.player_id);
     return player ? { hash, player } : null;
   }
@@ -347,6 +369,37 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
       const s = await sessionOf(ctx);
       if (s) await ctx.store.dropSession(s.hash);
       return json({ ok: true });
+    },
+
+    // ---------- Llevar la cuenta a otro navegador (MetaMask, mudanza) con un código de un solo uso ----------
+    'POST /api/rift/handoff': async (ctx) => {
+      const s = await needSession(ctx);
+      const { purpose, origin } = await readJson(ctx.request, 2000);
+      if (!HANDOFF_PURPOSES.includes(purpose)) throw new HttpError(400, 'purpose');
+      const kind = `handoff:${purpose}`;
+      // Un solo código vivo por jugador y por uso: pedir otro anula el anterior.
+      await ctx.store.dropChallenges(s.player.id, kind);
+      const code = b64url(randomBytes(32));
+      // Se guarda el resumen del código (no el código) y el sitio donde se va a usar.
+      await ctx.store.addChallenge({
+        id: await sha256hex(code),
+        kind,
+        value: JSON.stringify({ o: siteOf(ctx, origin).origin }),
+        playerId: s.player.id,
+        expires: ctx.t + HANDOFF_TTL
+      });
+      return json({ ok: true, code, expires: ctx.t + HANDOFF_TTL });
+    },
+
+    'POST /api/rift/handoff/redeem': async (ctx) => {
+      const { code, purpose, origin } = await readJson(ctx.request, 2000);
+      if (!HANDOFF_PURPOSES.includes(purpose) || typeof code !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(code)) throw new HttpError(400, 'expired');
+      const ch = await ctx.store.takeChallenge(await sha256hex(code), `handoff:${purpose}`, ctx.t);
+      if (!ch?.player_id) throw new HttpError(400, 'expired');
+      // El código solo vale en el sitio para el que se pidió.
+      if (JSON.parse(ch.value).o !== siteOf(ctx, origin).origin) throw new HttpError(400, 'expired');
+      if (!(await ctx.store.player(ch.player_id))) throw new HttpError(400, 'expired');
+      return json(await switchTo(ctx, await sessionOf(ctx), ch.player_id));
     },
 
     // ---------- Wallet: firmar un mensaje (gratis) ----------
@@ -637,6 +690,16 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
       const limit = Math.min(50, Number(ctx.url.searchParams.get('limit')) || 20);
       const runs = await ctx.store.pendingRuns(limit);
       return json({ ok: true, runs: runs.map((r) => ({ ...r, body: JSON.parse(r.body), claimed: JSON.parse(r.claimed) })) });
+    },
+    /** Antes de revocar: cuántas sesiones abiertas hay de antes de una fecha y cuántas se darían de baja. */
+    'GET /api/rift/audit/sessions': async (ctx) => {
+      audit(ctx);
+      const cutoff = sessionCutoff({ SESSIONS_NOT_BEFORE: ctx.url.searchParams.get('before') });
+      if (!cutoff) throw new HttpError(400, 'before');
+      const r = await ctx.store.sessionsBefore(cutoff, ctx.t);
+      const total = r?.total ?? 0;
+      const revoked = r?.withCredentials ?? 0;
+      return json({ ok: true, before: cutoff, active: sessionCutoff(ctx.env), total, revoked, kept: total - revoked });
     },
     'POST /api/rift/audit': async (ctx) => {
       audit(ctx);

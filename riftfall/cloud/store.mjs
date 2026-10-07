@@ -79,6 +79,11 @@ export function createStore(db) {
       run('INSERT INTO sessions (token_hash, player_id, created_at, expires_at) VALUES (?, ?, ?, ?)', hash, playerId, now, expires),
     session: (hash, now) => one('SELECT * FROM sessions WHERE token_hash = ? AND expires_at > ?', hash, now),
     dropSession: (hash) => run('DELETE FROM sessions WHERE token_hash = ?', hash),
+    /** Cuántas sesiones abiertas quedan de antes de una fecha (para medir una revocación antes de aplicarla). */
+    sessionsBefore: (cutoff, now) =>
+      one(`SELECT COUNT(*) AS total,
+        SUM(CASE WHEN EXISTS (SELECT 1 FROM wallets w WHERE w.player_id = s.player_id) OR EXISTS (SELECT 1 FROM passkeys k WHERE k.player_id = s.player_id) THEN 1 ELSE 0 END) AS withCredentials
+        FROM sessions s WHERE s.created_at < ? AND s.expires_at > ?`, cutoff, now),
 
     // ---------- Credenciales ----------
     wallets: async (playerId) => (await all('SELECT address FROM wallets WHERE player_id = ? ORDER BY created_at', playerId)).map((r) => r.address),
@@ -98,13 +103,16 @@ export function createStore(db) {
     // ---------- Desafíos de un solo uso (firma de wallet, passkeys) ----------
     addChallenge: ({ id, kind, value, playerId = null, expires }) =>
       run('INSERT INTO challenges (id, kind, value, player_id, expires_at) VALUES (?, ?, ?, ?, ?)', id, kind, value, playerId, expires),
-    /** Lo saca de la base al leerlo: no se puede usar dos veces. */
+    /**
+     * Lo saca de la base al leerlo, en una sola operación: si dos pedidos llegan a la vez con el mismo
+     * desafío, solo uno lo recibe. No se puede usar dos veces.
+     */
     async takeChallenge(id, kind, now) {
-      const row = await one('SELECT * FROM challenges WHERE id = ? AND kind = ?', id, kind);
-      if (!row) return null;
-      await run('DELETE FROM challenges WHERE id = ?', id);
-      return row.expires_at > now ? row : null;
+      const row = await one('DELETE FROM challenges WHERE id = ? AND kind = ? RETURNING *', id, kind);
+      return row && row.expires_at > now ? row : null;
     },
+    /** Borra los desafíos pendientes de un jugador de un tipo (queda uno solo vivo a la vez). */
+    dropChallenges: (playerId, kind) => run('DELETE FROM challenges WHERE player_id = ? AND kind = ?', playerId, kind),
     sweep: (now) => run('DELETE FROM challenges WHERE expires_at < ?', now),
 
     // ---------- Origen de los jugadores y estadísticas del dueño ----------
