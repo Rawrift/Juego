@@ -104,6 +104,10 @@ button:disabled { cursor: default; }
 .money b { font-size: 16px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
 .bell { position: relative; width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; color: var(--ink2); }
 .bell:hover { background: var(--s3); }
+.owner-btn { display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border-radius: 11px; font-weight: 800; font-size: 13px; color: #ffc94d; background: rgba(255, 201, 77, .1); border: 1px solid rgba(255, 201, 77, .45); box-shadow: 0 0 14px rgba(255, 201, 77, .18); }
+.owner-btn[hidden] { display: none; }
+.owner-btn svg { width: 17px; height: 17px; }
+.owner-btn:hover { background: rgba(255, 201, 77, .18); }
 .bell i { position: absolute; top: 8px; right: 9px; width: 8px; height: 8px; border-radius: 50%; background: var(--red); border: 2px solid var(--card-solid); display: none; }
 .profile { display: flex; align-items: center; gap: 10px; padding: 4px 6px 4px 4px; border-radius: 12px; text-align: left; }
 .profile:hover { background: var(--s2); }
@@ -436,6 +440,8 @@ button:disabled { cursor: default; }
   .brand-cube svg { width: 28px; height: 28px; }
   .live { padding: 0 4px 0 10px; }
   .money { padding: 0 10px; }
+  .owner-btn { padding: 0 9px; }
+  .owner-btn span { display: none; }
   .money b { font-size: 15px; }
   .avatar { width: 34px; height: 34px; }
   .kpis { top: 70px; left: 8px; right: 8px; flex-wrap: nowrap; overflow-x: auto; gap: 8px; scrollbar-width: none; }
@@ -549,5 +555,45 @@ button:disabled { cursor: default; }
 .mi.acct { height: auto; padding: 8px 10px; margin-bottom: 6px; border: 1px solid var(--line-strong); background: var(--s2); }
 .mi.acct > span { display: flex; flex-direction: column; text-align: left; }
 .mi.acct small { font-size: 11.5px; font-weight: 600; color: var(--ink2); }
+.mi.acct.owner { border-color: rgba(255, 201, 77, .5); background: rgba(255, 201, 77, .08); }
+.mi.acct.owner > svg { color: #ffc94d; }
 .profile.guest .avatar { position: relative; }
 .profile.guest .avatar::after { content: ''; position: absolute; top: -2px; right: -2px; width: 10px; height: 10px; border-radius: 50%; background: #ffc94d; box-shadow: 0 0 10px #ffc94d; border: 2px solid var(--card-solid); }
+
+/* ---------- Naves exclusivas (Hangar Rift) y evolución ---------- */
+.cls-h { margin: 14px 0 8px; font-family: var(--display); font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink3); }
+.buyship.excl { cursor: pointer; border-color: rgba(157, 107, 255, .35); background: linear-gradient(120deg, rgba(157, 107, 255, .07), transparent 60%); }
+.buyship.excl:hover { border-color: rgba(157, 107, 255, .7); }
+.excl-tag, .armor-tag { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; font-style: normal; font-size: 11px; font-weight: 700; color: #c9a8ff; vertical-align: middle; }
+.excl-tag .ic, .armor-tag .ic { width: 13px; height: 13px; }
+.armor-tag { color: #9ff4ff; }
+.buyship .specs .armor { color: #9ff4ff; }
+.mk-tag { display: inline-block; padding: 1px 6px; border-radius: 6px; font-style: normal; font-size: 10.5px; font-weight: 800; color: #04050c; background: var(--grad); vertical-align: middle; }
+.ship-row .evo-btn { height: auto; min-height: 34px; }
+.evo-box { margin-top: 4px; }
+.evo-box small { display: block; margin-top: 5px; font-size: 11.5px; color: var(--ink3); text-align: center; }
+.evo-max { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 8px 0 0; font-size: 12.5px; font-weight: 700; color: var(--green, #4dff9a); }
+.evo-max .ic { width: 15px; height: 15px; }
+.hg-cta { border-color: rgba(157, 107, 255, .45); background: linear-gradient(120deg, rgba(157, 107, 255, .16), rgba(77, 232, 255, .1) 60%, rgba(255, 201, 77, .1)); }
+.hg-cls { margin: 12px 0 10px; }
+.hg-cls .seg-btn { flex: 1; }
+.hg-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
+.hg-card { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px 8px; border-radius: 12px; border: 1px solid var(--line); background: var(--s2); text-align: center; }
+.hg-card img { width: 100%; aspect-ratio: 200 / 120; object-fit: contain; }
+.hg-card span { font-weight: 700; font-size: 12.5px; }
+.hg-card small { font-size: 11px; color: var(--ink3); }
+.hg-card.on { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue), 0 0 18px rgba(77, 232, 255, .25); }
+.hg-card.lock small { color: #c9a8ff; }
+.hg-preview .hg-evo { position: absolute; right: 10px; bottom: 10px; }
+.hg-info h3 { margin: 12px 0 2px; font-size: 18px; }
+.hg-info > p { margin: 0 0 8px; font-size: 13px; color: var(--ink2); }
+.hg-stat { display: grid; grid-template-columns: 90px 1fr 48px; align-items: center; gap: 10px; margin: 5px 0; font-size: 12.5px; }
+.hg-stat small { color: var(--ink3); }
+.hg-stat i { height: 7px; border-radius: 4px; background: var(--s3); overflow: hidden; }
+.hg-stat i b { display: block; height: 100%; border-radius: 4px; background: var(--grad); }
+.hg-stat span { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.modal-card.hangar > .btn.wide { margin: 12px 0 4px; }
+@media (max-width: 760px) {
+  .hg-grid { grid-template-columns: repeat(2, 1fr); }
+  .hg-stat { grid-template-columns: 74px 1fr 40px; }
+}

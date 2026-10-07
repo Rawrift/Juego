@@ -63,7 +63,7 @@ const T = {
     nudgeSub: 'Huella o Face ID, sin contraseñas',
     ownerBadge: 'Dueño',
     owner: 'Panel del dueño',
-    ownerHint: 'Esta cuenta tiene la wallet del dueño: tenés todo desbloqueado gratis (Pase Fundador Leyenda y todos los estéticos). Desde acá modificás tu partida.',
+    ownerHint: 'Esta cuenta tiene la wallet del dueño: tenés todo desbloqueado gratis (Pase Fundador Leyenda, todos los estéticos y todas las naves exclusivas). Desde acá modificás tu partida.',
     ownerDone: 'Listo.',
     tools: {
       cores: '+5.000 Núcleos',
@@ -72,7 +72,8 @@ const T = {
       parts: 'Todas las piezas al máximo',
       credits: '+$100.000',
       level: 'Nivel máximo',
-      upgrades: 'Todas las mejoras de la estación'
+      upgrades: 'Todas las mejoras de la estación',
+      evolve: 'Flota evolucionada (Mk III)'
     }
   },
   en: {
@@ -128,7 +129,7 @@ const T = {
     nudgeSub: 'Fingerprint or Face ID, no passwords',
     ownerBadge: 'Owner',
     owner: 'Owner panel',
-    ownerHint: 'This account has the owner wallet: everything is unlocked for free (Legend Founder Pass and every cosmetic). From here you can edit your save.',
+    ownerHint: 'This account has the owner wallet: everything is unlocked for free (Legend Founder Pass, every cosmetic and every exclusive ship). From here you can edit your save.',
     ownerDone: 'Done.',
     tools: {
       cores: '+5,000 Cores',
@@ -137,7 +138,8 @@ const T = {
       parts: 'Max all parts',
       credits: '+$100,000',
       level: 'Max level',
-      upgrades: 'Every station upgrade'
+      upgrades: 'Every station upgrade',
+      evolve: 'Evolve the fleet (Mk III)'
     }
   },
   pt: {
@@ -193,7 +195,7 @@ const T = {
     nudgeSub: 'Digital ou Face ID, sem senhas',
     ownerBadge: 'Dono',
     owner: 'Painel do dono',
-    ownerHint: 'Esta conta tem a carteira do dono: tudo desbloqueado de graça (Passe Fundador Lenda e todos os itens visuais). Daqui você modifica seu progresso.',
+    ownerHint: 'Esta conta tem a carteira do dono: tudo desbloqueado de graça (Passe Fundador Lenda, todos os itens visuais e todas as naves exclusivas). Daqui você modifica seu progresso.',
     ownerDone: 'Pronto.',
     tools: {
       cores: '+5.000 Núcleos',
@@ -202,7 +204,8 @@ const T = {
       parts: 'Todas as peças no máximo',
       credits: '+$100.000',
       level: 'Nível máximo',
-      upgrades: 'Todas as melhorias da estação'
+      upgrades: 'Todas as melhorias da estação',
+      evolve: 'Frota evoluída (Mk III)'
     }
   }
 };
@@ -407,10 +410,17 @@ export function createAccountUI({ game, lang = () => 'es', toast = () => {}, onC
     if (!root.hidden && !busy) render();
   });
 
-  function open() {
+  /** `owner: true` abre directo en el Panel del dueño (si la cuenta es del dueño). */
+  function open({ owner: toOwner = false } = {}) {
     render();
     root.hidden = false;
     root.querySelector('.ra-x')?.focus();
+    const section = toOwner && root.querySelector('.ra-owner');
+    if (section) {
+      section.scrollIntoView({ block: 'start' });
+      section.classList.add('flash');
+      setTimeout(() => section.classList.remove('flash'), 1200);
+    }
   }
   function close() {
     root.hidden = true;

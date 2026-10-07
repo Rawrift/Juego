@@ -30,12 +30,38 @@ export const PORT_IDS = Object.keys(PORTS).filter((p) => p !== 'hq');
 /** Cinturón de asteroides: cruzarlo sin escudos cuesta el doble de tiempo. */
 export const BELT = { inner: 74, outer: 82, slow: 0.5 };
 
+/**
+ * Naves. `cls` = clase (liviana, mediana, pesada: cada una carga lo mismo). Los modelos con `bp` son
+ * de diseño exclusivo: se construyen después de comprar su plano (Hangar Rift). No son más fuertes
+ * que los de fábrica: cambian un poco el equilibrio (más rápida pero gasta más, o al revés) y los
+ * blindados (`armor`) cruzan el cinturón de asteroides sin frenar.
+ */
 export const SHIPS = {
-  colibri: { cap: 20, speed: 3.4, fuel: 2.4, price: 3500, level: 1 },
-  mula: { cap: 60, speed: 2.7, fuel: 5.2, price: 15000, level: 2 },
-  titan: { cap: 120, speed: 2.1, fuel: 8.8, price: 48000, level: 4 }
+  colibri: { cls: 'light', cap: 20, speed: 3.4, fuel: 2.4, price: 3500, level: 1 },
+  mula: { cls: 'medium', cap: 60, speed: 2.7, fuel: 5.2, price: 15000, level: 2 },
+  titan: { cls: 'heavy', cap: 120, speed: 2.1, fuel: 8.8, price: 48000, level: 4 },
+  vencejo: { cls: 'light', cap: 20, speed: 3.7, fuel: 2.65, price: 3900, level: 1, bp: true },
+  libelula: { cls: 'light', cap: 20, speed: 3.15, fuel: 1.95, price: 3900, level: 1, bp: true },
+  halcon: { cls: 'light', cap: 20, speed: 3.3, fuel: 2.5, price: 3900, level: 1, bp: true, armor: true },
+  raya: { cls: 'medium', cap: 60, speed: 2.95, fuel: 5.75, price: 16500, level: 2, bp: true },
+  nomada: { cls: 'medium', cap: 60, speed: 2.5, fuel: 4.3, price: 16500, level: 2, bp: true },
+  bisonte: { cls: 'medium', cap: 60, speed: 2.6, fuel: 5.4, price: 16500, level: 2, bp: true, armor: true },
+  nova: { cls: 'heavy', cap: 120, speed: 2.3, fuel: 9.7, price: 52000, level: 4, bp: true },
+  leviatan: { cls: 'heavy', cap: 120, speed: 1.95, fuel: 7.3, price: 52000, level: 4, bp: true },
+  coloso: { cls: 'heavy', cap: 120, speed: 2.0, fuel: 9.0, price: 52000, level: 4, bp: true, armor: true }
 };
 export const SHIP_IDS = Object.keys(SHIPS);
+export const SHIP_CLASSES = ['light', 'medium', 'heavy'];
+
+/**
+ * Evolución de cada nave (Mk I → Mk II → Mk III), con créditos del juego: más velocidad y menos
+ * combustible. `cost` = parte del precio de la nave; `level` = reputación que pide.
+ */
+export const EVOS = [
+  { speed: 1, fuel: 1 },
+  { speed: 1.08, fuel: 0.92, cost: 0.6, level: 3 },
+  { speed: 1.16, fuel: 0.84, cost: 1.2, level: 6 }
+];
 
 /** Mejoras de la estación: cada nivel tiene su valor, su precio y el nivel de reputación que pide. */
 export const UPGRADES = {

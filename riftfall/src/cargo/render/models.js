@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { C, LIVERY, LIVERY_LOOKS, TRAIL_COLORS, hex } from './palette.js';
 import { containerTexture, signTexture, bedTexture } from './textures.js';
 import { rbox, cyl, sphere, lathe, mat, glass, glow, part, bake, profile, cached } from './kit.js';
+import { exclusiveBuilders, EXCLUSIVE_DIMS, EVO_ANCHORS } from './exclusive.js';
 
 export const CONTAINER = { w: 1.2, h: 0.8, d: 0.8 };
 
@@ -137,11 +138,9 @@ export function makeDrone() {
 // Cada modelo tiene su propia silueta (no es la misma nave más grande) y su color de librea:
 // Colibrí (correo veloz, cian), Mula (camión de plataforma, magenta), Titán (carguero pesado, dorado).
 
-export const SHIP_LOOKS = {
-  colibri: { cols: 2, rows: 1, livery: LIVERY.colibri },
-  mula: { cols: 2, rows: 3, livery: LIVERY.mula },
-  titan: { cols: 3, rows: 4, livery: LIVERY.titan }
-};
+const CLASS_GRID = { 20: { cols: 2, rows: 1 }, 60: { cols: 2, rows: 3 }, 120: { cols: 3, rows: 4 } };
+const CAPS = { colibri: 20, mula: 60, titan: 120, vencejo: 20, libelula: 20, halcon: 20, raya: 60, nomada: 60, bisonte: 60, nova: 120, leviatan: 120, coloso: 120 };
+export const SHIP_LOOKS = Object.fromEntries(Object.entries(CAPS).map(([m, cap]) => [m, { ...CLASS_GRID[cap], livery: LIVERY[m] }]));
 
 export const SLOT = { x: 0.92, z: 1.34 };
 
@@ -149,7 +148,8 @@ export const SLOT = { x: 0.92, z: 1.34 };
 const DIMS = {
   colibri: { front: 2.1, back: 2.9, height: 1.95, width: 2.6 },
   mula: { front: 2.15, back: 4.5, height: 2.45, width: 4.3 },
-  titan: { front: 3.25, back: 7.3, height: 3.0, width: 3.9 }
+  titan: { front: 3.25, back: 7.3, height: 3.0, width: 3.9 },
+  ...EXCLUSIVE_DIMS
 };
 
 export function shipDims(model) {
@@ -161,7 +161,16 @@ export function shipDims(model) {
 const BASE = {
   colibri: { hull: C.white, rough: 0.38, metal: 0.3, env: 1.2, dark: 0x232a55, ei: 0.25, neon: 2.2, steelMetal: 0.4 },
   mula: { hull: C.white, rough: 0.4, metal: 0.25, env: 1.1, dark: 0x222852, ei: 0.22, neon: 2.3, steelMetal: 0.4 },
-  titan: { hull: 0x56609a, rough: 0.36, metal: 0.5, env: 1.2, dark: 0x1d2348, ei: 0.2, neon: 2.4, steelMetal: 0.45 }
+  titan: { hull: 0x56609a, rough: 0.36, metal: 0.5, env: 1.2, dark: 0x1d2348, ei: 0.2, neon: 2.4, steelMetal: 0.45 },
+  vencejo: { hull: 0xc3cdf2, rough: 0.3, metal: 0.4, env: 1.3, dark: 0x1f2752, ei: 0.25, neon: 2.3, steelMetal: 0.45 },
+  libelula: { hull: 0xd2daf5, rough: 0.35, metal: 0.25, env: 1.2, dark: 0x1d2a50, ei: 0.25, neon: 2.3, steelMetal: 0.4 },
+  halcon: { hull: 0x3b416f, rough: 0.42, metal: 0.55, env: 1.2, dark: 0x171b3a, ei: 0.3, neon: 2.5, steelMetal: 0.5 },
+  raya: { hull: 0x2e3b7c, rough: 0.32, metal: 0.45, env: 1.3, dark: 0x161c42, ei: 0.28, neon: 2.4, steelMetal: 0.45 },
+  nomada: { hull: 0xb9c2e6, rough: 0.45, metal: 0.25, env: 1.1, dark: 0x262c55, ei: 0.22, neon: 2.3, steelMetal: 0.4 },
+  bisonte: { hull: 0x4a4f7c, rough: 0.45, metal: 0.55, env: 1.15, dark: 0x1a1e3e, ei: 0.25, neon: 2.4, steelMetal: 0.5 },
+  nova: { hull: 0xd8def7, rough: 0.25, metal: 0.55, env: 1.4, dark: 0x1d2348, ei: 0.25, neon: 2.5, steelMetal: 0.5 },
+  leviatan: { hull: 0x27346f, rough: 0.38, metal: 0.35, env: 1.25, dark: 0x141a3c, ei: 0.3, neon: 2.5, steelMetal: 0.45 },
+  coloso: { hull: 0x474d7a, rough: 0.45, metal: 0.55, env: 1.15, dark: 0x181c3b, ei: 0.25, neon: 2.4, steelMetal: 0.5 }
 };
 
 /** Materiales de una nave según su pintura y su estela (estéticos). */
@@ -172,6 +181,7 @@ function shipLook(model, { livery = 'rift', trail = 'cian' } = {}) {
   const neonColor = p?.neon ?? liv;
   return {
     liv,
+    hullColor: p?.hull ?? b.hull,
     hull: p ? mat(p.hull, { rough: p.rough, metal: p.metal, env: 1.3 }) : mat(b.hull, { rough: b.rough, metal: b.metal, env: b.env }),
     dark: mat(p?.dark ?? b.dark, { rough: 0.5, metal: 0.3 }),
     paint: mat(liv, { rough: 0.35, emissive: liv, ei: b.ei }),
@@ -363,7 +373,42 @@ function buildTitan(g, label, flames, navLights, legs, L) {
   return slots;
 }
 
-const BUILDERS = { colibri: buildColibri, mula: buildMula, titan: buildTitan };
+const BUILDERS = {
+  colibri: buildColibri,
+  mula: buildMula,
+  titan: buildTitan,
+  ...exclusiveBuilders({ addEngine, plate, navLight, leg, SLOT, CONTAINER })
+};
+
+/**
+ * Piezas de la evolución, iguales en todos los modelos y ubicadas según EVO_ANCHORS: Mk II suma dos
+ * góndolas de impulso con su motor; Mk III, además, un halo encendido arriba y llamas más largas.
+ */
+function addEvolution(g, model, evo, flames, L) {
+  const a = EVO_ANCHORS[model];
+  if (!a || evo < 1) return;
+  const s = a.s;
+  const pod = cached('evoPod', () => {
+    const geo = lathe('evoPodLathe', [[0.001, 0], [0.12, 0.05], [0.17, 0.25], [0.18, 0.75], [0.13, 1.0], [0.001, 1.08]], 20).clone();
+    geo.rotateX(Math.PI / 2);
+    geo.translate(0, 0, -0.45);
+    return geo;
+  });
+  for (const sx of [-1, 1]) {
+    const [x, y, z] = a.boost;
+    const p = part(g, pod, L.hull, sx * x, y, z);
+    p.scale.setScalar(s);
+    const ring = part(g, cyl(0.185, 0.185, 0.07, 20), L.neon, sx * x, y, z + 0.15 * s, Math.PI / 2, 0, 0);
+    ring.scale.setScalar(s);
+    addEngine(g, flames, sx * x, y, z - 0.5 * s, 0.5 * s, L.paint, L.hull, L.trail);
+  }
+  if (evo < 2) return;
+  const [x, y, z] = a.top;
+  const halo = part(g, cached('evoHalo', () => new THREE.TorusGeometry(0.42, 0.035, 8, 40)), glow(L.liv, 2.6), x, y, z, Math.PI / 2, 0, 0, { shadow: false });
+  halo.scale.setScalar(s);
+  const core = part(g, cached('evoCore', () => new THREE.OctahedronGeometry(0.1, 0)), glow(0xffffff, 2.2), x, y, z, 0, 0.5, 0, { shadow: false });
+  core.scale.setScalar(s);
+}
 
 /**
  * Nave de carga. userData.slots: posiciones locales de los contenedores (de adelante hacia atrás);
@@ -377,20 +422,26 @@ export function makeShip(model, label = 'RC', style = {}) {
   const navLights = [];
   const legs = new THREE.Group();
   legs.userData.live = true;
-  const slots = BUILDERS[model](g, label, flames, navLights, legs, shipLook(model, style));
+  const L = shipLook(model, style);
+  const slots = (BUILDERS[model] ?? BUILDERS.colibri)(g, label, flames, navLights, legs, L);
+  const evo = Math.max(0, Math.min(2, Math.floor(style?.evo ?? 0)));
+  addEvolution(g, model, evo, flames, L);
   g.add(legs);
   bake(g);
   const cargo = new THREE.Group();
   cargo.userData.live = true;
   g.add(cargo);
-  g.userData = { ...g.userData, slots, flames, cargo, legs, navLights, model, dims: shipDims(model) };
+  g.userData = { ...g.userData, slots, flames, cargo, legs, navLights, model, dims: shipDims(model), thrustMul: evo >= 2 ? 1.3 : 1 };
   return g;
 }
 
 /** Clave de lo que cambia el aspecto de una nave del juego (para rearmarla si cambia). */
 export function shipStyleKey(s) {
-  return `${s.model}|${s.name}|${s.look?.livery ?? 'rift'}|${s.look?.trail ?? 'cian'}`;
+  return `${s.model}|${s.name}|${s.look?.livery ?? 'rift'}|${s.look?.trail ?? 'cian'}|${s.evo ?? 0}`;
 }
+
+/** Estéticos y evolución de una nave del juego, para makeShip. */
+export const shipStyle = (s) => ({ ...s.look, evo: s.evo ?? 0 });
 
 /** Pone `n` contenedores del tipo `cargoType` en la nave (o los saca). */
 export function setShipCargo(ship, cargoType, n) {
@@ -414,9 +465,10 @@ export function setShipCargo(ship, cargoType, n) {
 
 /** Empuje visual de los motores, de 0 (apagados) a 1. */
 export function setThrust(ship, k, t = 0) {
+  const mul = ship.userData.thrustMul ?? 1;
   for (const f of ship.userData.flames) {
     const flick = 1 + Math.sin(t * 31 + f.id) * 0.06;
-    f.scale.set(1, Math.max(0.001, k * 1.25 * flick), 1);
+    f.scale.set(1, Math.max(0.001, k * 1.25 * mul * flick), 1);
     f.visible = k > 0.02;
     f.userData.halo.visible = k > 0.02;
     f.userData.halo.material.opacity = Math.min(1, k * 1.2);

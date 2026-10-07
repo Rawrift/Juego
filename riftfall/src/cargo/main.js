@@ -15,7 +15,7 @@ import { applyTransfer } from '../client/transfer.js';
 import { start as startAccount, createSync, syncPurchases, isReloading } from '../rift/account.js';
 import { createAccountUI } from '../rift/account-ui.js';
 import { setStationSign } from './render/stationScene.js';
-import { step, acceptOffer, buyCargo, buyUpgrade, buyShip, setAuto, fastForward, newGame, ownerBoost } from './sim/sim.js';
+import { step, acceptOffer, buyCargo, buyUpgrade, buyShip, evolveShip, setAuto, fastForward, newGame, ownerBoost } from './sim/sim.js';
 import { OFFLINE_MAX } from './sim/data.js';
 
 await document.fonts.load('800 100px "Plus Jakarta Sans"').catch(() => {});
@@ -136,7 +136,8 @@ const ui = createUI({
     accept: (offerId, shipId) => acceptOffer(state, offerId, shipId),
     buy: (port, shipId) => buyCargo(state, port, shipId),
     upgrade: (id) => buyUpgrade(state, id),
-    buyShip: (m) => buyShip(state, m),
+    buyShip: (m) => buyShip(state, m, owned()),
+    evolve: (shipId) => evolveShip(state, shipId),
     setAuto: (shipId, mode) => setAuto(state, shipId, mode),
     setView,
     setSpeed: (v) => (speed = v),
@@ -166,7 +167,7 @@ const ui = createUI({
     langChanged: () => map?.relabel(),
     restyle: () => save(state),
     persist: () => save(state),
-    openAccount: () => accountUI.open(),
+    openAccount: (opts) => accountUI.open(opts),
     setSign(text) {
       if (!setSign(text)) return false;
       setStationSign(signText());
@@ -205,7 +206,7 @@ const accountUI = createAccountUI({
   lang: () => lang,
   toast: (msg, kind) => ui.toast(`<span>${msg.replace(/[<>&]/g, '')}</span>`, kind === 'err' ? 'err' : 'ok', 4200),
   onChange: () => ui.renderAll(true),
-  owner: { credits: boost('credits'), level: boost('level'), upgrades: boost('upgrades') },
+  owner: { credits: boost('credits'), level: boost('level'), upgrades: boost('upgrades'), evolve: boost('evolve') },
   // En el celular sin wallet: Rift Cargo se abre en MetaMask con tu cuenta y tu partida.
   walletLink: () => {
     save(state);
@@ -255,7 +256,8 @@ window.addEventListener('pagehide', () => {
 });
 
 ui.renderAll(true);
-stage.start();
+// Los gráficos se preparan sin trabar la pantalla (si tarda más de 4 s, arranca igual).
+withTimeout(stage.precompile(), 4000).then(() => stage.start());
 if (away && away.seconds > 60) ui.showAway(away);
 else ui.tutorial();
 // Un pago de estéticos que quedó sin confirmar la vez anterior se verifica solo.

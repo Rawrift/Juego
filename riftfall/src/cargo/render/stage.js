@@ -3,6 +3,7 @@
 
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -19,15 +20,31 @@ function dampAngle(a, b, rate, dt) {
   return a + d * (1 - Math.exp(-rate * dt));
 }
 
-/** Calidad según el equipo: en celulares se baja la resolución y la oclusión va a media resolución. */
+/** Escalones de calidad que el equipo ya necesitó bajar (se recuerda para la próxima vez). */
+const GFX_KEY = 'riftcargo.gfx';
+const MAX_LEVEL = 6;
+function savedLevel() {
+  try {
+    return Math.max(0, Math.min(MAX_LEVEL, Math.floor(Number(localStorage.getItem(GFX_KEY)) || 0)));
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Calidad según el equipo. Lo que más cuesta dibujar es la oclusión ambiental (sombreado de las
+ * esquinas) y después el brillo de neón: en celulares la oclusión va apagada y el brillo se calcula a
+ * media resolución (es un difuminado: no se nota). `?q=low|high` la fija para pruebas.
+ */
 export function pickQuality() {
   const coarse = matchMedia('(pointer: coarse)').matches;
   const small = Math.min(screen.width, screen.height) < 820;
   const low = coarse || small || (navigator.hardwareConcurrency ?? 8) <= 4;
   const forced = new URLSearchParams(location.search).get('q');
   const fixed = !!forced;
-  if (forced === 'low' || (low && forced !== 'high')) return { name: 'low', dpr: 1.5, ao: 'half', shadow: 2048, smaa: false, fixed };
-  return { name: 'high', dpr: forced === 'high' ? 2 : 1.75, ao: 'full', shadow: 4096, smaa: true, fixed };
+  const level = fixed ? 0 : savedLevel();
+  if (forced === 'low' || (low && forced !== 'high')) return { name: 'low', dpr: 1.25, ao: 'off', bloom: 0.5, shadow: 2048, smaa: false, fixed, level };
+  return { name: 'high', dpr: forced === 'high' ? 2 : 1.75, ao: 'full', bloom: 0.5, shadow: 4096, smaa: true, fixed, level };
 }
 
 export function createStage(host, quality = pickQuality()) {
@@ -67,45 +84,95 @@ export function createStage(host, quality = pickQuality()) {
 
   let scene = null;
   let composer = null;
+  let renderPass = null;
   let aoPass = null;
+  let aoOn = false;
+  let aoSettings = { radius: 2.2, intensity: 3.2, falloff: 1.2 };
   let bloomPass = null;
+  let bloomScale = quality.bloom;
   let smaaPass = null;
   let width = 1;
   let height = 1;
 
   function buildComposer() {
     composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(width, height, { type: THREE.HalfFloatType }));
-    aoPass = new N8AOPass(scene, camera, width, height);
-    const cfg = aoPass.configuration;
-    cfg.gammaCorrection = false;
-    cfg.aoRadius = 2.2;
-    cfg.distanceFalloff = 1.2;
-    cfg.intensity = 3.2;
-    cfg.color = new THREE.Color(0x02030c);
-    cfg.halfRes = quality.ao === 'half';
-    aoPass.setQualityMode(quality.ao === 'half' ? 'Low' : 'Medium');
-    composer.addPass(aoPass);
+    // La escena la dibuja el paso de oclusión (N8AO) o, con la oclusión apagada, un paso común.
+    renderPass = new RenderPass(scene, camera);
+    composer.addPass(renderPass);
     // Brillo de las luces de neón (solo lo muy luminoso: tiras, motores, carteles).
     bloomPass = new UnrealBloomPass(new THREE.Vector2(width, height), 0.5, 0.32, 1.15);
     composer.addPass(bloomPass);
     composer.addPass(new OutputPass());
-    if (quality.smaa) {
+    // Si este equipo ya tuvo que bajar la calidad, se arranca así (sin armar lo que se apagaría igual).
+    const lv = quality.level;
+    if (quality.smaa && lv < 1) {
       smaaPass = new SMAAPass();
       composer.addPass(smaaPass);
     }
     composer.setPixelRatio(renderer.getPixelRatio());
-    composer.setSize(width, height);
+    const ao = lv >= 3 ? 'off' : lv >= 2 && quality.ao !== 'off' ? 'half' : quality.ao;
+    if (ao !== 'off') setAO(ao);
+    resize();
+  }
+
+  /** Oclusión ambiental: 'full', 'half' (a media resolución) u 'off'. */
+  function setAO(mode) {
+    const on = mode !== 'off';
+    if (on && !aoPass) {
+      aoPass = new N8AOPass(scene, camera, width, height);
+      const cfg = aoPass.configuration;
+      cfg.gammaCorrection = false;
+      cfg.color = new THREE.Color(0x02030c);
+    }
+    if (aoPass) {
+      aoPass.configuration.halfRes = mode === 'half';
+      aoPass.setQualityMode(mode === 'half' ? 'Low' : 'Medium');
+      applyAOSettings();
+    }
+    if (on === aoOn) return;
+    aoOn = on;
+    const [from, to] = on ? [renderPass, aoPass] : [aoPass, renderPass];
+    composer.removePass(from);
+    composer.insertPass(to, 0);
+    to.scene = scene;
+    resize();
+  }
+  function applyAOSettings() {
+    if (!aoPass) return;
+    aoPass.scene = scene;
+    aoPass.configuration.aoRadius = aoSettings.radius;
+    aoPass.configuration.intensity = aoSettings.intensity;
+    aoPass.configuration.distanceFalloff = aoSettings.falloff;
   }
 
   function setScene(s, { ao = { radius: 2.2, intensity: 3.2, falloff: 1.2 }, bloom = 0.55 } = {}) {
     scene = s;
     scene.environment = envMap;
-    if (!composer) buildComposer();
-    aoPass.scene = scene;
-    aoPass.configuration.aoRadius = ao.radius;
-    aoPass.configuration.intensity = ao.intensity;
-    aoPass.configuration.distanceFalloff = ao.falloff;
+    aoSettings = ao;
+    if (!composer) {
+      buildComposer();
+      applyLevel(quality.level);
+    }
+    renderPass.scene = scene;
+    applyAOSettings();
     bloomPass.strength = bloom;
+  }
+
+  /**
+   * Compila los shaders de la escena antes del primer cuadro, en paralelo y sin trabar la pantalla
+   * (si el navegador puede). Se compilan como para dibujar en el buffer de efectos, que es donde van.
+   */
+  function precompile() {
+    if (!scene || !composer) return Promise.resolve();
+    const prev = renderer.getRenderTarget();
+    renderer.setRenderTarget(composer.readBuffer);
+    try {
+      return renderer.compileAsync(scene, camera).catch(() => {});
+    } catch {
+      return Promise.resolve();
+    } finally {
+      renderer.setRenderTarget(prev);
+    }
   }
 
   function resize() {
@@ -115,7 +182,11 @@ export function createStage(host, quality = pickQuality()) {
     renderer.domElement.style.width = `${width}px`;
     renderer.domElement.style.height = `${height}px`;
     labels.setSize(width, height);
-    composer?.setSize(width, height);
+    if (!composer) return;
+    composer.setSize(width, height);
+    // El brillo es un difuminado: calcularlo a menos resolución casi no se nota y cuesta mucho menos.
+    const px = renderer.getPixelRatio() * bloomScale;
+    bloomPass.setSize(Math.max(1, Math.round(width * px)), Math.max(1, Math.round(height * px)));
   }
   new ResizeObserver(resize).observe(host);
   resize();
@@ -240,28 +311,45 @@ export function createStage(host, quality = pickQuality()) {
     return { x: (p.x + 1) / 2 * width, y: (1 - p.y) / 2 * height, visible: p.z < 1 };
   }
 
-  // Calidad automática: si el equipo no llega a ~40 cuadros por segundo se baja de a un escalón
-  // (sin suavizado extra, oclusión a media resolución, menos resolución).
-  const governor = { t: 0, frames: 0, level: 0, cooldown: 3 };
+  // Calidad automática: si el equipo no llega a ~40 cuadros por segundo se baja un escalón, y el
+  // escalón queda guardado para la próxima vez (así no arranca lageado cada vez que se abre).
+  const setDpr = (v) => {
+    renderer.setPixelRatio(v);
+    composer.setPixelRatio(v);
+    resize();
+  };
+  const STEPS = [
+    () => smaaPass && composer.passes.includes(smaaPass) && composer.removePass(smaaPass), // 1: sin suavizado extra
+    () => aoOn && setAO('half'), // 2: oclusión a media resolución
+    () => setAO('off'), // 3: sin oclusión
+    () => setDpr(Math.max(1, renderer.getPixelRatio() - 0.25)), // 4: un poco menos de resolución
+    () => {
+      bloomScale = 0.25; // 5: brillo a un cuarto
+      resize();
+    },
+    () => setDpr(1) // 6: resolución 1:1
+  ];
+  let level = 0;
+  function applyLevel(n) {
+    while (level < Math.min(n, MAX_LEVEL)) STEPS[level++]();
+  }
+  const governor = { t: 0, frames: 0, cooldown: 2 };
   function govern(raw) {
     governor.t += raw;
     governor.frames++;
     governor.cooldown -= raw;
-    if (governor.t < 2) return;
+    if (governor.t < 1.5) return;
     const avg = governor.t / governor.frames;
     governor.t = 0;
     governor.frames = 0;
-    if (avg < 0.025 || governor.cooldown > 0 || !composer) return;
-    governor.cooldown = 3;
-    governor.level++;
-    if (governor.level === 1 && smaaPass) composer.removePass(smaaPass);
-    else if (governor.level === 2) aoPass.configuration.halfRes = true;
-    else if (governor.level === 3 || governor.level === 4) {
-      renderer.setPixelRatio(Math.max(1, renderer.getPixelRatio() - 0.4));
-      composer.setPixelRatio(renderer.getPixelRatio());
-      resize();
-    } else if (governor.level === 5) aoPass.setQualityMode('Performance');
-    else if (governor.level === 6 && bloomPass) bloomPass.resolution.set(width / 2, height / 2);
+    if (avg < 0.025 || governor.cooldown > 0 || !composer || level >= MAX_LEVEL) return;
+    governor.cooldown = 1.5;
+    applyLevel(level + 1);
+    try {
+      localStorage.setItem(GFX_KEY, String(level));
+    } catch {
+      /* sin almacenamiento */
+    }
   }
 
   let last = performance.now();
@@ -293,6 +381,7 @@ export function createStage(host, quality = pickQuality()) {
   return {
     renderer, camera, rig, labels, quality, envMap,
     setScene,
+    precompile,
     onFrame: (fn) => frameFns.push(fn),
     onClick: (fn) => listeners.click.push(fn),
     pick,
@@ -303,6 +392,8 @@ export function createStage(host, quality = pickQuality()) {
     zoomBy(k) { rig.zoomGoal = Math.min(rig.maxZoom, Math.max(rig.minZoom, rig.zoomGoal * k)); },
     rotateBy(a) { rig.azimuthGoal += a; },
     get size() { return { width, height }; },
+    /** Efectos de la imagen (para medir y para las pruebas). */
+    get fx() { return { composer, ao: aoPass, aoOn, bloom: bloomPass, bloomScale, smaa: smaaPass, level, setAO, applyLevel }; },
     /** Saca una captura (para el kit de redes y los tests). */
     snapshot() { composer.render(0); return renderer.domElement.toDataURL('image/png'); }
   };

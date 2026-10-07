@@ -7,6 +7,8 @@ const dataDir = path.join(os.tmpdir(), `riftfall-e2e-${Date.now()}`);
 export default defineConfig({
   testDir: './test/e2e',
   timeout: 120_000,
+  // Sin placa de video el 3D se dibuja por software: el primer cuadro puede tardar varios segundos.
+  expect: { timeout: 15_000 },
   workers: 1,
   use: {
     baseURL: 'http://127.0.0.1:4174',

@@ -59,7 +59,7 @@ export function founderRank() {
 
 export function owned() {
   // El dueño del juego tiene todos los estéticos.
-  if (isAdmin()) return ownedSet(['pack'], 3);
+  if (isAdmin()) return ownedSet(['pack', 'fleet'], 3);
   return ownedSet(loadStyle().bought.map((b) => b.item), founderRank());
 }
 export const has = (id) => owned().has(id);

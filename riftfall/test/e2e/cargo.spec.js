@@ -83,6 +83,44 @@ test('mapa del sistema y mejoras', async ({ page }) => {
   expect(after).toBe(before + 1);
 });
 
+test('Hangar Rift: naves exclusivas con plano, construir con créditos y evolucionar a Mk II', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  // El jugador ya tiene el plano de la Raya (comprado antes en este navegador).
+  await page.addInitScript(() => localStorage.setItem('riftcargo.style', JSON.stringify({ bought: [{ item: 'ship-raya' }], sign: '', pending: [] })));
+  await page.goto('/cargo/');
+  await expect(page.locator('.stage-canvas')).toBeVisible();
+  await skipTutorial(page);
+  await page.evaluate(() => Object.assign(window.__CARGO__.state, { level: 6, credits: 1e6 }) && (window.__CARGO__.state.up.hangar = 2));
+  await page.locator('#tabs [data-v="fleet"]').click();
+  // La tienda muestra las 12 naves por clase; las exclusivas sin plano piden ir al Hangar.
+  await expect(page.locator('.buyship')).toHaveCount(12);
+  await expect(page.locator('.buyship.excl')).toHaveCount(9);
+  await page.locator('.hg-cta').click();
+  await expect(page.locator('.modal-card.hangar')).toBeVisible();
+  await expect(page.locator('.hg-card')).toHaveCount(4);
+  // Una sin plano: se ve el precio y los botones de pago.
+  await page.locator('[data-act="hgCls"][data-v="medium"]').click();
+  await page.locator('[data-act="hgModel"][data-v="bisonte"]').click();
+  await expect(page.locator('.modal-card.hangar [data-act="styBuy"][data-v="ship-bisonte"][data-m="usdt"]')).toContainText('5');
+  // Cómo queda evolucionada.
+  await page.locator('[data-act="hgEvo"][data-v="2"]').click();
+  await expect(page.locator('[data-act="hgEvo"][data-v="2"]')).toHaveClass(/on/);
+  // Con el plano, se construye con créditos.
+  await page.locator('[data-act="hgModel"][data-v="raya"]').click();
+  await page.locator('.modal-card.hangar [data-act="buyShip"]').click();
+  await expect.poll(() => page.evaluate(() => window.__CARGO__.state.ships.filter((x) => x.model === 'raya').length)).toBe(1);
+  await page.screenshot({ path: 'test-results/cargo-hangar.png' });
+  await page.locator('.modal-card.hangar [data-act="closeModal"]').click();
+  // Evolucionar la nave desde su tarjeta.
+  const id = await page.evaluate(() => window.__CARGO__.state.ships.find((x) => x.model === 'raya').id);
+  await page.locator(`.ship[data-v="${id}"]`).click();
+  await page.locator('#detail [data-act="evolve"]').click();
+  await expect.poll(() => page.evaluate((i) => window.__CARGO__.state.ships.find((x) => x.id === i).evo, id)).toBe(1);
+  await expect(page.locator('#detail')).toContainText('Mk 2');
+  expect(errors).toEqual([]);
+});
+
 test('celular: barra de pestañas y panel deslizable', async ({ browser }) => {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'es-ES' });
   await page.goto('/cargo/');

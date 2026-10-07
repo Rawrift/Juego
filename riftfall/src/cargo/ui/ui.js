@@ -4,18 +4,18 @@
 
 import { icon } from '../icons.js';
 import { t, num, money, pct, dur, lang, setLang } from '../i18n.js';
-import { BOX, CARGO_IDS, PORTS, SHIPS, SHIP_IDS, UPGRADES, UPGRADE_IDS, LEVELS } from '../sim/data.js';
+import { BOX, CARGO_IDS, PORTS, SHIPS, SHIP_IDS, SHIP_CLASSES, EVOS, UPGRADES, UPGRADE_IDS, LEVELS } from '../sim/data.js';
 import {
   available, freeSpace, depotCap, stockTotal, incomingTotal, value, upgradeCost, estimate, buyQuote,
-  buyPrice, priceTrend, isIdle, incomePerMin, onTimeRate, levelProgress, unlockedPorts, fleetCap, shipById
+  buyPrice, priceTrend, isIdle, incomePerMin, onTimeRate, levelProgress, unlockedPorts, fleetCap, shipById, evolveCost
 } from '../sim/sim.js';
 import { position, dist } from '../sim/orbit.js';
 import { shipThumb } from '../render/thumbs.js';
 import { morph } from './morph.js';
-import { LIVERY_IDS, TRAIL_IDS, LIVERIES, TRAILS, STYLE_ITEMS } from '../../shared/cargo-style.js';
+import { LIVERY_IDS, TRAIL_IDS, LIVERIES, TRAILS, STYLE_ITEMS, PACK_ITEMS, SHIP_ITEMS } from '../../shared/cargo-style.js';
 import { C, LIVERY, LIVERY_LOOKS, TRAIL_COLORS, hex } from '../render/palette.js';
 import * as style from '../style.js';
-import { account as rgAccount, claimPurchase, onAccount } from '../../rift/account.js';
+import { account as rgAccount, claimPurchase, onAccount, isAdmin } from '../../rift/account.js';
 import { openInMetaMask } from '../../rift/open-in-metamask.js';
 import { remoteWallet } from '../../rift/wallet.js';
 
@@ -27,7 +27,13 @@ const cg = (c, cls = '') => `<span class="cg cg-${c} ${cls}">${icon(c)}</span>`;
 const until = (at, cls = '') => `<b class="until ${cls}" data-until="${at}"></b>`;
 
 /** Lo que trae el pack (para saber si ya está todo). */
-const PACK_ALL = Object.keys(STYLE_ITEMS).filter((id) => id !== 'pack');
+const PACK_ALL = PACK_ITEMS;
+/** Carga de muestra en las miniaturas de cada clase de nave, y el modelo de fábrica de la clase. */
+const CLASS_CARGO = { light: 'agua', medium: 'mineral', heavy: 'piezas' };
+const CLASS_BASE = { light: 'colibri', medium: 'mula', heavy: 'titan' };
+const mk = (ship) => (ship.evo ?? 0) + 1;
+/** Estéticos y evolución de una nave, para su miniatura. */
+const looks = (ship) => ({ ...ship.look, evo: ship.evo ?? 0 });
 
 const STATUS_PILL = {
   parked: 'idle', queued: 'wait', docking: 'loading', docked: 'loading', waitdrones: 'wait', working: 'loading',
@@ -89,6 +95,7 @@ export function createUI({ state, actions, isMap }) {
         <button class="speed" data-act="speed" id="speedBtn" aria-label="${t('speed')}">1×</button>
       </div>
       <div class="money">${icon('coins')}<b id="credits"></b></div>
+      <button class="owner-btn" data-act="owner" id="ownerBtn" hidden>${icon('crown')}<span data-t="owner.btn"></span></button>
       <button class="bell" data-act="bell" aria-label="bell">${icon('bell')}<i id="bellDot"></i></button>
       <button class="profile" data-act="menu">
         <span class="avatar">${icon('user')}</span>
@@ -304,9 +311,9 @@ export function createUI({ state, actions, isMap }) {
       const eta = shipEta(s, state);
       const L = s.load;
       return `<article class="ship ${ui.detailId === s.id ? 'sel' : ''}" data-act="select" data-v="${s.id}">
-        <img class="ship-img" src="${shipThumb(s.model, L?.cargo ?? 'agua', s.look)}" alt="" />
+        <img class="ship-img" src="${shipThumb(s.model, L?.cargo ?? 'agua', looks(s))}" alt="" />
         <div class="ship-txt">
-          <h4>${shipName(s)} <small>${t(`ship.${s.model}`)} · ${SHIPS[s.model].cap} t</small></h4>
+          <h4>${shipName(s)}${s.evo ? ` <i class="mk-tag">${t('evo.mk', { n: mk(s) })}</i>` : ''} <small>${t(`ship.${s.model}`)} · ${SHIPS[s.model].cap} t</small></h4>
           <p>${statusText(s)}${eta ? ` · ${until(eta)}` : ''}</p>
           ${L ? `<p class="load">${cg(L.cargo, 'xs')}${L.tons} t ${cargoName(L.cargo)}</p>` : ''}
         </div>
@@ -318,27 +325,37 @@ export function createUI({ state, actions, isMap }) {
               ${['off', 'supply', 'orders', 'freight'].map((m) => `<option value="${m}" ${s.auto === m ? 'selected' : ''}>${t(`auto.${m}`)}</option>`).join('')}
             </select>
           </label>
+          ${evolveCost(state, s) ? `<button class="btn line sm evo-btn" data-act="select" data-v="${s.id}" title="${t('evo.title')}">${icon('upgrade')}<span>${t('evo.mk', { n: mk(s) + 1 })}</span></button>` : ''}
           <button class="btn line sm sty-btn" data-act="style" data-v="${s.id}" title="${t('style.title')}">${icon('brush')}<span>${t('style.open')}</span></button>
         </div>
       </article>`;
     }).join('');
     const full = state.ships.length >= fleetCap(state);
-    const shop = SHIP_IDS.map((m) => {
-      const def = SHIPS[m];
-      const locked = state.level < def.level;
-      return `<article class="buyship ${locked ? 'locked' : ''}">
-        <img src="${shipThumb(m, m === 'colibri' ? 'agua' : m === 'mula' ? 'mineral' : 'piezas')}" alt="" />
-        <div><h4>${t(`ship.${m}`)}</h4><p>${t(`ship.${m}.d`)}</p>
-          <p class="specs"><span>${icon('box')}${def.cap} t</span><span>${icon('gauge')}${def.speed}</span></p></div>
-        <button class="btn ${locked || full ? 'line' : 'primary'} sm" data-act="buyShip" data-v="${m}" ${locked || full || state.credits < def.price ? 'disabled' : ''}>
-          ${locked ? `${icon('lock')}${t('up.needLevel', { n: def.level })}` : money(def.price)}</button>
-      </article>`;
-    }).join('');
+    const shop = SHIP_CLASSES.map((c) => `<h4 class="cls-h">${t(`cls.${c}`)}</h4>${SHIP_IDS.filter((m) => SHIPS[m].cls === c).map((m) => shopCard(m, full)).join('')}`).join('');
     return `<button class="sty-cta" data-act="style">${icon('brush', 'sty-cta-ic')}<span><b>${t('style.cta')}</b><small>${t('style.ctaSub')}</small></span>${icon('right')}</button>
       <h3 class="ph">${t('fleet.title')} <small>${t('fleet.hangar', { n: state.ships.length, cap: fleetCap(state) })}</small></h3>
       ${hasAuto ? '' : `<p class="hint">${icon('bot')}${t('fleet.autoLocked')}</p>`}
       ${ships}
-      <h3 class="ph sub">${t('fleet.buy')}</h3>${full ? `<p class="hint">${icon('alert')}${t('fleet.full')}</p>` : ''}${shop}`;
+      <h3 class="ph sub">${t('fleet.buy')}</h3>${full ? `<p class="hint">${icon('alert')}${t('fleet.full')}</p>` : ''}
+      <button class="sty-cta hg-cta" data-act="hangar">${icon('rocket', 'sty-cta-ic')}<span><b>${t('hg.cta')}</b><small>${t('hg.ctaSub')}</small></span>${icon('right')}</button>
+      ${shop}`;
+  }
+
+  /** Una nave de la tienda: las de fábrica se compran con créditos; las exclusivas, con su plano. */
+  function shopCard(m, full) {
+    const def = SHIPS[m];
+    const locked = state.level < def.level;
+    const needBp = def.bp && !style.has(`ship-${m}`);
+    const btn = needBp
+      ? `<button class="btn line sm" data-act="hangar" data-v="${m}">${icon('lock')}US$ ${STYLE_ITEMS[`ship-${m}`].usd}</button>`
+      : `<button class="btn ${locked || full ? 'line' : 'primary'} sm" data-act="buyShip" data-v="${m}" ${locked || full || state.credits < def.price ? 'disabled' : ''}>
+          ${locked ? `${icon('lock')}${t('up.needLevel', { n: def.level })}` : money(def.price)}</button>`;
+    return `<article class="buyship ${locked ? 'locked' : ''} ${def.bp ? 'excl' : ''}" ${def.bp ? `data-act="hangar" data-v="${m}"` : ''}>
+      <img src="${shipThumb(m, CLASS_CARGO[def.cls])}" alt="" />
+      <div><h4>${t(`ship.${m}`)}${def.bp ? `<i class="excl-tag" title="${t('fleet.exclusive')}">${icon('sparkle')}</i>` : ''}</h4><p>${t(`ship.${m}.d`)}</p>
+        <p class="specs"><span>${icon('box')}${def.cap} t</span><span>${icon('gauge')}${def.speed}</span><span>${icon('combustible')}${def.fuel}</span>${def.armor ? `<span class="armor">${icon('shield')}</span>` : ''}</p></div>
+      ${btn}
+    </article>`;
   }
 
   const UP_ICONS = { docks: 'dock', drones: 'drone', depot: 'layers', hangar: 'home', engines: 'gauge', shields: 'shield', autopilot: 'bot' };
@@ -458,7 +475,7 @@ export function createUI({ state, actions, isMap }) {
       <div class="track-body">
         <ol class="steps">${nodes}</ol>
         <button class="shipcard" data-act="select" data-v="${s.id}">
-          <img src="${shipThumb(s.model, j.cargo, s.look)}" alt="" />
+          <img src="${shipThumb(s.model, j.cargo, looks(s))}" alt="" />
           <div><b>#${j.id} · ${shipName(s)}</b><small>${t('track.to', { port: portName(dest) })} · ${cg(j.cargo, 'xs')}${j.tons} t</small>${pill(s)}</div>
           ${icon('right')}
         </button>
@@ -477,7 +494,7 @@ export function createUI({ state, actions, isMap }) {
     const row = (k, v) => `<div class="row"><small>${k}</small><b>${v}</b></div>`;
     morph(el, `
       <div class="detail-head">
-        <img src="${shipThumb(s.model, s.load?.cargo ?? 'agua', s.look)}" alt="" />
+        <img src="${shipThumb(s.model, s.load?.cargo ?? 'agua', looks(s))}" alt="" />
         <div><small>${t(`ship.${s.model}`).toUpperCase()} · ${SHIPS[s.model].cap} t</small><h4>${shipName(s)}</h4></div>
         <button class="x" data-act="closeDetail">${icon('x')}</button>
       </div>
@@ -487,8 +504,21 @@ export function createUI({ state, actions, isMap }) {
       ${row(t('detail.eta'), eta ? until(eta) : '—')}
       ${row(t('detail.trips'), num(s.trips))}
       ${row(t('detail.earned'), money(s.earned))}
+      ${row(t('evo.title'), t('evo.mk', { n: mk(s) }))}
+      ${evoBox(s)}
       <button class="btn line sm wide" data-act="follow" data-v="${s.id}">${icon('focus')}${t('detail.follow')}</button>`);
     tick();
+  }
+
+  /** Botón para evolucionar la nave (Mk II, Mk III) con lo que mejora. */
+  function evoBox(s) {
+    const next = evolveCost(state, s);
+    if (!next) return `<p class="evo-max">${icon('check')}${t('evo.max')}</p>`;
+    const e = EVOS[mk(s)];
+    const low = state.level < next.level;
+    return `<div class="evo-box">
+      <button class="btn primary sm wide" data-act="evolve" data-v="${s.id}" ${low || state.credits < next.cost ? 'disabled' : ''}>${icon(low ? 'lock' : 'upgrade')}${low ? t('up.needLevel', { n: next.level }) : `${t('evo.btn', { n: next.mk })} · ${money(next.cost)}`}</button>
+      <small>${t('evo.d', { speed: Math.round((e.speed - 1) * 100), fuel: Math.round((1 - e.fuel) * 100) })}</small></div>`;
   }
 
   // ---------- Avisos ----------
@@ -520,6 +550,9 @@ export function createUI({ state, actions, isMap }) {
       } else if (e.type === 'newShip') {
         const s = shipById(state, e.ship);
         toast(`${icon('rocket')}<span>${t('toast.newShip', { ship: `${s.name} · ${t(`ship.${s.model}`)}` })}</span>`, 'ok');
+      } else if (e.type === 'evolve') {
+        const s = shipById(state, e.ship);
+        toast(`${icon('upgrade')}<span>${t('toast.evolve', { ship: s?.name ?? '', mk: e.mk })}</span>`, 'ok');
       } else if (e.type === 'upgrade') {
         toast(`${icon('upgrade')}<span>${t('toast.upgrade', { name: t(`up.${e.id}`) })}</span>`, 'ok');
       } else if (e.type === 'dispatch') {
@@ -540,7 +573,7 @@ export function createUI({ state, actions, isMap }) {
   function showLevel(n) {
     const items = [];
     for (const p of Object.keys(PORTS)) if (PORTS[p].level === n && p !== 'hq') items.push(`${icon('orbit')}${t('unlock.port', { port: portName(p) })}`);
-    for (const m of SHIP_IDS) if (SHIPS[m].level === n && n > 1) items.push(`${icon('rocket')}${t('unlock.ship', { ship: t(`ship.${m}`) })}`);
+    for (const m of SHIP_IDS) if (SHIPS[m].level === n && n > 1 && !SHIPS[m].bp) items.push(`${icon('rocket')}${t('unlock.ship', { ship: t(`ship.${m}`) })}`);
     for (const id of UPGRADE_IDS) if (UPGRADES[id].some((x) => x.level === n)) items.push(`${icon(UP_ICONS[id])}${t('unlock.up', { name: t(`up.${id}`) })}`);
     items.push(`${icon('star')}${t('unlock.more')}`);
     modal(`<div class="lvl-badge">${icon('star')}<b>${n}</b></div>
@@ -569,6 +602,9 @@ export function createUI({ state, actions, isMap }) {
   function renderAcct() {
     const a = rgAccount();
     root.querySelector('.profile')?.classList.toggle('guest', !!a?.player?.guest);
+    // El dueño tiene su panel a un toque, con la corona en la barra de arriba.
+    const own = root.querySelector('#ownerBtn');
+    if (own) own.hidden = !isAdmin();
   }
   onAccount(renderAcct);
   renderAcct();
@@ -577,6 +613,7 @@ export function createUI({ state, actions, isMap }) {
     const m = $('#menu', root);
     if (!m.hidden) return (m.hidden = true);
     m.innerHTML = `
+      ${isAdmin() ? `<button class="mi acct owner" data-act="owner">${icon('crown')}<span><b>${t('menu.owner')}</b><small>${t('menu.ownerSub')}</small></span></button>` : ''}
       ${rgAccount() ? `<button class="mi acct" data-act="account">${icon('user')}<span><b>${t('menu.account')}</b><small>${acctLine()}</small></span></button>` : ''}
       <small>${t('menu.lang')}</small>
       <div class="seg">${['es', 'en', 'pt'].map((l) => `<button class="seg-btn ${lang === l ? 'on' : ''}" data-act="lang" data-v="${l}">${l.toUpperCase()}</button>`).join('')}</div>
@@ -595,6 +632,7 @@ export function createUI({ state, actions, isMap }) {
   const itemName = (item) => {
     if (item.startsWith('liv-')) return t('item.liv', { name: t(`liv.${item.slice(4)}`) });
     if (item.startsWith('trail-')) return t('item.trail', { name: t(`trail.${item.slice(6)}`) });
+    if (item.startsWith('ship-')) return t('item.ship', { name: t(`ship.${item.slice(5)}`) });
     return t(`item.${item}`);
   };
   const lookOf = (s) => ({ livery: s?.look?.livery ?? 'rift', trail: s?.look?.trail ?? 'cian' });
@@ -602,6 +640,7 @@ export function createUI({ state, actions, isMap }) {
   function openStyle(shipId) {
     const s = shipById(state, shipId) ?? shipById(state, ui.detailId) ?? state.ships[0];
     Object.assign(sty, { open: true, shipId: s?.id ?? null, ...lookOf(s) });
+    hng.open = false;
     $('#menu', root).hidden = true;
     renderStyle(true);
     if (sty.price == null) {
@@ -668,7 +707,7 @@ export function createUI({ state, actions, isMap }) {
     const restoreOpen = !fresh && !!$('#modal .sty-restore', root)?.open;
     const owned = style.owned();
     const ships = state.ships.map((x) => `<button class="seg-btn ${x.id === sty.shipId ? 'on' : ''}" data-act="styShip" data-v="${x.id}">${x.name}</button>`).join('');
-    const preview = s ? shipThumb(s.model, s.load?.cargo ?? 'agua', { livery: sty.livery, trail: sty.trail }, { thrust: 0.9, w: 560, h: 260 }) : '';
+    const preview = s ? shipThumb(s.model, s.load?.cargo ?? 'agua', { livery: sty.livery, trail: sty.trail, evo: s.evo ?? 0 }, { thrust: 0.9, w: 560, h: 260 }) : '';
     const plates = owned.has('plates');
     const sign = owned.has('sign');
     const pack = PACK_ALL.every((x) => owned.has(x));
@@ -735,6 +774,12 @@ export function createUI({ state, actions, isMap }) {
     renderDetail();
   }
 
+  /** Redibuja la ventana de compras que esté abierta (Taller de estilo o Hangar Rift). */
+  function rerenderShop() {
+    if (hng.open) renderHangar();
+    else if (sty.open) renderStyle();
+  }
+
   async function buyItem(item, method) {
     // Sin wallet en el navegador y sin WalletConnect: abrir el juego en MetaMask o instalarla.
     if (!style.hasWallet() && !remoteWallet()) {
@@ -743,23 +788,88 @@ export function createUI({ state, actions, isMap }) {
       return;
     }
     sty.busy = { item, method, stage: 'wallet' };
-    renderStyle();
+    rerenderShop();
     try {
       const rec = await style.buyStyle(item, method, (stage) => {
         sty.busy = { item, method, stage };
-        renderStyle();
+        rerenderShop();
       });
       sty.busy = null;
       // La compra queda también en la Cuenta Rift (en todos tus dispositivos).
       claimPurchase(rec.tx).catch(() => {});
-      applyLook();
+      if (sty.open) applyLook();
+      else renderPanel(true);
       toast(`${icon('sparkle')}<span>${t('style.bought', { name: itemName(rec.item) })}</span>`, 'ok', 4200);
       actions.sound?.('level');
     } catch (err) {
       sty.busy = null;
       styleError(err);
     }
-    if (sty.open) renderStyle();
+    rerenderShop();
+  }
+
+  // ---------- Hangar Rift: naves de diseño exclusivo ----------
+  // Vitrina por clase: se elige un modelo, se ve en grande (y cómo queda evolucionado) y se compra su
+  // plano con USDT o BNB. Con el plano, la nave se construye con créditos desde la Flota.
+  const hng = { open: false, cls: 'light', model: 'vencejo', evo: 0 };
+
+  function openHangar(model) {
+    const m = SHIPS[model] ? model : hng.model;
+    Object.assign(hng, { open: true, model: m, cls: SHIPS[m].cls, evo: 0 });
+    sty.open = false;
+    $('#menu', root).hidden = true;
+    renderHangar(true);
+    if (sty.price == null) {
+      style.bnbPrice().then((p) => (sty.price = p)).catch(() => (sty.price = 0)).finally(() => hng.open && renderHangar());
+    }
+  }
+
+  function renderHangar(fresh = false) {
+    const m = hng.model;
+    const def = SHIPS[m];
+    const item = `ship-${m}`;
+    const mine = !def.bp || style.has(item);
+    const inCls = SHIP_IDS.filter((x) => SHIPS[x].cls === hng.cls);
+    const tag = (x) => (!SHIPS[x].bp ? t('hg.factory') : style.has(`ship-${x}`) ? t('fleet.bpOwned') : `US$ ${STYLE_ITEMS[`ship-${x}`].usd}`);
+    const cards = inCls.map((x) => `<button class="hg-card ${x === m ? 'on' : ''} ${SHIPS[x].bp && !style.has(`ship-${x}`) ? 'lock' : ''}" data-act="hgModel" data-v="${x}">
+      <img src="${shipThumb(x, CLASS_CARGO[hng.cls], {}, { w: 200, h: 120 })}" alt="" /><span>${t(`ship.${x}`)}</span><small>${tag(x)}</small></button>`).join('');
+    // Barras comparadas con lo mejor de la clase (en consumo, menos es mejor).
+    const best = (k, low) => inCls.reduce((a, x) => (low ? Math.min(a, SHIPS[x][k]) : Math.max(a, SHIPS[x][k])), low ? Infinity : 0);
+    const bar = (label, v, k, low = false) => {
+      const w = low ? best(k, true) / v : v / best(k);
+      return `<div class="hg-stat"><small>${label}</small><i><b style="width:${Math.round(w * 100)}%"></b></i><span>${v}</span></div>`;
+    };
+    const full = state.ships.length >= fleetCap(state);
+    const locked = state.level < def.level;
+    const action = mine
+      ? `<button class="btn primary wide" data-act="buyShip" data-v="${m}" ${locked || full || state.credits < def.price ? 'disabled' : ''}>${icon(locked ? 'lock' : 'rocket')}${locked ? t('up.needLevel', { n: def.level }) : full ? t('fleet.full') : t('hg.build', { price: money(def.price) })}</button>`
+      : `<div class="sty-buy"><div class="sty-buy-txt"><b>${t('style.buy', { name: itemName(item) })}</b><small>US$ ${STYLE_ITEMS[item].usd}</small></div>${payButtons(item)}</div>`;
+    const allShips = SHIP_ITEMS.every((x) => style.has(x));
+    const html = `
+      <div class="sty-head"><span class="sty-ic">${icon('rocket')}</span>
+        <div><h2>${t('hg.title')}</h2><p>${t('hg.sub')}</p></div>
+        <button class="x" data-act="closeModal" aria-label="close">${icon('x')}</button></div>
+      <div class="seg hg-cls">${SHIP_CLASSES.map((c) => `<button class="seg-btn ${c === hng.cls ? 'on' : ''}" data-act="hgCls" data-v="${c}">${t(`cls.${c}`)}</button>`).join('')}</div>
+      <div class="hg-grid">${cards}</div>
+      <div class="sty-preview hg-preview"><img src="${shipThumb(m, CLASS_CARGO[def.cls], { evo: hng.evo }, { thrust: 0.9, w: 560, h: 260 })}" alt="" />
+        <div class="seg hg-evo">${EVOS.map((_, i) => `<button class="seg-btn ${i === hng.evo ? 'on' : ''}" data-act="hgEvo" data-v="${i}">${t('evo.mk', { n: i + 1 })}</button>`).join('')}</div></div>
+      <div class="hg-info"><h3>${t(`ship.${m}`)}${def.bp ? ` <i class="excl-tag">${icon('sparkle')}${t('fleet.exclusive')}</i>` : ''}${def.armor ? ` <i class="armor-tag">${icon('shield')}${t('fleet.armor')}</i>` : ''}</h3>
+        <p>${t(`ship.${m}.d`)}</p>
+        ${bar(t('hg.speed'), def.speed, 'speed')}
+        ${bar(t('hg.fuel'), def.fuel, 'fuel', true)}
+        ${bar(t('hg.cap'), def.cap, 'cap')}</div>
+      ${action}
+      <div class="sty-pack ${allShips ? 'owned' : ''}">
+        <div class="sty-pack-txt"><b>${icon('sparkle')}${t('fleet.fleetPack')}</b><small>${allShips ? t('hg.fleetOwned') : t('fleet.fleetPackD')}</small></div>
+        ${allShips ? icon('check') : `<span class="sty-pack-price">US$ ${STYLE_ITEMS.fleet.usd}</span>${payButtons('fleet')}`}
+      </div>
+      <p class="sty-note">${t('fleet.bpHint')}</p>`;
+    const box = $('#modal', root);
+    const card = box.querySelector('.modal-card.hangar');
+    if (fresh || !card || box.hidden) {
+      box.innerHTML = `<div class="modal-card card style hangar">${html}</div>`;
+      box.hidden = false;
+    } else morph(card, html);
   }
 
   function styleError(err) {
@@ -921,9 +1031,38 @@ export function createUI({ state, actions, isMap }) {
       case 'buyShip': {
         const r = actions.buyShip(v);
         if (!r.ok) errToast(r.reason);
+        else actions.sound?.('level');
         renderPanel(true);
+        if (hng.open) renderHangar();
         break;
       }
+      case 'evolve': {
+        const r = actions.evolve(Number(v));
+        if (!r.ok) errToast(r.reason);
+        else {
+          actions.sound?.('level');
+          actions.restyle?.();
+        }
+        renderPanel(true);
+        renderDetail();
+        break;
+      }
+      case 'hangar':
+        openHangar(v);
+        break;
+      case 'hgCls':
+        hng.cls = v;
+        hng.model = SHIP_IDS.find((x) => SHIPS[x].cls === v && SHIPS[x].bp) ?? CLASS_BASE[v];
+        renderHangar();
+        break;
+      case 'hgModel':
+        hng.model = v;
+        renderHangar();
+        break;
+      case 'hgEvo':
+        hng.evo = Number(v);
+        renderHangar();
+        break;
       case 'select':
         ui.detailId = Number(v);
         actions.select(ui.detailId);
@@ -981,11 +1120,16 @@ export function createUI({ state, actions, isMap }) {
         break;
       case 'closeModal':
         sty.open = false;
+        hng.open = false;
         closeModal();
         break;
       case 'account':
         $('#menu', root).hidden = true;
         actions.openAccount?.();
+        break;
+      case 'owner':
+        $('#menu', root).hidden = true;
+        actions.openAccount?.({ owner: true });
         break;
       case 'style':
         openStyle(v != null ? Number(v) : null);

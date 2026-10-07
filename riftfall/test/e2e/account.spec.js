@@ -287,8 +287,10 @@ test('dueño: con la wallet del dueño tiene todo desbloqueado y el Panel del du
       document.querySelector('#coach').hidden = true;
     });
     await page.locator('.profile').click();
+    await expect(page.locator('#menu [data-act="owner"]')).toHaveCount(0);
     await page.locator('#menu [data-act="account"]').click();
     await expect(page.locator('.ra-owner')).toHaveCount(0);
+    await expect(page.locator('#ownerBtn')).toBeHidden();
     await page.click('[data-ra="wallet"]');
     await expect(page.locator('.ra-status')).toContainText('Dueño');
     await expect(page.locator('.ra-owner')).toContainText('Panel del dueño');
@@ -303,6 +305,13 @@ test('dueño: con la wallet del dueño tiene todo desbloqueado y el Panel del du
     // Un solo cartel de nivel nuevo (no once).
     await expect(page.locator('#modal h2')).toContainText('12');
     await page.click('#modal [data-act="closeModal"]');
+    // La corona de la barra de arriba abre directo el Panel del dueño (y también está en el menú).
+    await page.click('#ownerBtn');
+    await expect(page.locator('.ra-owner')).toBeInViewport();
+    await page.click('[data-ra="close"]');
+    await page.locator('.profile').click();
+    await expect(page.locator('#menu [data-act="owner"]')).toContainText('Panel del dueño');
+    await page.locator('.profile').click();
     // El Taller de estilo: todo es suyo (nada con candado).
     await page.locator('.profile').click();
     await page.locator('#menu [data-act="style"]').click();

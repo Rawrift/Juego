@@ -2,7 +2,7 @@
 // guardar en JSON, y `step(state, dt)` lo hace avanzar. La interfaz llama a las acciones (aceptar un
 // pedido, comprar carga, mejorar la estación) y lee los eventos que quedan en `state.events`.
 
-import { BOX, DRONE_CYCLE, HQ_TIMES, CARGO, CARGO_IDS, PORTS, PORT_IDS, SHIPS, UPGRADES, UPGRADE_IDS, LEVELS, START } from './data.js';
+import { BOX, DRONE_CYCLE, HQ_TIMES, CARGO, CARGO_IDS, PORTS, PORT_IDS, SHIPS, EVOS, UPGRADES, UPGRADE_IDS, LEVELS, START } from './data.js';
 import { position, intercept, avgDistance, dist } from './orbit.js';
 
 export const VERSION = 1;
@@ -30,7 +30,12 @@ export const incomingTotal = (s) => CARGO_IDS.reduce((a, c) => a + s.incoming[c]
 export const freeSpace = (s) => depotCap(s) - stockTotal(s) - incomingTotal(s);
 export const available = (s, c) => s.stock[c] - s.reserved[c];
 export const unlockedPorts = (s) => PORT_IDS.filter((p) => PORTS[p].level <= s.level);
-export const shipSpeed = (s, ship) => SHIPS[ship.model].speed * value(s, 'engines');
+const evoOf = (ship) => EVOS[ship.evo ?? 0] ?? EVOS[0];
+export const shipSpeed = (s, ship) => SHIPS[ship.model].speed * value(s, 'engines') * evoOf(ship).speed;
+/** Combustible por unidad de distancia (la evolución lo baja). */
+export const shipFuel = (ship) => SHIPS[ship.model].fuel * evoOf(ship).fuel;
+/** ¿Cruza el cinturón sin frenar? (escudos de la estación o nave blindada) */
+export const shipShielded = (s, ship) => value(s, 'shields') > 0 || !!SHIPS[ship.model].armor;
 export const fleetCap = (s) => value(s, 'hangar');
 export const isIdle = (ship) => !ship.job && ship.status === 'parked';
 export const levelProgress = (s) => {
@@ -111,7 +116,8 @@ function addShip(s, model) {
     auto: 'off',
     autoT: 0,
     trips: 0,
-    earned: 0
+    earned: 0,
+    evo: 0
   };
   s.ships.push(ship);
   return ship;
@@ -214,8 +220,8 @@ const droneShare = (s) => Math.max(1, Math.ceil(value(s, 'drones') / value(s, 'd
 export function estimate(s, ship, kind, job) {
   const steps = STEP_PLANS[kind](job);
   const speed = shipSpeed(s, ship);
-  const shields = value(s, 'shields') > 0;
-  const rate = SHIPS[ship.model].fuel;
+  const shields = shipShielded(s, ship);
+  const rate = shipFuel(ship);
   let t = s.t;
   let pos = position('hq', t);
   let atHq = true;
@@ -311,8 +317,14 @@ export function buyUpgrade(s, id) {
   return { ok: true };
 }
 
-export function buyShip(s, model) {
+/**
+ * Compra una nave con créditos. Los modelos exclusivos piden el plano: `owned` = artículos del
+ * jugador (Set con 'ship-<modelo>'), que la simulación no conoce por sí sola.
+ */
+export function buyShip(s, model, owned = null) {
   const m = SHIPS[model];
+  if (!m) return fail('unknown');
+  if (m.bp && !owned?.has(`ship-${model}`)) return fail('blueprint');
   if (s.level < m.level) return fail('level');
   if (s.ships.length >= fleetCap(s)) return fail('hangar');
   if (s.credits < m.price) return fail('money');
@@ -320,6 +332,27 @@ export function buyShip(s, model) {
   const ship = addShip(s, model);
   s.events.push({ type: 'newShip', ship: ship.id });
   return { ok: true, ship };
+}
+
+/** Lo que cuesta la próxima evolución de una nave (null si ya está al máximo). */
+export function evolveCost(s, ship) {
+  const next = EVOS[(ship?.evo ?? 0) + 1];
+  if (!ship || !next) return null;
+  return { cost: Math.round((SHIPS[ship.model].price * next.cost) / 100) * 100, level: next.level, mk: (ship.evo ?? 0) + 2 };
+}
+
+/** Evoluciona una nave (Mk II, Mk III): se puede en cualquier momento, aunque esté viajando. */
+export function evolveShip(s, shipId) {
+  const ship = shipById(s, shipId);
+  if (!ship) return fail('gone');
+  const next = evolveCost(s, ship);
+  if (!next) return fail('max');
+  if (s.level < next.level) return fail('level');
+  if (s.credits < next.cost) return fail('money');
+  spend(s, next.cost);
+  ship.evo = (ship.evo ?? 0) + 1;
+  s.events.push({ type: 'evolve', ship: ship.id, mk: next.mk });
+  return { ok: true };
 }
 
 export function setAuto(s, shipId, mode) {
@@ -331,7 +364,7 @@ export function setAuto(s, shipId, mode) {
   return { ok: true };
 }
 
-/** Herramientas del Panel del dueño: créditos, nivel máximo y todas las mejoras. */
+/** Herramientas del Panel del dueño: créditos, nivel máximo, todas las mejoras y la flota evolucionada. */
 export const OWNER_CREDITS = 100_000;
 export function ownerBoost(s, kind) {
   if (kind === 'credits') s.credits += OWNER_CREDITS;
@@ -342,6 +375,8 @@ export function ownerBoost(s, kind) {
     s.level = LEVELS.length;
   } else if (kind === 'upgrades') {
     for (const id of UPGRADE_IDS) s.up[id] = UPGRADES[id].length - 1;
+  } else if (kind === 'evolve') {
+    for (const ship of s.ships) ship.evo = EVOS.length - 1;
   } else return fail('unknown');
   return { ok: true };
 }
@@ -432,7 +467,7 @@ function beginStep(s, ship) {
 
 function beginTravel(s, ship, to) {
   const from = { ...ship.pos };
-  const r = intercept(from, to, s.t, shipSpeed(s, ship), value(s, 'shields') > 0);
+  const r = intercept(from, to, s.t, shipSpeed(s, ship), shipShielded(s, ship));
   ship.leg = { from, to: r.point, t0: s.t, dur: Math.max(0.5, r.time), target: to };
   ship.status = 'travel';
 }

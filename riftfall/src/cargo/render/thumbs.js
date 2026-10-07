@@ -43,13 +43,13 @@ function shoot(object, { w = 240, h = 160, view = 6, az = 0.8, el = 0.5, target 
 }
 
 /**
- * Imagen de una nave (con carga de muestra para que se lea qué es). `look` = { livery, trail };
+ * Imagen de una nave (con carga de muestra para que se lea qué es). `look` = { livery, trail, evo };
  * `thrust` > 0 enciende los motores (para ver el color de la estela).
  */
 export function shipThumb(model, cargo = 'agua', look = {}, { thrust = 0, w = 240, h = 160 } = {}) {
-  const key = `ship:${model}:${cargo}:${look?.livery ?? 'rift'}:${look?.trail ?? 'cian'}:${thrust}:${w}x${h}`;
+  const key = `ship:${model}:${cargo}:${look?.livery ?? 'rift'}:${look?.trail ?? 'cian'}:${look?.evo ?? 0}:${thrust}:${w}x${h}`;
   if (!cache.has(key)) {
-    const ship = makeShip(model, model === 'colibri' ? 'RC' : 'RIFT CARGO', look ?? {});
+    const ship = makeShip(model, shipDims(model).cols * shipDims(model).rows <= 2 ? 'RC' : 'RIFT CARGO', look ?? {});
     setShipCargo(ship, cargo, ship.userData.slots.length);
     if (thrust) setThrust(ship, thrust, 0);
     const d = shipDims(model);

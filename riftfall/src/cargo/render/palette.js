@@ -48,7 +48,17 @@ export const CARGO_COLORS = {
 export const LIVERY = {
   colibri: 0x4de8ff,
   mula: 0xff4dd2,
-  titan: 0xffc94d
+  titan: 0xffc94d,
+  // Naves de diseño exclusivo: cada una con su color propio.
+  vencejo: 0x3dffd0,
+  libelula: 0x8dff5a,
+  halcon: 0xb46bff,
+  raya: 0x4d8dff,
+  nomada: 0xffb54d,
+  bisonte: 0xff5a4d,
+  nova: 0x9ef3ff,
+  leviatan: 0x2fe0c0,
+  coloso: 0xff8a3d
 };
 
 export const hex = (n) => `#${n.toString(16).padStart(6, '0')}`;

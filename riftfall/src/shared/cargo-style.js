@@ -1,6 +1,8 @@
-// Estéticos de Rift Cargo: pinturas, estelas de motor, matrícula propia y cartel de la estación.
-// Se pagan en la red principal de BNB Chain (USDT o BNB) directo a la wallet del creador, igual que
-// el Pase Fundador. Solo cambian cómo se ve el juego: no dan ventaja ni se canjean por tokens.
+// Estéticos de Rift Cargo: pinturas, estelas de motor, matrícula propia y cartel de la estación, y
+// los planos de las naves de diseño exclusivo (Hangar Rift). Se pagan en la red principal de BNB
+// Chain (USDT o BNB) directo a la wallet del creador, igual que el Pase Fundador. No se canjean por
+// tokens y no son una inversión. Las naves exclusivas no son más fuertes que las de fábrica: tienen
+// su diseño propio y otro equilibrio entre velocidad y combustible.
 //
 // Cada pago lleva en la transacción una etiqueta con el artículo ("RCS:liv-aurora"), así un mismo
 // pago no sirve para dos cosas y se puede restaurar en otro dispositivo con solo el hash.
@@ -42,20 +44,34 @@ export const STYLE_ITEMS = {
   'trail-dorado': { usd: 1 },
   plates: { usd: 1 },
   sign: { usd: 2 },
-  pack: { usd: 7 }
+  pack: { usd: 7 },
+  // Planos de naves exclusivas: una vez comprado, se construyen con créditos del juego.
+  'ship-vencejo': { usd: 3 },
+  'ship-libelula': { usd: 3 },
+  'ship-halcon': { usd: 3 },
+  'ship-raya': { usd: 5 },
+  'ship-nomada': { usd: 5 },
+  'ship-bisonte': { usd: 5 },
+  'ship-nova': { usd: 8 },
+  'ship-leviatan': { usd: 8 },
+  'ship-coloso': { usd: 8 },
+  fleet: { usd: 29 }
 };
 export const STYLE_ITEM_IDS = Object.keys(STYLE_ITEMS);
-/** El pack trae todo lo demás (13 dólares sueltos). */
-export const PACK_ITEMS = STYLE_ITEM_IDS.filter((id) => id !== 'pack');
+/** Planos de naves exclusivas a la venta. */
+export const SHIP_ITEMS = STYLE_ITEM_IDS.filter((id) => id.startsWith('ship-'));
+/** El pack de estilo trae todos los estéticos (13 dólares sueltos); no trae naves. */
+export const PACK_ITEMS = STYLE_ITEM_IDS.filter((id) => id !== 'pack' && id !== 'fleet' && !id.startsWith('ship-'));
 
 /** Lo que regala cada nivel del Pase Fundador (acumulativo). */
-export const FOUNDER_PERKS = [[], ['plates'], ['liv-fundador', 'trail-dorado'], ['liv-prisma']];
+export const FOUNDER_PERKS = [[], ['plates'], ['liv-fundador', 'trail-dorado', 'ship-vencejo'], ['liv-prisma', 'ship-halcon']];
 
 /** Artículos que tiene un jugador: los comprados (el pack se expande) más los de su nivel de Fundador. */
 export function ownedSet(bought = [], founderRank = 0) {
   const set = new Set(['liv-rift', 'trail-cian']);
   for (const id of bought) {
     if (id === 'pack') PACK_ITEMS.forEach((x) => set.add(x));
+    else if (id === 'fleet') SHIP_ITEMS.forEach((x) => set.add(x));
     else set.add(id);
   }
   for (let r = 1; r <= Math.min(3, founderRank); r++) FOUNDER_PERKS[r].forEach((x) => set.add(x));

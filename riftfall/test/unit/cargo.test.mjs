@@ -148,3 +148,81 @@ test('panel del dueño: créditos, nivel máximo (un solo aviso) y todas las mej
   // La partida sigue andando con todo al máximo.
   run(s, 60);
 });
+
+test('naves exclusivas: piden el plano, cuestan créditos y no son más fuertes que las de fábrica', async () => {
+  const { SHIPS, SHIP_CLASSES } = await import('../../src/cargo/sim/data.js');
+  const s = newGame(5);
+  s.credits = 1e6;
+  s.level = 12;
+  s.up.hangar = 2;
+  assert.equal(buyShip(s, 'vencejo').reason, 'blueprint');
+  assert.equal(buyShip(s, 'vencejo', new Set(['ship-raya'])).reason, 'blueprint');
+  const r = buyShip(s, 'vencejo', new Set(['ship-vencejo']));
+  assert.ok(r.ok);
+  assert.equal(r.ship.model, 'vencejo');
+  assert.equal(r.ship.evo, 0);
+  assert.equal(buyShip(s, 'nada').reason, 'unknown');
+  // Por clase: misma carga, y ninguna exclusiva es mejor en velocidad Y consumo a la vez que todas las demás.
+  for (const c of SHIP_CLASSES) {
+    const models = Object.keys(SHIPS).filter((m) => SHIPS[m].cls === c);
+    assert.equal(models.length, 4, c);
+    assert.equal(new Set(models.map((m) => SHIPS[m].cap)).size, 1, c);
+    const base = models.find((m) => !SHIPS[m].bp);
+    for (const m of models.filter((x) => SHIPS[x].bp)) {
+      const better = SHIPS[m].speed > SHIPS[base].speed && SHIPS[m].fuel < SHIPS[base].fuel;
+      assert.ok(!better, `${m} no puede ser más rápida y más económica que ${base}`);
+      // Rendimiento (velocidad / consumo) dentro de un 15% del de fábrica.
+      const k = (SHIPS[m].speed / SHIPS[m].fuel) / (SHIPS[base].speed / SHIPS[base].fuel);
+      assert.ok(k > 0.85 && k < 1.15, `${m}: ${k}`);
+    }
+  }
+});
+
+test('evolución Mk II y Mk III: pide nivel y créditos, sube la velocidad y baja el combustible', async () => {
+  const { evolveShip, evolveCost, shipSpeed, shipFuel } = await import('../../src/cargo/sim/sim.js');
+  const s = newGame(6);
+  const ship = s.ships[0];
+  const speed0 = shipSpeed(s, ship);
+  const fuel0 = shipFuel(ship);
+  assert.equal(evolveShip(s, ship.id).reason, 'level');
+  s.level = 3;
+  s.credits = 0;
+  assert.equal(evolveShip(s, ship.id).reason, 'money');
+  s.credits = 1e6;
+  const cost = evolveCost(s, ship).cost;
+  assert.ok(evolveShip(s, ship.id).ok);
+  assert.equal(s.credits, 1e6 - cost);
+  assert.equal(ship.evo, 1);
+  assert.ok(shipSpeed(s, ship) > speed0 && shipFuel(ship) < fuel0);
+  assert.equal(evolveShip(s, ship.id).reason, 'level', 'Mk III pide nivel 6');
+  s.level = 6;
+  assert.ok(evolveShip(s, ship.id).ok);
+  assert.equal(evolveShip(s, ship.id).reason, 'max');
+  assert.equal(evolveCost(s, ship), null);
+  assert.deepEqual(s.events.filter((e) => e.type === 'evolve').map((e) => e.mk), [2, 3]);
+  // Las partidas viejas (sin `evo`) andan igual.
+  delete s.ships[1].evo;
+  assert.equal(shipSpeed(s, s.ships[1]), speed0);
+  run(s, 60);
+});
+
+test('las naves blindadas cruzan el cinturón sin frenar (como con los escudos)', async () => {
+  const { shipShielded } = await import('../../src/cargo/sim/sim.js');
+  const s = newGame(7);
+  s.level = 12;
+  s.credits = 1e6;
+  s.up.hangar = 2;
+  const armored = buyShip(s, 'halcon', new Set(['ship-halcon'])).ship;
+  const plain = buyShip(s, 'vencejo', new Set(['ship-vencejo'])).ship;
+  assert.equal(shipShielded(s, armored), true);
+  assert.equal(shipShielded(s, plain), false);
+  s.up.shields = 1;
+  assert.equal(shipShielded(s, plain), true);
+});
+
+test('panel del dueño: la flota evoluciona entera', async () => {
+  const { ownerBoost } = await import('../../src/cargo/sim/sim.js');
+  const s = newGame(8);
+  assert.ok(ownerBoost(s, 'evolve').ok);
+  assert.ok(s.ships.every((x) => x.evo === 2));
+});

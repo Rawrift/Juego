@@ -125,6 +125,27 @@ export function profile(key, pts, width, bevel = 0.07) {
   });
 }
 
+/**
+ * Ala o placa plana: contorno [[x, z], ...] visto desde arriba (+Z hacia adelante), con espesor en Y
+ * y bisel suave. Queda centrada en Y = 0.
+ */
+export function wing(key, pts, thick, bevel = 0.03) {
+  return cached(`wg:${key}:${thick}:${bevel}`, () => {
+    const shape = new THREE.Shape();
+    pts.forEach(([x, z], i) => (i ? shape.lineTo(x, -z) : shape.moveTo(x, -z)));
+    shape.closePath();
+    const depth = Math.max(0.005, thick - bevel * 2);
+    const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2, curveSegments: 10 });
+    g.rotateX(-Math.PI / 2);
+    g.translate(0, -depth / 2, 0);
+    g.computeVertexNormals();
+    return g;
+  });
+}
+
+/** Lo mismo que `wing` pero reflejado (el ala del otro lado). */
+export const wingPair = (key, pts, thick, bevel) => [wing(key, pts, thick, bevel), wing(`${key}:L`, pts.map(([x, z]) => [-x, z]), thick, bevel)];
+
 /** Rectángulo redondeado como forma 2D. */
 export function roundedRectShape(w, h, r) {
   const s = new THREE.Shape();

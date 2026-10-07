@@ -7,7 +7,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { makePlanet, makeSun } from './planets.js';
-import { makeShip, shipStyleKey, setShipCargo, setThrust, makePin, userUpdates } from './models.js';
+import { makeShip, shipStyle, shipStyleKey, setShipCargo, setThrust, makePin, userUpdates } from './models.js';
 import { rbox, mat, part, bake } from './kit.js';
 import { C, CARGO_COLORS } from './palette.js';
 import { solarTexture } from './textures.js';
@@ -217,7 +217,7 @@ export function createMap(stage, state, { onMarket } = {}) {
   const tmp = new THREE.Vector3();
 
   function shipMesh(s) {
-    const mesh = makeShip(s.model, s.name, s.look);
+    const mesh = makeShip(s.model, s.name, shipStyle(s));
     mesh.scale.setScalar(SHIP_SCALE);
     mesh.traverse((x) => (x.userData.shipId = s.id));
     mesh.userData.shipId = s.id;

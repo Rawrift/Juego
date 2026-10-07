@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { FOUNDER, TRANSFER_TOPIC, founderFromPayment, erc20TransferData } from '../../src/shared/founder.js';
-import { STYLE_ITEMS, PACK_ITEMS, ownedSet, styleTagHex, styleFromPayment, extraData } from '../../src/shared/cargo-style.js';
+import { STYLE_ITEMS, PACK_ITEMS, SHIP_ITEMS, ownedSet, styleTagHex, styleFromPayment, extraData } from '../../src/shared/cargo-style.js';
 
 const PAYER = '0x1111111111111111111111111111111111111111';
 const pad = (a) => `0x${a.toLowerCase().replace(/^0x/, '').padStart(64, '0')}`;
@@ -69,4 +69,21 @@ test('lo que tiene el jugador: lo de fábrica, lo comprado, el pack expandido y 
   // El pack sale más barato que todo suelto.
   const loose = PACK_ITEMS.reduce((sum, id) => sum + STYLE_ITEMS[id].usd, 0);
   assert.ok(STYLE_ITEMS.pack.usd < loose);
+});
+
+test('planos de naves: se compran sueltos o en la Flota Rift; el pack de estilo no trae naves', () => {
+  assert.equal(SHIP_ITEMS.length, 9);
+  assert.ok(PACK_ITEMS.every((id) => !id.startsWith('ship-') && id !== 'fleet'));
+  const pack = ownedSet(['pack'], 0);
+  assert.ok(SHIP_ITEMS.every((id) => !pack.has(id)));
+  const fleet = ownedSet(['fleet'], 0);
+  assert.ok(SHIP_ITEMS.every((id) => fleet.has(id)));
+  assert.ok(ownedSet(['ship-raya'], 0).has('ship-raya'));
+  // La Flota sale más barata que los 9 planos sueltos.
+  assert.ok(STYLE_ITEMS.fleet.usd < SHIP_ITEMS.reduce((sum, id) => sum + STYLE_ITEMS[id].usd, 0));
+  // El Pase Fundador Oro trae el Vencejo y el Leyenda, además, el Halcón Rift.
+  assert.ok(ownedSet([], 2).has('ship-vencejo') && !ownedSet([], 2).has('ship-halcon'));
+  assert.ok(ownedSet([], 3).has('ship-halcon'));
+  // La etiqueta del plano entra en el pago y se puede leer.
+  assert.ok(styleTagHex('ship-leviatan').length <= 80);
 });
