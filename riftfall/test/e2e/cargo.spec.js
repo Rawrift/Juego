@@ -198,8 +198,17 @@ test('celular, jugador nuevo: el primer pedido del tutorial se ve entero, nada l
 
   // Si el jugador cierra el panel antes de enviar, no se le vuelve a abrir solo.
   const again = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'es-ES' });
+  const secondErrors = [];
+  again.on('pageerror', (e) => secondErrors.push(e.message));
   await again.goto('/cargo/');
-  await expect(again.locator('.tut-target .btn.primary')).toBeInViewport({ ratio: 1 });
+  try {
+    await expect(again.locator('.mtabs')).toBeVisible();
+    await expect(again.locator('.tut-target .btn.primary')).toBeInViewport({ ratio: 1 });
+  } catch (e) {
+    console.log('SECOND MOBILE PAGE', JSON.stringify({ errors: secondErrors, url: again.url(), body: await again.locator('body').innerText() }));
+    await again.screenshot({ path: 'test-results/cargo-second-mobile-failure.png', animations: 'disabled' });
+    throw e;
+  }
   await again.locator('.mtabs [data-v="orders"]').tap();
   await expect(again.locator('.tut-target .btn.primary')).not.toBeInViewport();
   await again.waitForTimeout(2500);
