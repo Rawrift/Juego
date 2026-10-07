@@ -13,7 +13,9 @@ import {
   sanitizeInventory,
   equippedParts,
   openCrates,
-  cratesFromSummary
+  cratesFromSummary,
+  ALL_PARTS,
+  PART_MAX
 } from '../sim/index.js';
 import { MISSIONS, freshDaily, applyRunToDaily, missionView, streakBonus } from '../shared/missions.js';
 
@@ -207,4 +209,16 @@ export function buyLocalCrate(p) {
   p.cores += got.reduce((a, c) => a + c.refund, 0);
   saveProgress(p);
   return got;
+}
+
+/** Herramientas del Panel del dueño: Núcleos, talentos, niveles del Rift y piezas al máximo. */
+export const OWNER_CORES = 5000;
+export function ownerBoost(p, kind) {
+  if (kind === 'cores') p.cores += OWNER_CORES;
+  else if (kind === 'talents') p.talents = Object.fromEntries(Object.keys(TALENTS).map((id) => [id, TALENT_MAX]));
+  else if (kind === 'rift') p.riftMax = RIFT_MAX;
+  else if (kind === 'parts') p.parts = Object.fromEntries(ALL_PARTS.map((id) => [id, PART_MAX]));
+  else throw new Error('unknown');
+  saveProgress(p);
+  return p;
 }

@@ -261,7 +261,9 @@ export function createPanels(app) {
           out.push(
             el('div', { class: 'founder-status' }, [
               el('b', {}, `★ ${t('f.youAre', { tier: t(`f.tier.${rec.tier}`) })}`),
-              el('a', { href: `${FOUNDER.explorer}/tx/${rec.tx}`, target: '_blank', rel: 'noopener' }, t('f.viewTx')),
+              rec.owner
+                ? el('small', {}, t('f.owner'))
+                : el('a', { href: `${FOUNDER.explorer}/tx/${rec.tx}`, target: '_blank', rel: 'noopener' }, t('f.viewTx')),
               skins.length > 1
                 ? el('div', { class: 'skin-row' }, [
                     el('small', {}, t('f.skin')),

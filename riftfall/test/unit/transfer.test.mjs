@@ -44,3 +44,21 @@ test('un progreso vacío nunca pisa uno con partidas', () => {
   assert.equal(mergeProgress(blank, chrome).cores, 320);
   assert.equal(mergeProgress(null, chrome).runs, 14);
 });
+
+test('panel del dueño en RIFTFALL: Núcleos, talentos, niveles del Rift y piezas al máximo', async () => {
+  const { ownerBoost, loadProgress, OWNER_CORES } = await import('../../src/client/progress.js');
+  const { TALENTS, TALENT_MAX, RIFT_MAX, ALL_PARTS, PART_MAX } = await import('../../src/sim/index.js');
+  globalThis.localStorage = new Store();
+  const p = loadProgress();
+  ownerBoost(p, 'cores');
+  ownerBoost(p, 'talents');
+  ownerBoost(p, 'rift');
+  ownerBoost(p, 'parts');
+  const back = loadProgress();
+  assert.equal(back.cores, OWNER_CORES);
+  for (const id of Object.keys(TALENTS)) assert.equal(back.talents[id], TALENT_MAX);
+  assert.equal(back.riftMax, RIFT_MAX);
+  for (const id of ALL_PARTS) assert.equal(back.parts[id], PART_MAX);
+  assert.throws(() => ownerBoost(p, 'nada'));
+  delete globalThis.localStorage;
+});

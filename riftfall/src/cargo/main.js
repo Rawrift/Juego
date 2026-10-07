@@ -15,7 +15,7 @@ import { applyTransfer } from '../client/transfer.js';
 import { start as startAccount, createSync, syncPurchases, isReloading } from '../rift/account.js';
 import { createAccountUI } from '../rift/account-ui.js';
 import { setStationSign } from './render/stationScene.js';
-import { step, acceptOffer, buyCargo, buyUpgrade, buyShip, setAuto, fastForward, newGame } from './sim/sim.js';
+import { step, acceptOffer, buyCargo, buyUpgrade, buyShip, setAuto, fastForward, newGame, ownerBoost } from './sim/sim.js';
 import { OFFLINE_MAX } from './sim/data.js';
 
 await document.fonts.load('800 100px "Plus Jakarta Sans"').catch(() => {});
@@ -194,11 +194,18 @@ function updateOffset() {
 window.addEventListener('resize', updateOffset);
 updateOffset();
 
+// Panel del dueño: cada herramienta cambia la partida en juego y la guarda (local y en la nube).
+const boost = (kind) => () => {
+  ownerBoost(state, kind);
+  save(state);
+  cloud.schedule();
+};
 const accountUI = createAccountUI({
   game: 'cargo',
   lang: () => lang,
   toast: (msg, kind) => ui.toast(`<span>${msg.replace(/[<>&]/g, '')}</span>`, kind === 'err' ? 'err' : 'ok', 4200),
-  onChange: () => ui.renderAll(true)
+  onChange: () => ui.renderAll(true),
+  owner: { credits: boost('credits'), level: boost('level'), upgrades: boost('upgrades') }
 });
 
 let saveT = 0;

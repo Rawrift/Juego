@@ -50,13 +50,16 @@ de Rift Cargo, el nombre, los rankings y las compras (Pase Fundador, estéticos)
 en cualquier dispositivo. Corre en **Cloudflare Pages + D1** (plan gratis): `functions/` y `cloud/`. Detalles,
 límites del plan gratis y cómo ponerlo en marcha en [`docs/CUENTA-RIFT.md`](docs/CUENTA-RIFT.md).
 
+**Modo dueño:** con la wallet que cobra las ventas conectada a la cuenta, todo queda desbloqueado sin pagar y la
+ventana "Cuenta Rift" muestra un Panel del dueño (Núcleos, talentos, niveles del Rift y piezas en RIFTFALL;
+créditos, nivel y mejoras en Cargo).
+
 ## Ranking compartido y progreso entre navegadores
 
-- **Ranking de hoy / histórico** (`api/ranking.js` + `server/run-board.mjs`): cada partida normal que mejora tu
-  marca del día se manda a la web, que la vuelve a jugar con su nave, talentos, piezas y nivel del Rift antes de
-  anotarla. Todos los jugadores ven a todos (tarjeta "Ranking de hoy" y panel Ranking). Un solo archivo en
-  Vercel Blob: se escribe solo cuando alguien entra o sube en el ranking (el plan gratuito incluye 2.000
-  escrituras por mes).
+- **Ranking de hoy / histórico** (`cloud/api.mjs` + `server/run-board.mjs`): cada partida normal que mejora tu
+  marca del día se manda a la web, que hace un control rápido y la anota; después `scripts/audit-runs.mjs` la
+  vuelve a jugar con su nave, talentos, piezas y nivel del Rift y saca las que no coinciden. Todos los jugadores
+  ven a todos (tarjeta "Ranking de hoy" y panel Ranking). Se guarda en la base D1 de Cloudflare.
 - **Progreso que no se pierde** (`src/client/transfer.js`): en el celular, conectar la wallet abre el juego dentro
   de MetaMask, que tiene otra memoria. El progreso, el nombre y el id del ranking viajan comprimidos en el link y
   se suman a lo que hubiera (nunca se pisa algo con partidas por algo vacío). En Habilidades está el botón

@@ -30,6 +30,13 @@
   pago en BNB Chain y pide que la wallet que pagó esté en la cuenta (así nadie puede adueñarse de un pago
   copiando el hash de BscScan). En otro dispositivo, al entrar, aparecen solas.
 - **El día del ranking "Hoy" y del Desafío** cambia a las 00:00 de Argentina (antes era a las 21:00).
+- **Modo dueño:** la cuenta que tiene conectada la wallet que cobra las ventas
+  (`FOUNDER.treasury`, 0x09aF…7Dd) es del dueño. Tiene todo desbloqueado sin pagar (Pase Fundador Leyenda
+  en RIFTFALL y todos los estéticos de Cargo) y, en la ventana "Cuenta Rift", un **Panel del dueño** con
+  herramientas para su partida: en RIFTFALL +5.000 Núcleos, talentos al máximo, todos los niveles del
+  Rift y todas las piezas al máximo; en Cargo +$100.000, nivel máximo y todas las mejoras de la estación.
+  Para sumar otro dueño (otra wallet), se agrega en Cloudflare la variable `ADMIN_WALLETS` (direcciones
+  separadas por coma). Las partidas del dueño entran al ranking como las de cualquiera.
 - **Sin servidor** (por ejemplo, la versión para portales o un sitio sin la nube) el juego funciona igual
   con lo guardado en el dispositivo, y el botón de la cuenta no aparece.
 
@@ -55,7 +62,7 @@
   saca del ranking las que no coinciden:
 
   ```bash
-  AUDIT_TOKEN=<la clave> node scripts/audit-runs.mjs https://riftfall.pages.dev
+  AUDIT_TOKEN=<la clave> node scripts/audit-runs.mjs https://riftgames.pages.dev
   ```
 
   La clave se configura en Cloudflare (Pages → Settings → Variables → `AUDIT_TOKEN`, como secreto).
@@ -67,10 +74,16 @@
 
 ## Dónde está publicado
 
-- **Sitio:** https://riftgames.pages.dev (RIFTFALL en `/`, Rift Cargo en `/cargo/`).
-- **Cloudflare:** proyecto Pages `riftgames` y base D1 `rift` (región este de EE. UU.), en la cuenta del dueño.
-- **Dirección vieja:** riftfall-chi.vercel.app y riftfall.duckdns.org mandan a la nueva con todo lo que el
-  jugador tenía guardado en ese navegador (`src/rift/move.js`). Los rankings de Vercel se copiaron a D1.
+- **Dirección del juego: https://riftfall.duckdns.org** (el link de siempre; RIFTFALL en `/`, Rift Cargo en
+  `/cargo/`). Esa dirección apunta a Vercel, que ahora solo reenvía todo a Cloudflare (`vercel.json`,
+  sin funciones propias). Las passkeys quedan atadas a riftfall.duckdns.org.
+- **Cloudflare:** proyecto Pages `riftgames` (https://riftgames.pages.dev) y base D1 `rift` (región este
+  de EE. UU.), en la cuenta del dueño. Ahí corre el juego con la Cuenta Rift.
+- **Por qué no se usa riftgames.pages.dev como dirección:** MetaMask marca como peligrosas las direcciones
+  gratuitas compartidas (`*.pages.dev`, `*.vercel.app`, `*.workers.dev`, `*.github.io`), porque cualquiera
+  puede crear una. riftfall.duckdns.org no figura como peligrosa. Quien abre la de Cloudflare o la de
+  Vercel pasa a riftfall.duckdns.org con todo lo que tenía guardado en ese navegador (`src/rift/move.js`).
+- **Al publicar hay que subir las dos partes seguidas** (Cloudflare con el juego y Vercel con el reenvío).
 
 ## Publicar una versión nueva
 
@@ -82,6 +95,9 @@ npm run build
 npx wrangler pages deploy --project-name riftgames --branch main
 npx wrangler logout                # al terminar, se cierra el acceso
 ```
+
+Vercel (el reenvío de riftfall.duckdns.org) se publica desde GitHub como siempre: solo cambia si se toca
+`vercel.json` o `scripts/vercel-proxy.mjs`.
 
 `wrangler.toml` enlaza la base D1 como `DB`. Para consultar la base:
 `npx wrangler d1 execute rift --remote --command "SELECT COUNT(*) FROM players"`.

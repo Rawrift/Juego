@@ -130,3 +130,21 @@ test('el estado se puede guardar y volver a cargar', () => {
   assert.equal(copy.ships[0].status, s.ships[0].status);
   assert.equal(copy.credits, s.credits);
 });
+
+test('panel del dueño: créditos, nivel máximo (un solo aviso) y todas las mejoras', async () => {
+  const { ownerBoost, OWNER_CREDITS, upgradeCost } = await import('../../src/cargo/sim/sim.js');
+  const { LEVELS, UPGRADE_IDS } = await import('../../src/cargo/sim/data.js');
+  const s = newGame(3);
+  const before = s.credits;
+  assert.equal(ownerBoost(s, 'credits').ok, true);
+  assert.equal(s.credits, before + OWNER_CREDITS);
+  assert.equal(s.stats.earned, 0, 'los créditos regalados no cuentan como ganados');
+  ownerBoost(s, 'level');
+  assert.equal(s.level, LEVELS.length);
+  assert.equal(s.events.filter((e) => e.type === 'level').length, 1);
+  ownerBoost(s, 'upgrades');
+  for (const id of UPGRADE_IDS) assert.equal(upgradeCost(s, id), null, id);
+  assert.equal(ownerBoost(s, 'nada').ok, false);
+  // La partida sigue andando con todo al máximo.
+  run(s, 60);
+});

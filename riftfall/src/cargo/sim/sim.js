@@ -331,6 +331,21 @@ export function setAuto(s, shipId, mode) {
   return { ok: true };
 }
 
+/** Herramientas del Panel del dueño: créditos, nivel máximo y todas las mejoras. */
+export const OWNER_CREDITS = 100_000;
+export function ownerBoost(s, kind) {
+  if (kind === 'credits') s.credits += OWNER_CREDITS;
+  else if (kind === 'level') {
+    // Un solo aviso de nivel (no uno por cada nivel salteado).
+    s.xp = Math.max(s.xp, LEVELS[LEVELS.length - 1]);
+    if (s.level < LEVELS.length) s.events.push({ type: 'level', level: LEVELS.length });
+    s.level = LEVELS.length;
+  } else if (kind === 'upgrades') {
+    for (const id of UPGRADE_IDS) s.up[id] = UPGRADES[id].length - 1;
+  } else return fail('unknown');
+  return { ok: true };
+}
+
 function spend(s, n) {
   s.credits -= n;
   s.stats.spent += n;

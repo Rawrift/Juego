@@ -52,6 +52,8 @@ export const isReloading = () => reloading;
 export const sessionToken = () => read(TOKEN);
 export const account = () => current;
 export const isOnline = () => online;
+/** ¿La cuenta es del dueño del juego? (tiene la wallet que cobra las ventas) */
+export const isAdmin = () => !!current?.player?.admin;
 /** Para sumar al pedido del ranking: así el servidor anota la partida en tu cuenta. */
 export const authHeaders = () => (read(TOKEN) ? { authorization: `Bearer ${read(TOKEN)}` } : {});
 
@@ -232,7 +234,18 @@ export async function syncPurchases() {
   let changed = false;
   const list = current.purchases ?? [];
   const best = list.filter((p) => p.kind === 'founder' && RANK[p.item]).sort((a, b) => RANK[b.item] - RANK[a.item])[0];
-  const localF = readJson('riftfall.founder');
+  let localF = readJson('riftfall.founder');
+  // El dueño tiene el Pase Fundador Leyenda sin pagar; si la cuenta deja de ser del dueño, se saca.
+  if (localF?.owner && !isAdmin()) {
+    write('riftfall.founder', null);
+    localF = null;
+    changed = true;
+  }
+  if (isAdmin() && RANK[localF?.tier] !== RANK.legend) {
+    localF = { tier: 'legend', tx: 'owner', owner: true, at: Date.now() };
+    write('riftfall.founder', JSON.stringify(localF));
+    changed = true;
+  }
   if (best && RANK[best.item] > (RANK[localF?.tier] ?? 0)) {
     write('riftfall.founder', JSON.stringify({ tier: best.item, tx: best.tx, payer: best.payer, method: best.method, usd: best.usd, at: best.at }));
     changed = true;

@@ -191,3 +191,24 @@ test('passkeys desde el link de siempre (duckdns, que llega reenviado): solo dir
   const n = await call('POST', '/api/rift/wallet/nonce', { body: { address: Wallet.createRandom().address, origin: 'https://riftfall.duckdns.org' } });
   assert.match(n.message, /Sitio: riftfall\.duckdns\.org/);
 });
+
+test('dueño: la wallet que cobra las ventas (o las de ADMIN_WALLETS) marca la cuenta como dueño', async () => {
+  const boss = Wallet.createRandom();
+  const { call } = setup({ env: { ADMIN_WALLETS: ` ${boss.address} , no-es-wallet` } });
+  const g = await call('POST', '/api/rift/guest', {});
+  assert.equal(g.account.player.admin, undefined);
+  const linked = await walletLogin(call, boss, g.token);
+  assert.equal(linked.account.player.admin, true);
+  assert.equal((await call('GET', '/api/rift/me', { token: g.token })).account.player.admin, true);
+  // Cualquier otra wallet no.
+  const other = await call('POST', '/api/rift/guest', {});
+  const o = await walletLogin(call, Wallet.createRandom(), other.token);
+  assert.equal(o.account.player.admin, undefined);
+});
+
+test('dueño: la wallet de la tesorería siempre es dueña, sin configurar nada', async () => {
+  const { adminWallets } = await import('../../cloud/api.mjs');
+  const { FOUNDER } = await import('../../src/shared/founder.js');
+  assert.ok(adminWallets({}).has(FOUNDER.treasury.toLowerCase()));
+  assert.equal(adminWallets({ ADMIN_WALLETS: '0xABC' }).size, 1);
+});

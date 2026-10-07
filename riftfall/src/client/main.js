@@ -49,7 +49,8 @@ import {
   recordChallenge,
   equipLocalPart,
   buyLocalCrate,
-  mergeProgress
+  mergeProgress,
+  ownerBoost
 } from './progress.js';
 import { receiveTransfer, metamaskLink, applyTransfer } from './transfer.js';
 import { moveIfOldHost, receiveMove } from '../rift/move.js';
@@ -1472,7 +1473,22 @@ async function boot() {
 let accountUI = null;
 function setupAccount() {
   if (PORTAL) return;
-  accountUI = createAccountUI({ game: 'riftfall', lang: () => lang, toast });
+  // Panel del dueño: cada herramienta cambia el progreso de este dispositivo (y la cuenta lo sube a la nube).
+  const boost = (kind) => () => {
+    app.progress = ownerBoost(loadProgress(), kind);
+    updateRiftPick();
+    updateMenu();
+  };
+  accountUI = createAccountUI({
+    game: 'riftfall',
+    lang: () => lang,
+    toast,
+    onChange: () => {
+      applyCosmetics();
+      updateMenu();
+    },
+    owner: { cores: boost('cores'), talents: boost('talents'), rift: boost('rift'), parts: boost('parts') }
+  });
   $('#accountBtn').addEventListener('click', () => accountUI.open());
   const sync = createSync('riftfall', {
     get: () => loadProgress(),

@@ -56,7 +56,20 @@ const T = {
       generic: 'No se pudo completar: {msg}'
     },
     nudge: 'Protegé tu progreso',
-    nudgeSub: 'Huella o Face ID, sin contraseñas'
+    nudgeSub: 'Huella o Face ID, sin contraseñas',
+    ownerBadge: 'Dueño',
+    owner: 'Panel del dueño',
+    ownerHint: 'Esta cuenta tiene la wallet del dueño: tenés todo desbloqueado gratis (Pase Fundador Leyenda y todos los estéticos). Desde acá modificás tu partida.',
+    ownerDone: 'Listo.',
+    tools: {
+      cores: '+5.000 Núcleos',
+      talents: 'Talentos al máximo',
+      rift: 'Todos los niveles del Rift',
+      parts: 'Todas las piezas al máximo',
+      credits: '+$100.000',
+      level: 'Nivel máximo',
+      upgrades: 'Todas las mejoras de la estación'
+    }
   },
   en: {
     title: 'Rift Account',
@@ -107,7 +120,20 @@ const T = {
       generic: 'Could not complete it: {msg}'
     },
     nudge: 'Secure your progress',
-    nudgeSub: 'Fingerprint or Face ID, no passwords'
+    nudgeSub: 'Fingerprint or Face ID, no passwords',
+    ownerBadge: 'Owner',
+    owner: 'Owner panel',
+    ownerHint: 'This account has the owner wallet: everything is unlocked for free (Legend Founder Pass and every cosmetic). From here you can edit your save.',
+    ownerDone: 'Done.',
+    tools: {
+      cores: '+5,000 Cores',
+      talents: 'Max all talents',
+      rift: 'Unlock every Rift level',
+      parts: 'Max all parts',
+      credits: '+$100,000',
+      level: 'Max level',
+      upgrades: 'Every station upgrade'
+    }
   },
   pt: {
     title: 'Conta Rift',
@@ -158,7 +184,20 @@ const T = {
       generic: 'Não foi possível concluir: {msg}'
     },
     nudge: 'Proteja seu progresso',
-    nudgeSub: 'Digital ou Face ID, sem senhas'
+    nudgeSub: 'Digital ou Face ID, sem senhas',
+    ownerBadge: 'Dono',
+    owner: 'Painel do dono',
+    ownerHint: 'Esta conta tem a carteira do dono: tudo desbloqueado de graça (Passe Fundador Lenda e todos os itens visuais). Daqui você modifica seu progresso.',
+    ownerDone: 'Pronto.',
+    tools: {
+      cores: '+5.000 Núcleos',
+      talents: 'Talentos no máximo',
+      rift: 'Todos os níveis do Rift',
+      parts: 'Todas as peças no máximo',
+      credits: '+$100.000',
+      level: 'Nível máximo',
+      upgrades: 'Todas as melhorias da estação'
+    }
   }
 };
 
@@ -170,6 +209,7 @@ const ICON = {
   wallet: 'M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1 M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4',
   shield: 'M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z M9 12l2 2 4-4',
   user: 'M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2 M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+  crown: 'M2 8l4 10h12l4-10-6 4-4-8-4 8z M6 21h12',
   x: 'M18 6 6 18 M6 6l12 12',
   out: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4 M16 17l5-5-5-5 M21 12H9',
   star: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z'
@@ -190,9 +230,10 @@ function cube() {
 
 /**
  * Monta la ventana. `game` = 'riftfall' | 'cargo' (para marcar dónde estás); `lang()` da el idioma;
- * `toast(texto, tipo)` muestra avisos con el estilo del juego.
+ * `toast(texto, tipo)` muestra avisos con el estilo del juego. `owner` = herramientas del Panel del
+ * dueño de este juego ({ cores: fn, talents: fn, … }): solo se ven si la cuenta es del dueño.
  */
-export function createAccountUI({ game, lang = () => 'es', toast = () => {}, onChange = () => {} }) {
+export function createAccountUI({ game, lang = () => 'es', toast = () => {}, onChange = () => {}, owner = {} }) {
   const root = document.createElement('div');
   root.className = 'ra-overlay';
   root.hidden = true;
@@ -224,12 +265,16 @@ export function createAccountUI({ game, lang = () => 'es', toast = () => {}, onC
     const styles = (a?.purchases ?? []).filter((p) => p.kind === 'style').length;
     const btn = (act, ic, label, cls = 'ghost') => `<button class="ra-btn ${cls}" data-ra="${act}" ${busy ? 'disabled' : ''}>${icon(ic)}<span>${busy === act ? '…' : label}</span></button>`;
     const pk = passkeysSupported();
+    const admin = !!a?.player?.admin;
+    const tools = Object.keys(owner).filter((k) => typeof owner[k] === 'function');
     root.innerHTML = `<div class="ra-card" role="dialog" aria-modal="true" aria-label="${L.title}">
       <header class="ra-head"><span class="ra-cube">${cube()}</span><div><h2>${L.title}</h2><p>${L.sub}</p></div>
         <button class="ra-x" data-ra="close" aria-label="close">${icon('x')}</button></header>
       ${!on ? `<div class="ra-status off">${icon('shield')}<div><b>${L.offline}</b></div><button class="ra-btn ghost sm" data-ra="retry">${L.retry}</button></div>` : `
       <div class="ra-status ${guest ? 'guest' : 'safe'}">${icon(guest ? 'user' : 'shield')}
-        <div><b>${guest ? L.guest : L.safe}</b><small>${guest ? L.guestHint : L.safeHint}</small></div></div>
+        <div><b>${guest ? L.guest : L.safe}${admin ? ` <span class="ra-badge">${L.ownerBadge}</span>` : ''}</b><small>${guest ? L.guestHint : L.safeHint}</small></div></div>
+      ${admin && tools.length ? `<section class="ra-owner"><h3 class="ra-h3">${icon('crown')}${L.owner}</h3><p class="ra-note">${L.ownerHint}</p>
+        <div class="ra-tools">${tools.map((k) => btn(`owner:${k}`, 'star', L.tools[k] ?? k)).join('')}</div></section>` : ''}
       <label class="ra-label">${L.name}</label>
       <div class="ra-field"><input id="raName" maxlength="16" autocomplete="nickname" value="${esc(a.player.name)}" /><button class="ra-btn ghost sm" data-ra="name">${L.save}</button></div>
       <div class="ra-actions">
@@ -283,6 +328,15 @@ export function createAccountUI({ game, lang = () => 'es', toast = () => {}, onC
     if (act === 'close') {
       ev.preventDefault();
       return close();
+    }
+    if (act.startsWith('owner:')) {
+      const fn = owner[act.slice(6)];
+      if (!account()?.player?.admin || typeof fn !== 'function') return;
+      return run(act, async () => {
+        await fn();
+        toast(tx().ownerDone, 'ok');
+        onChange();
+      });
     }
     if (act === 'retry') return run(act, async () => {
       await start();

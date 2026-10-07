@@ -7,6 +7,7 @@ import { FOUNDER, tierRank, bnbPriceFromReserves, bnbWeiForUsd, erc20TransferDat
 import { STYLE_ITEMS, ownedSet, styleTagHex, styleFromPayment } from '../shared/cargo-style.js';
 import { packData, unpackData } from '../shared/pack.js';
 import { injected } from '../client/injected.js';
+import { isAdmin } from '../rift/account.js';
 
 const KEY = 'riftcargo.style';
 const PARAM = 'rf';
@@ -56,6 +57,8 @@ export function founderRank() {
 }
 
 export function owned() {
+  // El dueño del juego tiene todos los estéticos.
+  if (isAdmin()) return ownedSet(['pack'], 3);
   return ownedSet(loadStyle().bought.map((b) => b.item), founderRank());
 }
 export const has = (id) => owned().has(id);

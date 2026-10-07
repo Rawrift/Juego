@@ -10,11 +10,11 @@ import { createD1 } from '../../cloud/d1-node.mjs';
 // Cloudflare (cloud/api.mjs) y una base SQLite en memoria. Se usa "localhost" porque las passkeys
 // no funcionan con direcciones IP.
 
-async function riftSite(port) {
+async function riftSite(port, extraEnv = {}) {
   const DIST = path.resolve('dist-e2e');
   const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.woff': 'font/woff', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webmanifest': 'application/manifest+json' };
   const api = createApi({ chain: { payment: async () => ({ kind: null, reason: 'notFound' }) } });
-  const env = { DB: createD1() };
+  const env = { DB: createD1(), ...extraEnv };
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://localhost:${port}`);
     if (url.pathname.startsWith('/api/')) {
@@ -37,6 +37,29 @@ async function riftSite(port) {
   });
   await new Promise((r) => server.listen(port, '127.0.0.1', r));
   return { url: `http://localhost:${port}`, env, close: () => server.close() };
+}
+
+/** Wallet simulada (como MetaMask) que firma con `w`. Cuenta las firmas en window.__signs. */
+async function withWallet(ctx, w) {
+  await ctx.exposeBinding('testSign', async (_src, msg) => w.signMessage(msg));
+  await ctx.addInitScript((address) => {
+    const hex2str = (h) => new TextDecoder().decode(Uint8Array.from(h.slice(2).match(/../g).map((b) => parseInt(b, 16))));
+    window.__signs = 0;
+    window.ethereum = {
+      isMetaMask: true,
+      on() {},
+      removeListener() {},
+      async request({ method, params }) {
+        if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [address];
+        if (method === 'eth_chainId') return '0x38';
+        if (method === 'personal_sign') {
+          window.__signs++;
+          return window.testSign(hex2str(params[0]));
+        }
+        throw Object.assign(new Error(`no soportado: ${method}`), { code: 4200 });
+      }
+    };
+  }, w.address);
 }
 
 /** Lector de huella simulado (como el de un celular). */
@@ -138,31 +161,10 @@ test('cuenta con wallet: firmar (gratis) la suma a la cuenta y otro dispositivo 
   test.setTimeout(300_000);
   const site = await riftSite(4191);
   const w = Wallet.createRandom();
-  const withWallet = async (ctx) => {
-    await ctx.exposeBinding('testSign', async (_src, msg) => w.signMessage(msg));
-    await ctx.addInitScript((address) => {
-      const hex2str = (h) => new TextDecoder().decode(Uint8Array.from(h.slice(2).match(/../g).map((b) => parseInt(b, 16))));
-      window.__signs = 0;
-      window.ethereum = {
-        isMetaMask: true,
-        on() {},
-        removeListener() {},
-        async request({ method, params }) {
-          if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [address];
-          if (method === 'eth_chainId') return '0x38';
-          if (method === 'personal_sign') {
-            window.__signs++;
-            return window.testSign(hex2str(params[0]));
-          }
-          throw Object.assign(new Error(`no soportado: ${method}`), { code: 4200 });
-        }
-      };
-    }, w.address);
-  };
   const a = await browser.newContext(phone);
   const b = await browser.newContext(desktop);
-  await withWallet(a);
-  await withWallet(b);
+  await withWallet(a, w);
+  await withWallet(b, w);
   try {
     // Celular: juega Rift Cargo y conecta la wallet desde la Cuenta Rift.
     const p1 = await a.newPage();
@@ -185,6 +187,8 @@ test('cuenta con wallet: firmar (gratis) la suma a la cuenta y otro dispositivo 
     await expect(p1.locator('.ra-status')).toContainText('Cuenta protegida');
     await expect(p1.locator('.ra-cred')).toContainText(w.address.slice(0, 6).toLowerCase());
     expect(await p1.evaluate(() => window.__signs)).toBe(1);
+    // Una wallet cualquiera no es dueña del juego.
+    await expect(p1.locator('.ra-owner')).toHaveCount(0);
     await p1.click('[data-ra="close"]');
     // Se va (la partida sube a la nube al esconder la página).
     await p1.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
@@ -215,6 +219,78 @@ test('cuenta con wallet: firmar (gratis) la suma a la cuenta y otro dispositivo 
   } finally {
     await a.close();
     await b.close();
+    site.close();
+  }
+});
+
+test('dueño: con la wallet del dueño tiene todo desbloqueado y el Panel del dueño en los dos juegos', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const boss = Wallet.createRandom();
+  const site = await riftSite(4193, { ADMIN_WALLETS: boss.address });
+  const ctx = await browser.newContext(desktop);
+  await withWallet(ctx, boss);
+  try {
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    // Rift Cargo: conecta la wallet desde la Cuenta Rift y aparece el panel.
+    await page.goto(`${site.url}/cargo/`);
+    await page.locator('.profile').waitFor();
+    await page.evaluate(() => {
+      window.__CARGO__.state.flags.tut = 99;
+      document.querySelector('#coach').hidden = true;
+    });
+    await page.locator('.profile').click();
+    await page.locator('#menu [data-act="account"]').click();
+    await expect(page.locator('.ra-owner')).toHaveCount(0);
+    await page.click('[data-ra="wallet"]');
+    await expect(page.locator('.ra-status')).toContainText('Dueño');
+    await expect(page.locator('.ra-owner')).toContainText('Panel del dueño');
+    const credits = await page.evaluate(() => window.__CARGO__.state.credits);
+    await page.click('[data-ra="owner:credits"]');
+    await expect.poll(() => page.evaluate(() => window.__CARGO__.state.credits)).toBeGreaterThanOrEqual(credits + 100_000);
+    await page.click('[data-ra="owner:level"]');
+    await page.click('[data-ra="owner:upgrades"]');
+    await expect.poll(() => page.evaluate(() => window.__CARGO__.state.level)).toBe(12);
+    expect(await page.evaluate(() => Object.values(window.__CARGO__.state.up))).toEqual([3, 4, 4, 2, 3, 1, 1]);
+    await page.click('[data-ra="close"]');
+    // Un solo cartel de nivel nuevo (no once).
+    await expect(page.locator('#modal h2')).toContainText('12');
+    await page.click('#modal [data-act="closeModal"]');
+    // El Taller de estilo: todo es suyo (nada con candado).
+    await page.locator('.profile').click();
+    await page.locator('#menu [data-act="style"]').click();
+    await expect(page.locator('.sw.has').first()).toBeVisible();
+    await expect(page.locator('.sw.lock')).toHaveCount(0);
+    // La partida con todo eso queda en la nube.
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await expect.poll(async () => (await site.env.DB.prepare("SELECT data FROM saves WHERE game = 'cargo'").first())?.data ?? '', { timeout: 20_000 })
+      .toContain('"level":12');
+
+    // RIFTFALL: misma cuenta, Pase Fundador Leyenda sin pagar y su panel.
+    await page.goto(`${site.url}/`);
+    await expect(page.locator('#accountBtn')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('riftfall.founder') ?? 'null')?.tier)).toBe('legend');
+    await page.click('#accountBtn');
+    await expect(page.locator('.ra-owner [data-ra^="owner:"]')).toHaveCount(4);
+    for (const k of ['cores', 'talents', 'rift', 'parts']) {
+      await page.click(`[data-ra="owner:${k}"]`);
+      await expect(page.locator(`[data-ra="owner:${k}"]`)).toBeEnabled();
+    }
+    const prog = await page.evaluate(() => JSON.parse(localStorage.getItem('riftfall.progress')));
+    expect(prog.cores).toBeGreaterThanOrEqual(5000);
+    expect(prog.riftMax).toBe(10);
+    expect(Object.values(prog.talents).every((v) => v === 5)).toBe(true);
+    await page.click('[data-ra="close"]');
+    await expect(page.locator('#riftNum')).toBeVisible();
+    expect(await page.locator('#riftPips i.open, #riftPips i.on').count()).toBe(10);
+    await expect(page.locator('#founderChip')).toBeVisible();
+    expect(errors).toEqual([]);
+  } finally {
+    await ctx.close();
     site.close();
   }
 });

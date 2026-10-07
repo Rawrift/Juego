@@ -20,6 +20,7 @@ import { createDailyBoard, defaultName } from '../server/world-board.mjs';
 import { replayRun } from '../src/sim/index.js';
 import { cleanName } from '../src/shared/duel.js';
 import { publicId } from '../src/shared/public-id.js';
+import { FOUNDER } from '../src/shared/founder.js';
 
 const DAY = 86_400_000;
 const SESSION_DAYS = 365;
@@ -93,6 +94,16 @@ function siteOf(ctx, claimed) {
   return { origin, host: u.host, hostname: u.hostname };
 }
 
+/**
+ * Dueños del juego: la wallet que cobra las ventas (la del creador) y las que se sumen en la variable
+ * ADMIN_WALLETS (separadas por coma). Quien tenga una de esas wallets en su cuenta tiene todo
+ * desbloqueado y el Panel del dueño en los dos juegos.
+ */
+export function adminWallets(env = {}) {
+  const extra = String(env.ADMIN_WALLETS ?? '').split(',').map((s) => s.trim().toLowerCase()).filter((s) => /^0x[0-9a-f]{40}$/.test(s));
+  return new Set([FOUNDER.treasury.toLowerCase(), ...extra]);
+}
+
 /** Mensaje que firma la wallet para entrar (no cuesta nada ni autoriza pagos). */
 export function walletMessage(address, code, host, at) {
   return [
@@ -159,8 +170,15 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
       ctx.store.passkeys(player.id),
       ctx.store.purchases(player.id)
     ]);
+    const admins = adminWallets(ctx.env);
     return {
-      player: { id: player.id, pid: player.pid, name: player.name, guest: !wallets.length && !passkeys.length },
+      player: {
+        id: player.id,
+        pid: player.pid,
+        name: player.name,
+        guest: !wallets.length && !passkeys.length,
+        ...(wallets.some((w) => admins.has(w)) ? { admin: true } : {})
+      },
       wallets,
       passkeys: passkeys.map((p) => ({ id: p.cred_id.slice(0, 10), device: p.device, created: p.created_at })),
       purchases
