@@ -30,6 +30,14 @@
   pago en BNB Chain y pide que la wallet que pagó esté en la cuenta (así nadie puede adueñarse de un pago
   copiando el hash de BscScan). En otro dispositivo, al entrar, aparecen solas.
 - **El día del ranking "Hoy" y del Desafío** cambia a las 00:00 de Argentina (antes era a las 21:00).
+- **Wallet en el celular (Chrome o Safari):** no hace falta abrir el juego dentro de MetaMask. Con
+  MetaMask Connect (`@metamask/connect-evm`, sin claves ni cuentas) el juego muestra un botón "Abrir
+  MetaMask", el jugador aprueba en la app y vuelve a la pestaña. Para entrar se conecta y se firma en un
+  solo paso (`connectAndSign`; el servidor saca la wallet de la firma). Los pagos (Pase Fundador,
+  estéticos) usan el mismo camino. El botón lo toca el jugador porque en iPhone la app solo se abre con
+  un toque (si el juego la abre solo, iOS manda a la App Store). Si no anda, la misma ventana ofrece
+  abrir el juego dentro de MetaMask con la cuenta y el progreso. La librería se descarga solo cuando hace
+  falta (~105 KB) y sus estadísticas de uso están apagadas.
 - **Modo dueño:** la cuenta que tiene conectada la wallet que cobra las ventas
   (`FOUNDER.treasury`, 0x09aF…7Dd) es del dueño. Tiene todo desbloqueado sin pagar (Pase Fundador Leyenda
   en RIFTFALL y todos los estéticos de Cargo) y, en la ventana "Cuenta Rift", un **Panel del dueño** con
@@ -52,6 +60,7 @@
 | Cliente de la cuenta (los dos juegos) | `src/rift/account.js` |
 | Ventana "Cuenta Rift" | `src/rift/account-ui.js`, `src/rift/account.css` |
 | Mudanza desde la dirección vieja | `src/rift/move.js` |
+| Wallet en el celular (MetaMask Connect) | `src/rift/wallet.js`, `src/rift/open-in-metamask.js` |
 | Pruebas | `test/unit/cloud.test.mjs`, `test/e2e/account.spec.js` |
 
 ## Límites del plan gratis de Cloudflare y cómo se resolvieron

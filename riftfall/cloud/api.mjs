@@ -104,12 +104,16 @@ export function adminWallets(env = {}) {
   return new Set([FOUNDER.treasury.toLowerCase(), ...extra]);
 }
 
-/** Mensaje que firma la wallet para entrar (no cuesta nada ni autoriza pagos). */
+/**
+ * Mensaje que firma la wallet para entrar (no cuesta nada ni autoriza pagos). Sin `address` (desde
+ * Chrome o Safari en el celular se conecta y se firma en un solo paso, antes de saber la wallet) no
+ * lleva esa línea: la wallet sale de la firma.
+ */
 export function walletMessage(address, code, host, at) {
   return [
     'Rift: iniciar sesión',
     `Sitio: ${host}`,
-    `Wallet: ${address}`,
+    ...(address ? [`Wallet: ${address}`] : []),
     `Código: ${code}`,
     `Fecha: ${new Date(at).toISOString()}`,
     '',
@@ -292,11 +296,11 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
 
     // ---------- Wallet: firmar un mensaje (gratis) ----------
     'POST /api/rift/wallet/nonce': async (ctx) => {
-      const { address, origin } = await readJson(ctx.request, 2000);
-      if (!/^0x[0-9a-fA-F]{40}$/.test(address ?? '')) throw new HttpError(400, 'address');
+      const { address = null, origin } = await readJson(ctx.request, 2000);
+      if (address !== null && !/^0x[0-9a-fA-F]{40}$/.test(address)) throw new HttpError(400, 'address');
       const id = randomHex(16);
       const message = walletMessage(address, randomHex(8), siteOf(ctx, origin).host, ctx.t);
-      await ctx.store.addChallenge({ id, kind: 'wallet', value: JSON.stringify({ address: address.toLowerCase(), message }), expires: ctx.t + 10 * 60_000 });
+      await ctx.store.addChallenge({ id, kind: 'wallet', value: JSON.stringify({ address: address?.toLowerCase() ?? null, message }), expires: ctx.t + 10 * 60_000 });
       return json({ ok: true, id, message });
     },
 
@@ -304,14 +308,16 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
       const { id, signature } = await readJson(ctx.request, 4000);
       const ch = await ctx.store.takeChallenge(String(id ?? ''), 'wallet', ctx.t);
       if (!ch) throw new HttpError(400, 'expired');
-      const { address, message } = JSON.parse(ch.value);
+      const { address: expected, message } = JSON.parse(ch.value);
       let signer = '';
       try {
         signer = verifyMessage(message, String(signature ?? '')).toLowerCase();
       } catch {
         signer = '';
       }
-      if (signer !== address) throw new HttpError(401, 'signature');
+      // Si el pedido no decía la wallet, es la que firmó.
+      if (!/^0x[0-9a-f]{40}$/.test(signer) || (expected && signer !== expected)) throw new HttpError(401, 'signature');
+      const address = signer;
       const current = await sessionOf(ctx);
       const owner = await ctx.store.walletOwner(address);
       if (owner) return json(await switchTo(ctx, current, owner));

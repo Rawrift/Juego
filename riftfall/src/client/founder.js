@@ -5,7 +5,7 @@
 import { BrowserProvider, JsonRpcProvider, FetchRequest } from 'ethers';
 import { FOUNDER, tierRank, bnbPriceFromReserves, bnbWeiForUsd, founderFromPayment, erc20TransferData } from '../shared/founder.js';
 import { t } from './i18n.js';
-import { injected } from './injected.js';
+import { walletProvider } from '../rift/wallet.js';
 
 const KEY = 'riftfall.founder';
 const SKIN_KEY = 'riftfall.skin';
@@ -124,20 +124,22 @@ async function ensureMainnet(browser) {
 export async function buyFounder(tierId, method, onStage = () => {}) {
   const tier = FOUNDER.tiers.find((x) => x.id === tierId);
   if (!tier) throw new Error('nivel desconocido');
-  if (!injected()) throw new Error(t('err.noWallet'));
+  // La wallet del navegador o, en Chrome o Safari del celular, la app de MetaMask.
+  const eth = await walletProvider();
+  if (!eth) throw new Error(t('err.noWallet'));
   busy = true;
   try {
-    return await purchase(tier, method, onStage);
+    return await purchase(tier, method, onStage, eth);
   } finally {
     busy = false;
   }
 }
 
-async function purchase(tier, method, onStage) {
-  let browser = new BrowserProvider(injected(), 'any');
+async function purchase(tier, method, onStage, eth) {
+  let browser = new BrowserProvider(eth, 'any');
   await browser.send('eth_requestAccounts', []);
   await ensureMainnet(browser);
-  browser = new BrowserProvider(injected(), 'any');
+  browser = new BrowserProvider(eth, 'any');
   const signer = await browser.getSigner();
   const from = await signer.getAddress();
 

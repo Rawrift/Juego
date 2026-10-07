@@ -45,6 +45,7 @@
     "@fontsource/orbitron": "^5.3.0",
     "@fontsource/plus-jakarta-sans": "^5.3.0",
     "@fontsource/rajdhani": "^5.3.0",
+    "@metamask/connect-evm": "2.1.1",
     "@simplewebauthn/browser": "^14.0.0",
     "@simplewebauthn/server": "^14.0.3",
     "@vercel/blob": "^2.8.1",

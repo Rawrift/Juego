@@ -12,7 +12,7 @@ import { createD1 } from '../../cloud/d1-node.mjs';
 
 async function riftSite(port, extraEnv = {}) {
   const DIST = path.resolve('dist-e2e');
-  const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.woff': 'font/woff', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webmanifest': 'application/manifest+json' };
+  const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.woff': 'font/woff', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webmanifest': 'application/manifest+json', '.json': 'application/json' };
   const api = createApi({ chain: { payment: async () => ({ kind: null, reason: 'notFound' }) } });
   const env = { DB: createD1(), ...extraEnv };
   const server = http.createServer(async (req, res) => {
@@ -58,6 +58,43 @@ async function withWallet(ctx, w) {
         }
         throw Object.assign(new Error(`no soportado: ${method}`), { code: 4200 });
       }
+    };
+  }, w.address);
+}
+
+/**
+ * App de MetaMask simulada para Chrome o Safari del celular (MetaMask Connect): pide aprobar con un
+ * link y responde cuando la prueba llama a window.__mmApprove() (como si el jugador aprobara en la app).
+ */
+async function withMetaMaskApp(ctx, w) {
+  await ctx.exposeBinding('testSign', async (_src, msg) => w.signMessage(msg));
+  await ctx.addInitScript((address) => {
+    window.__mmConnectFake = (opts) => {
+      const wait = () => {
+        opts.mobile.preferredOpenLink('metamask://connect/mwp?p=prueba');
+        return new Promise((ok) => (window.__mmApprove = ok));
+      };
+      const client = {
+        status: 'disconnected',
+        async connectAndSign({ message }) {
+          await wait();
+          client.status = 'connected';
+          return { accounts: [address], chainId: '0x38', signature: await window.testSign(message) };
+        },
+        async connect() {
+          await wait();
+          client.status = 'connected';
+          return { accounts: [address], chainId: '0x38' };
+        },
+        getProvider: () => ({
+          async request({ method }) {
+            if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [address];
+            if (method === 'eth_chainId') return '0x38';
+            throw Object.assign(new Error(`no soportado: ${method}`), { code: 4200 });
+          }
+        })
+      };
+      return client;
     };
   }, w.address);
 }
@@ -295,9 +332,41 @@ test('dueño: con la wallet del dueño tiene todo desbloqueado y el Panel del du
   }
 });
 
-test('celular sin wallet (Safari): "Conectar wallet" ofrece abrir el juego en MetaMask con la cuenta', async ({ browser }) => {
+test('celular con Chrome: conecta MetaMask sin salir de Chrome (se aprueba en la app) y el dueño tiene su panel', async ({ browser }) => {
+  const boss = Wallet.createRandom();
+  const site = await riftSite(4196, { ADMIN_WALLETS: boss.address });
+  const ctx = await browser.newContext(phone);
+  await withMetaMaskApp(ctx, boss);
+  try {
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto(`${site.url}/`);
+    await expect(page.locator('#accountBtn')).toBeVisible();
+    // "Conectar wallet" de arriba: aparece el botón para aprobar en la app (un link que toca el jugador).
+    await page.click('#walletBtn');
+    const approve = page.locator('.ra-mm [data-mm="approve"]');
+    await expect(approve.first()).toHaveAttribute('href', 'https://metamask.app.link/connect/mwp?p=prueba');
+    await expect(approve.nth(1)).toHaveAttribute('href', 'metamask://connect/mwp?p=prueba');
+    // Aprueba en MetaMask (conectar y firmar en un solo paso) y vuelve a Chrome.
+    await page.evaluate(() => window.__mmApprove());
+    await expect(page.locator('.ra-mm')).toHaveCount(0);
+    await expect(page.locator('#walletBtn')).toHaveText(boss.address.slice(0, 6).toLowerCase() + '…' + boss.address.slice(-4).toLowerCase());
+    // La wallet quedó en la Cuenta Rift: es el dueño, con su panel, sin haber abierto el juego en MetaMask.
+    await page.click('#accountBtn');
+    await expect(page.locator('.ra-status')).toContainText('Dueño');
+    await expect(page.locator('.ra-owner')).toBeVisible();
+    expect(errors).toEqual([]);
+  } finally {
+    await ctx.close();
+    site.close();
+  }
+});
+
+test('celular con Chrome: cancelar, y si la conexión no anda, abrir el juego dentro de MetaMask con la misma cuenta', async ({ browser }) => {
   const site = await riftSite(4194);
   const ctx = await browser.newContext(phone);
+  await withMetaMaskApp(ctx, Wallet.createRandom());
   try {
     const page = await ctx.newPage();
     const errors = [];
@@ -307,20 +376,22 @@ test('celular sin wallet (Safari): "Conectar wallet" ofrece abrir el juego en Me
     const token = await page.evaluate(() => localStorage.getItem('rift.session'));
     await page.click('#accountBtn');
     await page.click('[data-ra="wallet"]');
+    await page.click('.ra-mm [data-mm="cancel"]');
+    await expect(page.locator('.ra-mm')).toHaveCount(0);
+    await expect(page.locator('.toast').last()).toContainText('Se canceló');
+    // Plan B: abrir el juego dentro de MetaMask, llevando la cuenta.
+    await page.click('[data-ra="wallet"]');
+    await page.click('.ra-mm [data-mm="inside"]');
     const open = page.locator('.ra-mm [data-mm="open"]');
     await expect(open).toHaveText('Abrir en MetaMask');
     const href = await open.getAttribute('href');
     expect(href).toMatch(/^https:\/\/metamask\.app\.link\/dapp\/localhost:4194\/\?rf=/);
-    // En el navegador de MetaMask (memoria vacía) el link trae la misma cuenta.
     const mm = await browser.newContext(phone);
     const p2 = await mm.newPage();
     await p2.goto(`http://${href.split('/dapp/')[1]}`);
     await expect(p2.locator('#accountBtn')).toBeVisible();
     expect(await p2.evaluate(() => localStorage.getItem('rift.session'))).toBe(token);
     await mm.close();
-    // Cerrar la ventana vuelve a la cuenta.
-    await page.click('.ra-mm [data-mm="close"]');
-    await expect(page.locator('.ra-mm')).toHaveCount(0);
     expect(errors).toEqual([]);
   } finally {
     await ctx.close();

@@ -212,3 +212,20 @@ test('dueño: la wallet de la tesorería siempre es dueña, sin configurar nada'
   assert.ok(adminWallets({}).has(FOUNDER.treasury.toLowerCase()));
   assert.equal(adminWallets({ ADMIN_WALLETS: '0xABC' }).size, 1);
 });
+
+test('wallet sin decir la dirección antes (celular: conectar y firmar en un paso): la wallet sale de la firma', async () => {
+  const { call } = setup();
+  const w = Wallet.createRandom();
+  const g = await call('POST', '/api/rift/guest', {});
+  const n = await call('POST', '/api/rift/wallet/nonce', { body: {} });
+  assert.equal(n.status, 200);
+  assert.doesNotMatch(n.message, /Wallet:/);
+  const signature = await w.signMessage(n.message);
+  const r = await call('POST', '/api/rift/wallet/login', { body: { id: n.id, signature }, token: g.token });
+  assert.equal(r.linked, true);
+  assert.deepEqual(r.account.wallets, [w.address.toLowerCase()]);
+  // Una firma rota no entra, y una dirección mal escrita se rechaza.
+  const n2 = await call('POST', '/api/rift/wallet/nonce', { body: {} });
+  assert.equal((await call('POST', '/api/rift/wallet/login', { body: { id: n2.id, signature: '0x1234' } })).status, 401);
+  assert.equal((await call('POST', '/api/rift/wallet/nonce', { body: { address: 'hola' } })).status, 400);
+});

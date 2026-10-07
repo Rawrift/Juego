@@ -8,6 +8,7 @@ import { STYLE_ITEMS, ownedSet, styleTagHex, styleFromPayment } from '../shared/
 import { packData, unpackData } from '../shared/pack.js';
 import { injected } from '../client/injected.js';
 import { isAdmin } from '../rift/account.js';
+import { walletProvider } from '../rift/wallet.js';
 
 const KEY = 'riftcargo.style';
 const PARAM = 'rf';
@@ -205,10 +206,11 @@ async function waitReceipt(hash, ms = 180_000) {
  */
 export async function buyStyle(item, method, onStage = () => {}) {
   if (!STYLE_ITEMS[item]) throw fail('unknown');
-  const eth = injected();
-  if (!eth) throw fail('noWallet');
   busy = true;
   try {
+    // La wallet del navegador o, en Chrome o Safari del celular, la app de MetaMask.
+    const eth = await walletProvider();
+    if (!eth) throw fail('noWallet');
     const [from] = await eth.request({ method: 'eth_requestAccounts' });
     await ensureBsc(eth);
     const usd = STYLE_ITEMS[item].usd;

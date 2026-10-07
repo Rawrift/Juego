@@ -25,7 +25,7 @@ import { WORLD, myPublicId, fetchRunBoard, fetchWorldDaily } from './world.js';
 import { dailyNumber } from '../shared/daily.js';
 import { $, el, toast, fmtTime, fmtNum, shortAddr, fmtRift, brandText } from './dom.js';
 import { t, tx, locale, lang } from './i18n.js';
-import { openInMetaMask } from '../rift/open-in-metamask.js';
+import { openInMetaMask, isTouch } from '../rift/open-in-metamask.js';
 
 /** Ícono de cada talento (reutiliza los de las mejoras parecidas). */
 const TALENT_ICON = { hull: 'hull', power: 'might', reflex: 'haste', engines: 'thrust', magnet: 'magnet', memory: 'growth' };
@@ -302,7 +302,8 @@ export function createPanels(app) {
               const bnbAmt = price ? Number(bnbWeiForUsd(tier.usd, price) / 10n ** 12n) / 1e6 : null;
               const bnb = el('button', { class: 'btn ghost small', disabled: !bnbAmt }, bnbAmt ? t('f.payBnb', { n: bnbAmt }) : t('f.priceErr'));
               const buy = (btn, method) => async () => {
-                if (!injected()) {
+                // En la compu sin MetaMask: cómo instalarla. En el celular se paga con la app de MetaMask.
+                if (!injected() && !isTouch()) {
                   openInMetaMask(metamaskLink, { lang });
                   return;
                 }

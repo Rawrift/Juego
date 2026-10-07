@@ -50,6 +50,9 @@ de Rift Cargo, el nombre, los rankings y las compras (Pase Fundador, estéticos)
 en cualquier dispositivo. Corre en **Cloudflare Pages + D1** (plan gratis): `functions/` y `cloud/`. Detalles,
 límites del plan gratis y cómo ponerlo en marcha en [`docs/CUENTA-RIFT.md`](docs/CUENTA-RIFT.md).
 
+**Wallet desde Chrome o Safari del celular:** con MetaMask Connect se aprueba en la app de MetaMask y se vuelve
+a la pestaña, sin abrir el juego dentro de MetaMask (`src/rift/wallet.js`).
+
 **Modo dueño:** con la wallet que cobra las ventas conectada a la cuenta, todo queda desbloqueado sin pagar y la
 ventana "Cuenta Rift" muestra un Panel del dueño (Núcleos, talentos, niveles del Rift y piezas en RIFTFALL;
 créditos, nivel y mejoras en Cargo).

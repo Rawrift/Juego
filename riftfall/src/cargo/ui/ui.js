@@ -16,7 +16,7 @@ import { LIVERY_IDS, TRAIL_IDS, LIVERIES, TRAILS, STYLE_ITEMS } from '../../shar
 import { C, LIVERY, LIVERY_LOOKS, TRAIL_COLORS, hex } from '../render/palette.js';
 import * as style from '../style.js';
 import { account as rgAccount, claimPurchase, onAccount } from '../../rift/account.js';
-import { openInMetaMask } from '../../rift/open-in-metamask.js';
+import { openInMetaMask, isTouch } from '../../rift/open-in-metamask.js';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const shipName = (s) => s.name;
@@ -735,7 +735,8 @@ export function createUI({ state, actions, isMap }) {
   }
 
   async function buyItem(item, method) {
-    if (!style.hasWallet()) {
+    // En la compu sin MetaMask: cómo instalarla. En el celular se paga con la app de MetaMask.
+    if (!style.hasWallet() && !isTouch()) {
       actions.persist?.();
       openInMetaMask(style.metamaskLink, { lang });
       return;

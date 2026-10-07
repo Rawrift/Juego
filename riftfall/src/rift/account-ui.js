@@ -6,7 +6,7 @@ import {
   account, isOnline, start, loginWallet, addPasskey, loginPasskey, setName, logout, passkeysSupported, onAccount, syncPurchases, reloadForAccount
 } from './account.js';
 import { injected } from '../client/injected.js';
-import { openInMetaMask } from './open-in-metamask.js';
+import { openInMetaMask, setWalletFallback, isTouch } from './open-in-metamask.js';
 
 const T = {
   es: {
@@ -53,6 +53,7 @@ const T = {
       'passkey-unknown': 'Esa huella no corresponde a ninguna cuenta.',
       passkey: 'No se pudo verificar la huella.',
       signature: 'No se pudo verificar la firma.',
+      mmconnect: 'No se pudo conectar con la app de MetaMask. Probá abrir el juego dentro de MetaMask.',
       expired: 'Se venció el pedido. Probá de nuevo.',
       offline: 'Sin conexión con el servidor.',
       generic: 'No se pudo completar: {msg}'
@@ -117,6 +118,7 @@ const T = {
       'passkey-unknown': 'That fingerprint does not match any account.',
       passkey: 'Could not verify the fingerprint.',
       signature: 'Could not verify the signature.',
+      mmconnect: 'Could not connect to the MetaMask app. Try opening the game inside MetaMask.',
       expired: 'The request expired. Try again.',
       offline: 'No connection to the server.',
       generic: 'Could not complete it: {msg}'
@@ -181,6 +183,7 @@ const T = {
       'passkey-unknown': 'Essa digital não corresponde a nenhuma conta.',
       passkey: 'Não foi possível verificar a digital.',
       signature: 'Não foi possível verificar a assinatura.',
+      mmconnect: 'Não foi possível conectar ao app do MetaMask. Tente abrir o jogo dentro do MetaMask.',
       expired: 'O pedido expirou. Tente de novo.',
       offline: 'Sem conexão com o servidor.',
       generic: 'Não foi possível concluir: {msg}'
@@ -238,6 +241,8 @@ function cube() {
  * en este navegador no hay wallet, por ejemplo Safari o Chrome en el celular).
  */
 export function createAccountUI({ game, lang = () => 'es', toast = () => {}, onChange = () => {}, owner = {}, walletLink }) {
+  // "Abrir el juego dentro de MetaMask" (por si MetaMask Connect no anda) lleva la cuenta y el progreso.
+  if (walletLink) setWalletFallback(walletLink);
   const root = document.createElement('div');
   root.className = 'ra-overlay';
   root.hidden = true;
@@ -358,10 +363,14 @@ export function createAccountUI({ game, lang = () => 'es', toast = () => {}, onC
       const r = await loginPasskey();
       if (r.switched) reloadSoon();
     });
-    // Sin wallet en este navegador (Safari o Chrome en el celular): el juego se abre dentro de MetaMask.
-    if (act === 'wallet' && !injected()) return openInMetaMask(walletLink, { lang: lang() });
+    // En la compu sin MetaMask: cómo instalarla. (En el celular se conecta con la app de MetaMask.)
+    if (act === 'wallet' && !injected() && !isTouch()) return openInMetaMask(walletLink, { lang: lang() });
     if (act === 'wallet') return run(act, async () => {
-      const r = await loginWallet();
+      const r = await loginWallet().catch((err) => {
+        // Si la conexión con la app falla, queda la otra forma: abrir el juego dentro de MetaMask.
+        if (err?.code === 'mmconnect') openInMetaMask(walletLink, { lang: lang() });
+        throw err;
+      });
       if (r.switched) return reloadSoon();
       toast(tx().ok.wallet, 'ok');
       // Las compras hechas con esa wallet en este dispositivo pasan a la cuenta.

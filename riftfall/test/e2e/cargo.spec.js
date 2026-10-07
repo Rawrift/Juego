@@ -223,10 +223,18 @@ test('Taller de estilo: se prueba la pintura, se paga en USDT verificado en la c
   expect(errors).toEqual([]);
 });
 
-test('celular sin wallet: pagar abre MetaMask llevando la partida y los estéticos, sin perder nada', async ({ browser }) => {
+test('celular sin wallet: pagar pide aprobar en MetaMask y, si no anda, abre el juego en MetaMask con la partida y los estéticos', async ({ browser }) => {
   test.setTimeout(300_000);
   const opts = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'es-ES' };
   const phone = await browser.newPage(opts);
+  // Chrome del celular: MetaMask Connect pide aprobar en la app (simulada: nunca responde, así se usa el plan B).
+  await phone.addInitScript(() => {
+    window.__mmConnectFake = (o) => ({
+      status: 'disconnected',
+      connect: () => (o.mobile.preferredOpenLink('metamask://connect/mwp?p=prueba'), new Promise(() => {})),
+      getProvider: () => ({ request: async () => [] })
+    });
+  });
   await phone.goto('/cargo/');
   await phone.locator('.mtabs').waitFor();
   await skipTutorial(phone);
@@ -247,6 +255,9 @@ test('celular sin wallet: pagar abre MetaMask llevando la partida y los estétic
   await phone.locator('.sty-cta').tap();
   await phone.locator('[data-act="styTrail"][data-v="magenta"]').tap();
   await phone.locator('.sty-buy').first().locator('text=Pagar US$ 1 en USDT').tap();
+  // Se pide aprobar en la app de MetaMask; si no anda, el plan B abre el juego dentro de MetaMask.
+  await expect(phone.locator('.ra-mm [data-mm="approve"]').first()).toHaveAttribute('href', 'https://metamask.app.link/connect/mwp?p=prueba');
+  await phone.locator('.ra-mm [data-mm="inside"]').tap();
   // Ventana "Abrir en MetaMask": el jugador toca el link (así iOS abre la app y no la App Store).
   const open = phone.locator('.ra-mm [data-mm="open"]');
   await expect(open).toHaveText('Abrir en MetaMask');
