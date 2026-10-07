@@ -322,7 +322,7 @@ test('celular sin wallet: pagar pide conectar la wallet y, si no anda, abre el j
     await route.fulfill({ status: 200, contentType: 'text/html', body: '<p>MetaMask</p>' });
   });
   await phone.locator('.mtabs [data-v="fleet"]').tap();
-  await phone.locator('.sty-cta[data-act="style"]').tap();
+  await phone.locator('#panel .sty-cta[data-act="style"]').tap();
   await phone.locator('[data-act="styTrail"][data-v="magenta"]').tap();
   await phone.locator('.sty-buy').first().locator('text=Pagar US$ 1 en USDT').tap();
   // Se pide conectar la wallet; si no anda, el plan B abre el juego dentro de MetaMask.

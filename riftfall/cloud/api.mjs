@@ -376,15 +376,16 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
       const s = await needSession(ctx);
       const { purpose, origin } = await readJson(ctx.request, 2000);
       if (!HANDOFF_PURPOSES.includes(purpose)) throw new HttpError(400, 'purpose');
+      const target = siteOf(ctx, origin).origin;
+      if (origin && target !== origin) throw new HttpError(400, 'origin');
       const kind = `handoff:${purpose}`;
       // Un solo código vivo por jugador y por uso: pedir otro anula el anterior.
-      await ctx.store.dropChallenges(s.player.id, kind);
       const code = b64url(randomBytes(32));
       // Se guarda el resumen del código (no el código) y el sitio donde se va a usar.
-      await ctx.store.addChallenge({
+      await ctx.store.replaceChallenge({
         id: await sha256hex(code),
         kind,
-        value: JSON.stringify({ o: siteOf(ctx, origin).origin }),
+        value: JSON.stringify({ o: target }),
         playerId: s.player.id,
         expires: ctx.t + HANDOFF_TTL
       });
@@ -397,7 +398,7 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
       const ch = await ctx.store.takeChallenge(await sha256hex(code), `handoff:${purpose}`, ctx.t);
       if (!ch?.player_id) throw new HttpError(400, 'expired');
       // El código solo vale en el sitio para el que se pidió.
-      if (JSON.parse(ch.value).o !== siteOf(ctx, origin).origin) throw new HttpError(400, 'expired');
+      if (origin !== siteOf(ctx, origin).origin || JSON.parse(ch.value).o !== origin) throw new HttpError(400, 'expired');
       if (!(await ctx.store.player(ch.player_id))) throw new HttpError(400, 'expired');
       return json(await switchTo(ctx, await sessionOf(ctx), ch.player_id));
     },

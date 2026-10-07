@@ -1208,7 +1208,9 @@ test('MetaMask en el celular: al conectar la wallet el progreso viaja al navegad
     expect(got.p.bestScore).toBe(4321);
     expect(got.p.runs).toBe(7);
     expect(got.name).toBe('Rodri');
-    expect(got.pid).toBe('cd'.repeat(16));
+    // Sin servidor se lleva el progreso, pero el id secreto del ranking nunca viaja en el enlace.
+    expect(got.pid).not.toBe('cd'.repeat(16));
+    expect(got.pid).toMatch(/^[a-f0-9]{32}$/);
     expect(got.url).not.toContain('rf=');
   } finally {
     await chromeCtx.close();

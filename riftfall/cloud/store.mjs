@@ -103,6 +103,12 @@ export function createStore(db) {
     // ---------- Desafíos de un solo uso (firma de wallet, passkeys) ----------
     addChallenge: ({ id, kind, value, playerId = null, expires }) =>
       run('INSERT INTO challenges (id, kind, value, player_id, expires_at) VALUES (?, ?, ?, ?, ?)', id, kind, value, playerId, expires),
+    /** Reemplazo transaccional: dos emisiones simultáneas también dejan un solo código vivo. */
+    replaceChallenge: ({ id, kind, value, playerId, expires }) => db.batch([
+      db.prepare('DELETE FROM challenges WHERE player_id = ? AND kind = ?').bind(playerId, kind),
+      db.prepare('INSERT INTO challenges (id, kind, value, player_id, expires_at) VALUES (?, ?, ?, ?, ?)')
+        .bind(id, kind, value, playerId, expires)
+    ]),
     /**
      * Lo saca de la base al leerlo, en una sola operación: si dos pedidos llegan a la vez con el mismo
      * desafío, solo uno lo recibe. No se puede usar dos veces.

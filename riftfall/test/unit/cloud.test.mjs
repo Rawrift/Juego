@@ -331,9 +331,10 @@ test('código de un solo uso: solo vale para su uso y su sitio, y un intento equ
   // Mudanza: pedido para la dirección nueva, solo se canjea diciendo esa dirección.
   const c3 = await fresh('move', 'https://otro.test');
   assert.equal((await call('POST', '/api/rift/handoff/redeem', { body: { code: c3, purpose: 'move', origin: 'https://otro.test' } })).status, 200);
-  // Un sitio que no está en la lista no puede ser destino: el código queda para el sitio propio.
-  const c4 = await fresh('open', 'https://malo.example');
-  assert.equal((await call('POST', '/api/rift/handoff/redeem', { body: { code: c4, purpose: 'open', origin: 'https://malo.example' } })).status, 200, 'se trata como el sitio propio');
+  // Un sitio desconocido se rechaza; tampoco se transforma silenciosamente en el sitio propio.
+  assert.equal((await call('POST', '/api/rift/handoff', { body: { purpose: 'open', origin: 'https://malo.example' }, token: g.token })).status, 400);
+  const c4 = await fresh();
+  assert.equal((await call('POST', '/api/rift/handoff/redeem', { body: { code: c4, purpose: 'open', origin: 'https://malo.example' } })).status, 400);
   // Formatos raros.
   for (const code of [undefined, 5, '', 'x', 'a'.repeat(44), { $ne: 1 }]) {
     assert.equal((await call('POST', '/api/rift/handoff/redeem', { body: { code, purpose: 'open', origin: SITE } })).status, 400);
@@ -347,6 +348,15 @@ test('código de un solo uso: dos canjes a la vez, entra uno solo', async () => 
   const redeem = () => call('POST', '/api/rift/handoff/redeem', { body: { code: h.code, purpose: 'open', origin: SITE } });
   const res = await Promise.all([redeem(), redeem(), redeem()]);
   assert.deepEqual(res.map((r) => r.status).sort(), [200, 400, 400]);
+});
+
+test('código de un solo uso: emisiones simultáneas dejan un solo código vivo', async () => {
+  const { call } = setup();
+  const g = await call('POST', '/api/rift/guest', { body: {} });
+  const codes = await Promise.all(Array.from({ length: 4 }, () => call('POST', '/api/rift/handoff', { body: { purpose: 'open', origin: SITE }, token: g.token })));
+  assert.equal(codes.every((r) => r.status === 200), true);
+  const results = await Promise.all(codes.map((r) => call('POST', '/api/rift/handoff/redeem', { body: { code: r.code, purpose: 'open', origin: SITE } })));
+  assert.deepEqual(results.map((r) => r.status).sort(), [200, 400, 400, 400]);
 });
 
 test('código de un solo uso: el navegador que lo abre conserva lo suyo si era invitado y cambia de cuenta', async () => {
