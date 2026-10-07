@@ -99,7 +99,21 @@
 
 ## Publicar una versión nueva
 
-El proyecto se publica subiendo la carpeta compilada (no está conectado a GitHub). Desde `riftfall/`:
+El proyecto se publica subiendo la carpeta compilada (no está conectado a GitHub).
+
+**Con la clave guardada en el entorno (lo normal):** el dueño creó en Cloudflare un token de API con
+permisos *Cloudflare Pages: Edit*, *D1: Edit* y *Account Settings: Read*, y lo guardó en las variables de
+entorno del entorno de Claude como `CLOUDFLARE_API_TOKEN` (más `CLOUDFLARE_ACCOUNT_ID` =
+`cd89c1d1c3cdccfb01fd913fb3802a59`, que no es secreto). Con eso se publica sin pedirle nada:
+
+```bash
+npm run deploy:cloudflare
+```
+
+El token nunca se escribe en el repositorio ni en el chat; se puede revocar en Cloudflare (Mi perfil →
+API Tokens).
+
+**Sin la clave (inicio de sesión de un solo uso):** desde `riftfall/`:
 
 ```bash
 npx wrangler login --device        # el dueño abre el link y toca "Autorizar" (no comparte contraseñas)
