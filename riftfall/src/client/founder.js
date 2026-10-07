@@ -3,9 +3,10 @@
 // beneficios en este dispositivo. Para otro dispositivo basta el hash del pago.
 
 import { BrowserProvider, JsonRpcProvider, FetchRequest } from 'ethers';
-import { FOUNDER, tierRank, bnbPriceFromReserves, bnbWeiForUsd, founderFromPayment, erc20TransferData } from '../shared/founder.js';
+import { FOUNDER, tierRank, bnbPriceFromReserves } from '../shared/founder.js';
 import { t } from './i18n.js';
 import { walletProvider } from '../rift/wallet.js';
+import { preparePurchase, confirmedPurchase } from '../rift/purchases.js';
 
 const KEY = 'riftfall.founder';
 const SKIN_KEY = 'riftfall.skin';
@@ -85,16 +86,17 @@ export async function bnbPrice() {
 }
 
 /** Verifica un pago por su hash y, si vale, guarda el nivel. */
-export async function verifyPayment(hash, expectPayer = null) {
+export async function verifyPayment(hash, expectPayer = null, options = {}) {
   hash = String(hash ?? '').trim();
   if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) throw new Error(t('f.badHash'));
-  const p = readProvider();
-  const [tx, receipt, price] = await Promise.all([p.getTransaction(hash), p.getTransactionReceipt(hash), bnbPrice()]);
-  if (!tx) throw new Error(t('f.notFound'));
-  const res = founderFromPayment({ tx, receipt, bnbUsd: price });
-  if (!res.tier) throw new Error(t(`f.err.${res.reason}`));
-  if (expectPayer && res.payer !== expectPayer.toLowerCase()) throw new Error(t('f.err.otherPayer'));
-  return save({ tier: res.tier, tx: hash, payer: res.payer, method: res.method, usd: res.usd, at: Date.now() });
+  try {
+    const rec = await confirmedPurchase(hash, 'founder', expectPayer, options);
+    return save({ tier: rec.item, tx: rec.tx, payer: rec.payer, method: rec.method, usd: rec.usd, at: rec.at });
+  } catch (err) {
+    const key = `f.err.${err.code}`;
+    if (t(key) !== key) throw Object.assign(new Error(t(key)), { code: err.code });
+    throw err;
+  }
 }
 
 async function ensureMainnet(browser) {
@@ -130,6 +132,10 @@ export async function buyFounder(tierId, method, onStage = () => {}) {
   busy = true;
   try {
     return await purchase(tier, method, onStage, eth);
+  } catch (err) {
+    const key = `f.err.${err.code}`;
+    if (t(key) !== key) throw Object.assign(new Error(t(key)), { code: err.code });
+    throw err;
   } finally {
     busy = false;
   }
@@ -143,17 +149,11 @@ async function purchase(tier, method, onStage, eth) {
   const signer = await browser.getSigner();
   const from = await signer.getAddress();
 
-  let req;
-  if (method === 'usdt') {
-    const amount = BigInt(Math.round(tier.usd * 1e6)) * 10n ** 12n;
-    req = { to: FOUNDER.usdt, data: erc20TransferData(FOUNDER.treasury, amount), value: 0n, gasLimit: 90000n };
-  } else {
-    const price = await bnbPrice();
-    req = { to: FOUNDER.treasury, value: bnbWeiForUsd(tier.usd, price), gasLimit: 30000n };
-  }
+  const order = await preparePurchase('founder', tier.id, method, from, eth);
+  const req = { to: order.to, data: order.data, value: BigInt(order.value), gasLimit: method === 'usdt' ? 100000n : 30000n };
   onStage('wallet');
   const hash = await signer.sendUncheckedTransaction(req);
   onStage('confirm');
   await readProvider().waitForTransaction(hash, 1, 180_000);
-  return verifyPayment(hash, from);
+  return verifyPayment(hash, from, { wait: true });
 }

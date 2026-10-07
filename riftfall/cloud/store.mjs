@@ -1,6 +1,8 @@
 // Base de datos de la Cuenta Rift (Cloudflare D1, que es SQLite). Las tablas se crean solas la
 // primera vez. Todo pasa por esta capa para que los tests usen SQLite de Node con la misma interfaz.
 
+import { ORDER_LIMIT } from '../src/shared/purchase-order.js';
+
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS players (
     id TEXT PRIMARY KEY, pid TEXT NOT NULL UNIQUE, name TEXT NOT NULL DEFAULT '',
@@ -24,6 +26,14 @@ const SCHEMA = [
     tx TEXT PRIMARY KEY, player_id TEXT NOT NULL, kind TEXT NOT NULL, item TEXT NOT NULL,
     usd REAL, method TEXT, payer TEXT, at INTEGER NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS purchases_player ON purchases (player_id)`,
+  `CREATE TABLE IF NOT EXISTS purchase_orders (
+    id TEXT PRIMARY KEY, player_id TEXT NOT NULL, payer TEXT NOT NULL,
+    json TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, tx TEXT UNIQUE)`,
+  `CREATE INDEX IF NOT EXISTS orders_player_created ON purchase_orders (player_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS orders_payer_created ON purchase_orders (payer, created_at)`,
+  `CREATE TABLE IF NOT EXISTS purchase_reviews (
+    tx TEXT PRIMARY KEY, admin_id TEXT NOT NULL, player_id TEXT NOT NULL,
+    kind TEXT NOT NULL, item TEXT NOT NULL, amount_wei TEXT NOT NULL, reason TEXT NOT NULL, at INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS docs (key TEXT PRIMARY KEY, json TEXT NOT NULL, v INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT, board TEXT NOT NULL, player_pid TEXT NOT NULL, body TEXT NOT NULL,
@@ -144,6 +154,49 @@ export function createStore(db) {
     },
 
     // ---------- Compras ----------
+    async canOrder(playerId, payer, now) {
+      const r = await one('SELECT COUNT(*) AS n FROM purchase_orders WHERE (player_id = ? OR payer = ?) AND created_at > ?', playerId, payer, now - 86_400_000);
+      return r.n < ORDER_LIMIT;
+    },
+    async addOrder(playerId, order) {
+      const r = await run(`INSERT INTO purchase_orders (id, player_id, payer, json, created_at, expires_at)
+        SELECT ?, ?, ?, ?, ?, ? WHERE
+        (SELECT COUNT(*) FROM purchase_orders WHERE (player_id = ? OR payer = ?) AND created_at > ?) < ?`,
+      order.id, playerId, order.payer, JSON.stringify(order), order.createdAt, order.expiresAt,
+      playerId, order.payer, order.createdAt - 86_400_000, ORDER_LIMIT);
+      if (!changes(r)) throw new Conflict();
+    },
+    async order(id) {
+      const row = await one('SELECT * FROM purchase_orders WHERE id = ?', id);
+      return row ? { ...JSON.parse(row.json), playerId: row.player_id, tx: row.tx } : null;
+    },
+    async completeOrder(orderId, { tx, playerId, kind, item, usd, method, payer, now }) {
+      const result = await db.batch([
+        db.prepare(`INSERT INTO purchases (tx, player_id, kind, item, usd, method, payer, at)
+          SELECT ?, ?, ?, ?, ?, ?, ?, ? FROM purchase_orders
+          WHERE id = ? AND player_id = ? AND payer = ? AND tx IS NULL`)
+          .bind(tx, playerId, kind, item, usd, method, payer, now, orderId, playerId, payer),
+        db.prepare(`UPDATE purchase_orders SET tx = ? WHERE id = ? AND tx IS NULL
+          AND EXISTS (SELECT 1 FROM purchases WHERE tx = ? AND player_id = ?)`)
+          .bind(tx, orderId, tx, playerId)
+      ]);
+      if (!changes(result[0])) throw new Conflict();
+    },
+    async reviewPurchase({ tx, adminId, playerId, kind, item, amountWei, reason, payer, orderId = null, now }) {
+      const statements = [
+        db.prepare(`INSERT INTO purchases (tx, player_id, kind, item, usd, method, payer, at)
+          SELECT ?, ?, ?, ?, NULL, ?, ?, ? WHERE ? IS NULL OR EXISTS
+          (SELECT 1 FROM purchase_orders WHERE id = ? AND payer = ? AND tx IS NULL)`)
+          .bind(tx, playerId, kind, item, 'bnb-manual', payer, now, orderId, orderId, payer),
+        db.prepare(`INSERT INTO purchase_reviews (tx, admin_id, player_id, kind, item, amount_wei, reason, at)
+          SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM purchases WHERE tx = ?)`)
+          .bind(tx, adminId, playerId, kind, item, amountWei, reason, now, tx)
+      ];
+      if (orderId) statements.push(db.prepare(`UPDATE purchase_orders SET tx = ? WHERE id = ? AND tx IS NULL
+        AND EXISTS (SELECT 1 FROM purchases WHERE tx = ?)` ).bind(tx, orderId, tx));
+      const result = await db.batch(statements);
+      if (!changes(result[0])) throw new Conflict();
+    },
     purchases: (playerId) => all('SELECT tx, kind, item, usd, method, payer, at FROM purchases WHERE player_id = ? ORDER BY at', playerId),
     purchase: (tx) => one('SELECT * FROM purchases WHERE tx = ?', tx),
     addPurchase: ({ tx, playerId, kind, item, usd, method, payer, now }) =>

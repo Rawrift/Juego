@@ -56,8 +56,8 @@
 .ra-status.off b { font-size: 13px; font-weight: 600; color: var(--ra-ink2); }
 .ra-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--ra-ink3); margin: 0 2px 6px; }
 .ra-field { display: flex; gap: 8px; margin-bottom: 14px; }
-.ra-field input { flex: 1; min-width: 0; height: 40px; padding: 0 12px; border-radius: 11px; border: 1px solid rgba(120, 200, 255, .3); background: rgba(5, 6, 15, .7); color: var(--ra-ink); font: inherit; font-size: 15px; font-weight: 700; }
-.ra-field input:focus { outline: none; border-color: var(--ra-cyan); box-shadow: 0 0 0 3px rgba(77, 232, 255, .18); }
+.ra-field input, .ra-field select { flex: 1; min-width: 0; height: 40px; padding: 0 12px; border-radius: 11px; border: 1px solid rgba(120, 200, 255, .3); background: rgba(5, 6, 15, .7); color: var(--ra-ink); font: inherit; font-size: 15px; font-weight: 700; }
+.ra-field input:focus, .ra-field select:focus { outline: none; border-color: var(--ra-cyan); box-shadow: 0 0 0 3px rgba(77, 232, 255, .18); }
 .ra-actions { display: grid; gap: 8px; }
 .ra-btn { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 46px; padding: 0 16px; border: 0; border-radius: 13px; font: inherit; font-size: 14.5px; font-weight: 800; cursor: pointer; color: var(--ra-ink); transition: filter .15s, transform .08s; }
 .ra-btn:active:not(:disabled) { transform: translateY(1px); }

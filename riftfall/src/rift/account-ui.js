@@ -3,11 +3,27 @@
 
 import './account.css';
 import {
-  account, isOnline, start, loginWallet, addPasskey, loginPasskey, setName, logout, passkeysSupported, onAccount, syncPurchases, reloadForAccount, fetchStats
+  account, isOnline, start, loginWallet, addPasskey, loginPasskey, setName, logout, passkeysSupported, onAccount, syncPurchases, reloadForAccount, fetchStats, api
 } from './account.js';
 import { injected } from '../client/injected.js';
 import { openInMetaMask, setWalletFallback } from './open-in-metamask.js';
-import { remoteWallet } from './wallet.js';
+import { remoteWallet, walletProvider } from './wallet.js';
+import { STYLE_ITEMS } from '../shared/cargo-style.js';
+
+const REVIEW = {
+  es: { title: 'Reconocer una compra anterior', sub: 'Para pagos BNB sin pedido previo. Revisá el comprobante: el pagador debe tener su wallet vinculada. Confirmás con una firma gratuita y queda registrado.',
+    hash: 'Hash de la transacción', item: 'Artículo comprado', amount: 'BNB recibido', reason: 'Motivo y comprobante de la compra', submit: 'Reconocer compra', done: 'Compra reconocida y registrada.',
+    paint: 'Pintura', trail: 'Estela', ship: 'Nave', plates: 'Matrículas', sign: 'Cartel', pack: 'Pack de estilo', fleet: 'Flota Rift',
+    error: 'No se pudo reconocer la compra. Revisá artículo, importe, pagador y confirmaciones del comprobante.' },
+  en: { title: 'Recognize a previous purchase', sub: 'For BNB payments without a prior order. Check the receipt: the payer must link their wallet. Confirm with a free signature; the decision is recorded.',
+    hash: 'Transaction hash', item: 'Purchased item', amount: 'BNB received', reason: 'Reason and purchase evidence', submit: 'Recognize purchase', done: 'Purchase recognized and recorded.',
+    paint: 'Paint', trail: 'Trail', ship: 'Ship', plates: 'License plates', sign: 'Sign', pack: 'Style pack', fleet: 'Rift fleet',
+    error: 'Could not recognize the purchase. Check the item, amount, payer and receipt confirmations.' },
+  pt: { title: 'Reconhecer uma compra anterior', sub: 'Para pagamentos BNB sem pedido prévio. Confira o comprovante: o pagador deve vincular a carteira. Confirme com uma assinatura gratuita; a decisão fica registrada.',
+    hash: 'Hash da transação', item: 'Artigo comprado', amount: 'BNB recebido', reason: 'Motivo e comprovante da compra', submit: 'Reconhecer compra', done: 'Compra reconhecida e registrada.',
+    paint: 'Pintura', trail: 'Rastro', ship: 'Nave', plates: 'Placas', sign: 'Letreiro', pack: 'Pacote de estilo', fleet: 'Frota Rift',
+    error: 'Não foi possível reconhecer a compra. Confira artigo, valor, pagador e confirmações do comprovante.' }
+};
 
 const T = {
   es: {
@@ -373,6 +389,25 @@ export function createAccountUI({ game, lang = () => 'es', toast = () => {}, onC
   }
 
   function render() {
+    if (view === 'review' && account()?.player?.admin) {
+      const L = tx();
+      const R = REVIEW[lang()] ?? REVIEW.es;
+      const itemName = (id) => {
+        for (const [prefix, name] of [['liv-', R.paint], ['trail-', R.trail], ['ship-', R.ship]]) if (id.startsWith(prefix)) return `${name} ${id.slice(prefix.length)}`;
+        return R[id] ?? id;
+      };
+      const options = ['pilot', 'gold', 'legend'].map((id) => `<option value="founder:${id}">${fill(L.founder, { tier: L.tiers[id] })}</option>`)
+        .concat(Object.keys(STYLE_ITEMS).map((id) => `<option value="style:${id}">${esc(itemName(id))}</option>`)).join('');
+      root.innerHTML = `<div class="ra-card" role="dialog" aria-modal="true" aria-label="${R.title}">
+        <header class="ra-head"><button class="ra-x" data-ra="statsBack" aria-label="${L.st.back}">${icon('back')}</button><h2>${R.title}</h2><button class="ra-x" data-ra="close" aria-label="close">${icon('x')}</button></header>
+        <p class="ra-note">${R.sub}</p>
+        <label class="ra-label" for="raReviewHash">${R.hash}</label><div class="ra-field"><input id="raReviewHash" maxlength="66" placeholder="0x…" autocomplete="off" /></div>
+        <label class="ra-label" for="raReviewItem">${R.item}</label><div class="ra-field"><select id="raReviewItem">${options}</select></div>
+        <label class="ra-label" for="raReviewAmount">${R.amount}</label><div class="ra-field"><input id="raReviewAmount" inputmode="decimal" placeholder="0.01" /></div>
+        <label class="ra-label" for="raReviewReason">${R.reason}</label><div class="ra-field"><input id="raReviewReason" minlength="10" maxlength="300" /></div>
+        <button class="ra-btn primary" data-ra="reviewSubmit" ${busy ? 'disabled' : ''}>${busy ? '…' : R.submit}</button></div>`;
+      return;
+    }
     if (view === 'stats' && account()?.player?.admin) {
       root.innerHTML = renderStats();
       return;
@@ -396,6 +431,7 @@ export function createAccountUI({ game, lang = () => 'es', toast = () => {}, onC
         <div><b>${guest ? L.guest : L.safe}${admin ? ` <span class="ra-badge">${L.ownerBadge}</span>` : ''}</b><small>${guest ? L.guestHint : L.safeHint}</small></div></div>
       ${admin && tools.length ? `<section class="ra-owner"><h3 class="ra-h3">${icon('crown')}${L.owner}</h3><p class="ra-note">${L.ownerHint}</p>
         ${btn('stats', 'chart', L.st.open, 'primary')}
+        ${btn('review', 'wallet', (REVIEW[lang()] ?? REVIEW.es).title)}
         <div class="ra-tools">${tools.map((k) => btn(`owner:${k}`, 'star', L.tools[k] ?? k)).join('')}</div></section>` : ''}
       <label class="ra-label">${L.name}</label>
       <div class="ra-field"><input id="raName" maxlength="16" autocomplete="nickname" value="${esc(a.player.name)}" /><button class="ra-btn ghost sm" data-ra="name">${L.save}</button></div>
@@ -447,6 +483,34 @@ export function createAccountUI({ game, lang = () => 'es', toast = () => {}, onC
     const el = ev.target.closest('[data-ra]');
     if (!el || el.disabled) return;
     const act = el.dataset.ra;
+    if (act === 'review' && account()?.player?.admin) {
+      view = 'review';
+      return render();
+    }
+    if (act === 'reviewSubmit' && account()?.player?.admin) {
+      const R = REVIEW[lang()] ?? REVIEW.es;
+      const amount = root.querySelector('#raReviewAmount')?.value.trim() ?? '';
+      if (!/^\d+(?:\.\d{1,18})?$/.test(amount)) return toast(R.error, 'err');
+      const [whole, decimal = ''] = amount.split('.');
+      const amountWei = (BigInt(whole) * 10n ** 18n + BigInt(decimal.padEnd(18, '0'))).toString();
+      const [kind, item] = root.querySelector('#raReviewItem').value.split(':');
+      const body = { tx: root.querySelector('#raReviewHash').value.trim(), kind, item, amountWei, reason: root.querySelector('#raReviewReason').value.trim() };
+      return run(act, async () => {
+        try {
+          const { id, message } = await api('POST', '/api/rift/purchase/review/options', body);
+          const provider = await walletProvider();
+          if (!provider) throw new Error('noWallet');
+          const [address] = await provider.request({ method: 'eth_requestAccounts' });
+          const hex = [...new TextEncoder().encode(message)].map((x) => x.toString(16).padStart(2, '0')).join('');
+          const signature = await provider.request({ method: 'personal_sign', params: [`0x${hex}`, address] });
+          await api('POST', '/api/rift/purchase/review', { id, signature });
+          toast(R.done, 'ok');
+          view = 'main';
+        } catch (err) {
+          toast(err?.code === 4001 ? tx().err.rejected : R.error, 'err');
+        }
+      });
+    }
     if (act === 'stats' || act === 'statsLoad') {
       view = 'stats';
       return loadStats();
