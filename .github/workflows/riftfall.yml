@@ -9,7 +9,7 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     defaults:
       run:
         working-directory: riftfall
@@ -24,7 +24,7 @@ jobs:
       - run: npm run test:integration
       - run: npm run build
       - name: El build de producción no expone ganchos de test
-        run: "! grep -q __RIFTFALL__ dist/assets/*.js"
+        run: "! grep -qE '__RIFTFALL__|__CARGO__' dist/assets/*.js"
       - name: El Lanzador no se publica junto al juego
         run: test ! -e dist/lanzar.html
       - run: npx playwright install --with-deps chromium

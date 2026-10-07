@@ -287,5 +287,5 @@ if (/(^|\.)duckdns\.org$|\.vercel\.app$/.test(location.hostname)) {
   document.head.appendChild(sc);
 }
 
-// Gancho para pruebas automáticas (no se usa en el juego).
-window.__CARGO__ = { state, stage, station, setView, step, fastForward, newGame, get view() { return view; }, get map() { return map; } };
+// Solo desarrollo y pruebas: el build publicado no expone el estado ni los controles de simulación.
+if (import.meta.env.DEV || import.meta.env.MODE === 'e2e') window.__CARGO__ = { state, stage, station, setView, step, fastForward, newGame, get view() { return view; }, get map() { return map; } };
