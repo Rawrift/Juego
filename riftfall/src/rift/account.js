@@ -5,6 +5,7 @@
 
 import { injected } from '../client/injected.js';
 import { remoteWallet, remoteAddress, remoteSign, disconnectRemote } from './wallet.js';
+import { GAME_KEYS } from './handoff.js';
 
 const TOKEN = 'rift.session';
 const CACHE = 'rift.account';
@@ -146,7 +147,6 @@ export async function start({ pid = read('riftfall.pid'), name = read('riftfall.
 }
 
 /** Después de entrar a otra cuenta: si la de antes tenía credenciales, este dispositivo arranca de cero. */
-const GAME_KEYS = ['riftfall.progress', 'riftfall.founder', 'riftfall.skin', 'riftfall.name', 'riftcargo.save', 'riftcargo.style'];
 function afterLogin(res) {
   if (res.token) write(TOKEN, res.token);
   if (res.switched && !res.prevGuest) for (const k of GAME_KEYS) write(k, null);

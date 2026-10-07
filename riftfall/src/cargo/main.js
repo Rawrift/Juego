@@ -25,7 +25,7 @@ await document.fonts.load('800 100px "Plus Jakarta Sans"').catch(() => {});
 if (await moveIfOldHost()) await new Promise(() => {});
 // Si se llegó desde el link de MetaMask (o de la mudanza), primero se trae la partida y los estéticos.
 await receiveMove({ applyRiftfall: (d) => applyTransfer(d), applyCargo: applyCargoTransfer });
-if (new URLSearchParams(location.search).has('rf')) await receiveCargoTransfer();
+await receiveCargoTransfer();
 
 // Cuenta Rift: antes de cargar la partida se trae la de la nube (si la de otro dispositivo avanzó
 // más, se juega esa). Sin servidor o sin conexión, se sigue con la del dispositivo.

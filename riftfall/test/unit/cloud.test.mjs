@@ -13,14 +13,22 @@ function setup({ payments = {}, env = {} } = {}) {
   const chain = { payment: async (tx) => payments[tx] ?? { kind: null, reason: 'notFound' } };
   const api = createApi({ now: () => t, chain });
   const DB = createD1();
+  const fullEnv = { DB, ...env };
   const call = async (method, path, { body, token } = {}) => {
     const headers = { 'content-type': 'application/json' };
     if (token) headers.authorization = `Bearer ${token}`;
-    const res = await api.handle(new Request(`https://rift.test${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined }), { DB, ...env });
+    const res = await api.handle(new Request(`https://rift.test${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined }), fullEnv);
     return { status: res.status, ...(await res.json()) };
   };
-  return { call, advance: (ms) => (t += ms) };
+  apiRaw = async (e, path, bearer) => {
+    const res = await api.handle(new Request(`https://rift.test${path}`, { headers: bearer ? { authorization: `Bearer ${bearer}` } : {} }), e);
+    return { status: res.status, ...(await res.json()) };
+  };
+  return { call, advance: (ms) => (t += ms), env: fullEnv };
 }
+let apiRaw = null;
+const pick = (o, keys) => Object.fromEntries(keys.map((k) => [k, o[k]]));
+const setupWithPayments = () => ({ ...setup(), payments: {} });
 
 async function walletLogin(call, wallet, token) {
   const n = await call('POST', '/api/rift/wallet/nonce', { body: { address: wallet.address } });
@@ -270,4 +278,126 @@ test('estadísticas del dueño: guarda de dónde llega cada jugador nuevo y solo
   assert.equal(st.recent.length, 4);
   assert.equal(st.days.reduce((a, d) => a + d.n, 0), 4);
   assert.ok(Array.isArray(st.purchases));
+});
+
+// ---------- Llevar la cuenta a otro navegador sin poner la sesión en el link ----------
+
+const SITE = 'https://rift.test';
+
+test('código de un solo uso: entra a la misma cuenta con una sesión nueva y no se puede volver a usar', async () => {
+  const { call } = setup();
+  const g = await call('POST', '/api/rift/guest', { body: { name: 'Papá' } });
+  const h = await call('POST', '/api/rift/handoff', { body: { purpose: 'open', origin: SITE }, token: g.token });
+  assert.equal(h.status, 200);
+  assert.match(h.code, /^[A-Za-z0-9_-]{43}$/);
+  assert.notEqual(h.code, g.token);
+  const r = await call('POST', '/api/rift/handoff/redeem', { body: { code: h.code, purpose: 'open', origin: SITE } });
+  assert.equal(r.status, 200);
+  assert.equal(r.account.player.id, g.account.player.id);
+  assert.ok(r.token && r.token !== g.token, 'sesión nueva, no la del link');
+  assert.equal((await call('GET', '/api/rift/me', { token: r.token })).status, 200);
+  assert.equal((await call('GET', '/api/rift/me', { token: g.token })).status, 200, 'el navegador de origen sigue adentro');
+  const again = await call('POST', '/api/rift/handoff/redeem', { body: { code: h.code, purpose: 'open', origin: SITE } });
+  assert.equal(again.status, 400);
+  assert.equal(again.error, 'expired');
+});
+
+test('código de un solo uso: sin sesión no se pide, vence a los 5 minutos y pedir otro anula el anterior', async () => {
+  const { call, advance } = setup();
+  assert.equal((await call('POST', '/api/rift/handoff', { body: { purpose: 'open' } })).status, 401);
+  const g = await call('POST', '/api/rift/guest', { body: {} });
+  assert.equal((await call('POST', '/api/rift/handoff', { body: { purpose: 'otra-cosa' }, token: g.token })).status, 400);
+  const old = await call('POST', '/api/rift/handoff', { body: { purpose: 'open', origin: SITE }, token: g.token });
+  advance(5 * 60_000 + 1);
+  assert.equal((await call('POST', '/api/rift/handoff/redeem', { body: { code: old.code, purpose: 'open', origin: SITE } })).status, 400, 'vencido');
+  const a = await call('POST', '/api/rift/handoff', { body: { purpose: 'open', origin: SITE }, token: g.token });
+  const b = await call('POST', '/api/rift/handoff', { body: { purpose: 'open', origin: SITE }, token: g.token });
+  assert.equal((await call('POST', '/api/rift/handoff/redeem', { body: { code: a.code, purpose: 'open', origin: SITE } })).status, 400, 'anulado por el segundo');
+  assert.equal((await call('POST', '/api/rift/handoff/redeem', { body: { code: b.code, purpose: 'open', origin: SITE } })).status, 200);
+});
+
+test('código de un solo uso: solo vale para su uso y su sitio, y un intento equivocado lo quema', async () => {
+  const { call } = setup({ env: { ALLOWED_ORIGINS: 'https://otro.test' } });
+  const g = await call('POST', '/api/rift/guest', { body: {} });
+  const fresh = async (purpose = 'open', origin = SITE) => (await call('POST', '/api/rift/handoff', { body: { purpose, origin }, token: g.token })).code;
+  // Otro uso: no sirve (y el código sigue vivo para el uso correcto).
+  const c1 = await fresh('open');
+  assert.equal((await call('POST', '/api/rift/handoff/redeem', { body: { code: c1, purpose: 'move', origin: SITE } })).status, 400);
+  assert.equal((await call('POST', '/api/rift/handoff/redeem', { body: { code: c1, purpose: 'open', origin: SITE } })).status, 200);
+  // Otro sitio de los permitidos: no sirve, y queda quemado.
+  const c2 = await fresh('open', SITE);
+  assert.equal((await call('POST', '/api/rift/handoff/redeem', { body: { code: c2, purpose: 'open', origin: 'https://otro.test' } })).status, 400);
+  assert.equal((await call('POST', '/api/rift/handoff/redeem', { body: { code: c2, purpose: 'open', origin: SITE } })).status, 400);
+  // Mudanza: pedido para la dirección nueva, solo se canjea diciendo esa dirección.
+  const c3 = await fresh('move', 'https://otro.test');
+  assert.equal((await call('POST', '/api/rift/handoff/redeem', { body: { code: c3, purpose: 'move', origin: 'https://otro.test' } })).status, 200);
+  // Un sitio que no está en la lista no puede ser destino: el código queda para el sitio propio.
+  const c4 = await fresh('open', 'https://malo.example');
+  assert.equal((await call('POST', '/api/rift/handoff/redeem', { body: { code: c4, purpose: 'open', origin: 'https://malo.example' } })).status, 200, 'se trata como el sitio propio');
+  // Formatos raros.
+  for (const code of [undefined, 5, '', 'x', 'a'.repeat(44), { $ne: 1 }]) {
+    assert.equal((await call('POST', '/api/rift/handoff/redeem', { body: { code, purpose: 'open', origin: SITE } })).status, 400);
+  }
+});
+
+test('código de un solo uso: dos canjes a la vez, entra uno solo', async () => {
+  const { call } = setup();
+  const g = await call('POST', '/api/rift/guest', { body: {} });
+  const h = await call('POST', '/api/rift/handoff', { body: { purpose: 'open', origin: SITE }, token: g.token });
+  const redeem = () => call('POST', '/api/rift/handoff/redeem', { body: { code: h.code, purpose: 'open', origin: SITE } });
+  const res = await Promise.all([redeem(), redeem(), redeem()]);
+  assert.deepEqual(res.map((r) => r.status).sort(), [200, 400, 400]);
+});
+
+test('código de un solo uso: el navegador que lo abre conserva lo suyo si era invitado y cambia de cuenta', async () => {
+  const { call, payments } = setupWithPayments();
+  const w = Wallet.createRandom();
+  const owner = await call('POST', '/api/rift/guest', { body: {} });
+  await walletLogin(call, w, owner.token);
+  const mm = await call('POST', '/api/rift/guest', { body: {} });
+  const h = await call('POST', '/api/rift/handoff', { body: { purpose: 'open', origin: SITE }, token: owner.token });
+  const r = await call('POST', '/api/rift/handoff/redeem', { body: { code: h.code, purpose: 'open', origin: SITE }, token: mm.token });
+  assert.equal(r.status, 200);
+  assert.equal(r.switched, true);
+  assert.equal(r.prevGuest, true);
+  assert.equal(r.account.player.id, owner.account.player.id);
+  assert.deepEqual(r.account.wallets, [w.address.toLowerCase()]);
+  assert.equal((await call('GET', '/api/rift/me', { token: mm.token })).status, 401, 'la sesión de invitado de ese navegador se cierra');
+  assert.ok(payments);
+});
+
+test('revocación: con fecha de corte, las cuentas con wallet vuelven a entrar y los invitados siguen', async () => {
+  const cutoffAt = Date.UTC(2026, 9, 6, 16);
+  const DBenv = {};
+  const { call, advance, env } = setup({ env: DBenv });
+  const w = Wallet.createRandom();
+  const withWallet = await call('POST', '/api/rift/guest', { body: {} });
+  await walletLogin(call, w, withWallet.token);
+  await call('PUT', '/api/rift/save', { body: { game: 'riftfall', data: { runs: 7 }, rev: 0 }, token: withWallet.token });
+  const guest = await call('POST', '/api/rift/guest', { body: {} });
+  // Antes de aplicar: se mide a cuántos afecta.
+  env.AUDIT_TOKEN = 'clave';
+  const count = async () => {
+    const res = await apiRaw(env, `/api/rift/audit/sessions?before=${cutoffAt}`, 'clave');
+    return res;
+  };
+  advance(2 * 3_600_000);
+  assert.deepEqual(pick(await count(), ['total', 'revoked', 'kept']), { total: 2, revoked: 1, kept: 1 });
+  assert.equal((await call('GET', '/api/rift/me', { token: withWallet.token })).status, 200, 'sin la variable no se revoca nada');
+  // Se aplica.
+  env.SESSIONS_NOT_BEFORE = new Date(cutoffAt).toISOString();
+  assert.equal((await call('GET', '/api/rift/me', { token: withWallet.token })).status, 401);
+  assert.equal((await call('GET', '/api/rift/me', { token: guest.token })).status, 200, 'el invitado no pierde su cuenta');
+  // Vuelve a entrar con la wallet: misma cuenta, mismo progreso, sesión nueva que ya no se revoca.
+  const back = await walletLogin(call, w);
+  assert.equal(back.status, 200);
+  assert.equal(back.account.player.id, withWallet.account.player.id);
+  assert.equal((await call('GET', '/api/rift/save?game=riftfall', { token: back.token })).data.runs, 7);
+  assert.equal((await call('GET', '/api/rift/me', { token: back.token })).status, 200);
+  assert.deepEqual(pick(await count(), ['total', 'revoked', 'kept']), { total: 1, revoked: 0, kept: 1 });
+  // Un valor mal escrito no revoca nada.
+  const { sessionCutoff } = await import('../../cloud/api.mjs');
+  assert.equal(sessionCutoff({ SESSIONS_NOT_BEFORE: 'pronto' }), 0);
+  assert.equal(sessionCutoff({}), 0);
+  assert.equal(sessionCutoff({ SESSIONS_NOT_BEFORE: String(cutoffAt) }), cutoffAt);
 });
