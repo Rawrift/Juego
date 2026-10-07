@@ -536,9 +536,9 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
       if (reason.length < 10 || reason.length > 300) throw new HttpError(400, 'badOrder');
       const id = randomHex(16);
       const purchase = { tx, adminId: s.player.id, playerId, kind: body.kind, item: body.item,
-        amountWei: pay.amountWei, reason, payer: pay.payer, orderId: pay.orderId, now: ctx.t };
+        amountWei: pay.amountWei, reason, payer: pay.payer, orderId: pay.orderId, method: `${pay.method ?? 'bnb'}-manual`, now: ctx.t };
       const message = ['Rift: reconocer una compra anterior', `Sitio: ${ctx.url.host}`, `Transacción: ${tx}`,
-        `Artículo: ${body.kind}/${body.item}`, `Pagador: ${pay.payer}`, `BNB recibido (wei): ${pay.amountWei}`,
+        `Artículo: ${body.kind}/${body.item}`, `Pagador: ${pay.payer}`, `${(pay.method ?? 'bnb').toUpperCase()} recibido (unidades mínimas): ${pay.amountWei}`,
         `Motivo: ${reason}`, `Código: ${id}`, '', 'Solo registra un derecho en el juego. No mueve fondos.'].join('\n');
       await ctx.store.addChallenge({ id, kind: 'purchase-review', playerId: s.player.id,
         value: JSON.stringify({ purchase, message }), expires: ctx.t + 2 * 60_000 });

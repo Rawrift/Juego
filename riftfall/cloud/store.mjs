@@ -182,12 +182,12 @@ export function createStore(db) {
       ]);
       if (!changes(result[0])) throw new Conflict();
     },
-    async reviewPurchase({ tx, adminId, playerId, kind, item, amountWei, reason, payer, orderId = null, now }) {
+    async reviewPurchase({ tx, adminId, playerId, kind, item, amountWei, reason, payer, method = 'bnb-manual', orderId = null, now }) {
       const statements = [
         db.prepare(`INSERT INTO purchases (tx, player_id, kind, item, usd, method, payer, at)
           SELECT ?, ?, ?, ?, NULL, ?, ?, ? WHERE ? IS NULL OR EXISTS
           (SELECT 1 FROM purchase_orders WHERE id = ? AND payer = ? AND tx IS NULL)`)
-          .bind(tx, playerId, kind, item, 'bnb-manual', payer, now, orderId, orderId, payer),
+          .bind(tx, playerId, kind, item, method, payer, now, orderId, orderId, payer),
         db.prepare(`INSERT INTO purchase_reviews (tx, admin_id, player_id, kind, item, amount_wei, reason, at)
           SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM purchases WHERE tx = ?)`)
           .bind(tx, adminId, playerId, kind, item, amountWei, reason, now, tx)

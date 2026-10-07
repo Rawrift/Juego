@@ -64,10 +64,10 @@ export function createChain({ rpcUrls = FOUNDER.rpcUrls, fetchImpl = fetch } = {
         const order = await findOrder(id);
         if (!order || (order.tx && order.tx !== hash)) return { kind: null, reason: 'badOrder' };
         const result = paymentForOrder({ order, tx, receipt, blockTime: Number(BigInt(block.timestamp)) * 1000 });
-        if (review && order.method === 'bnb' && result.reason === 'orderExpired') {
+        if (review && result.reason === 'orderExpired') {
           const checked = paymentForOrder({ order, tx, receipt, blockTime: Number(BigInt(block.timestamp)) * 1000, allowExpired: true });
           if (checked.kind) return { kind: 'manual', payer: order.payer, amountWei: order.wei,
-            tagItem: order.kind === 'style' ? order.item : null, lockedKind: order.kind, lockedItem: order.item, orderId: id };
+            tagItem: order.kind === 'style' ? order.item : null, lockedKind: order.kind, lockedItem: order.item, method: order.method, orderId: id };
         }
         return result.kind ? { ...result, orderId: id } : result;
       }
@@ -79,7 +79,7 @@ export function createChain({ rpcUrls = FOUNDER.rpcUrls, fetchImpl = fetch } = {
           tagItem = styleFromPayment({ tx, receipt, bnbUsd: Number.MAX_SAFE_INTEGER }).item;
           if (!tagItem) return { kind: null, reason: 'otherItem' };
         }
-        return { kind: 'manual', payer: String(tx.from).toLowerCase(), amountWei: BigInt(tx.value).toString(), tagItem };
+        return { kind: 'manual', payer: String(tx.from).toLowerCase(), amountWei: BigInt(tx.value).toString(), tagItem, method: 'bnb' };
       }
       // Los pagos antiguos no se recotizan con 'latest'. USDT es independiente del precio del BNB.
       let bnbUsd;

@@ -11,16 +11,16 @@ import { remoteWallet, walletProvider } from './wallet.js';
 import { STYLE_ITEMS } from '../shared/cargo-style.js';
 
 const REVIEW = {
-  es: { title: 'Reconocer una compra anterior', sub: 'Para pagos BNB sin pedido previo. Revisá el comprobante: el pagador debe tener su wallet vinculada. Confirmás con una firma gratuita y queda registrado.',
-    hash: 'Hash de la transacción', item: 'Artículo comprado', amount: 'BNB recibido', reason: 'Motivo y comprobante de la compra', submit: 'Reconocer compra', done: 'Compra reconocida y registrada.',
+  es: { title: 'Reconocer una compra anterior', sub: 'Para pagos BNB sin pedido previo o pedidos BNB/USDT confirmados tarde. Revisá el comprobante: el pagador debe tener su wallet vinculada. Confirmás con una firma gratuita y queda registrado.',
+    hash: 'Hash de la transacción', item: 'Artículo comprado', amount: 'BNB o USDT recibidos', reason: 'Motivo y comprobante de la compra', submit: 'Reconocer compra', done: 'Compra reconocida y registrada.',
     paint: 'Pintura', trail: 'Estela', ship: 'Nave', plates: 'Matrículas', sign: 'Cartel', pack: 'Pack de estilo', fleet: 'Flota Rift',
     error: 'No se pudo reconocer la compra. Revisá artículo, importe, pagador y confirmaciones del comprobante.' },
-  en: { title: 'Recognize a previous purchase', sub: 'For BNB payments without a prior order. Check the receipt: the payer must link their wallet. Confirm with a free signature; the decision is recorded.',
-    hash: 'Transaction hash', item: 'Purchased item', amount: 'BNB received', reason: 'Reason and purchase evidence', submit: 'Recognize purchase', done: 'Purchase recognized and recorded.',
+  en: { title: 'Recognize a previous purchase', sub: 'For BNB payments without a prior order or late BNB/USDT orders. Check the receipt: the payer must link their wallet. Confirm with a free signature; the decision is recorded.',
+    hash: 'Transaction hash', item: 'Purchased item', amount: 'BNB or USDT received', reason: 'Reason and purchase evidence', submit: 'Recognize purchase', done: 'Purchase recognized and recorded.',
     paint: 'Paint', trail: 'Trail', ship: 'Ship', plates: 'License plates', sign: 'Sign', pack: 'Style pack', fleet: 'Rift fleet',
     error: 'Could not recognize the purchase. Check the item, amount, payer and receipt confirmations.' },
-  pt: { title: 'Reconhecer uma compra anterior', sub: 'Para pagamentos BNB sem pedido prévio. Confira o comprovante: o pagador deve vincular a carteira. Confirme com uma assinatura gratuita; a decisão fica registrada.',
-    hash: 'Hash da transação', item: 'Artigo comprado', amount: 'BNB recebido', reason: 'Motivo e comprovante da compra', submit: 'Reconhecer compra', done: 'Compra reconhecida e registrada.',
+  pt: { title: 'Reconhecer uma compra anterior', sub: 'Para pagamentos BNB sem pedido prévio ou pedidos BNB/USDT confirmados tarde. Confira o comprovante: o pagador deve vincular a carteira. Confirme com uma assinatura gratuita; a decisão fica registrada.',
+    hash: 'Hash da transação', item: 'Artigo comprado', amount: 'BNB ou USDT recebidos', reason: 'Motivo e comprovante da compra', submit: 'Reconhecer compra', done: 'Compra reconhecida e registrada.',
     paint: 'Pintura', trail: 'Rastro', ship: 'Nave', plates: 'Placas', sign: 'Letreiro', pack: 'Pacote de estilo', fleet: 'Frota Rift',
     error: 'Não foi possível reconhecer a compra. Confira artigo, valor, pagador e confirmações do comprovante.' }
 };

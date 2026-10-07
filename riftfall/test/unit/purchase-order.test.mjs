@@ -77,11 +77,13 @@ test('BNB: la compra y el artículo no cambian con el precio ni dependen de un R
   assert.equal(state.calls.filter((x) => x.method === 'eth_call').length, 1, 'solo se cotiza al crear el pedido');
 });
 
-test('BNB tardío: revisión preserva el artículo del pedido y consume el pedido una sola vez', async (t) => {
+for (const method of ['bnb', 'usdt']) test(`${method} tardío: revisión preserva el artículo del pedido y consume el pedido una sola vez`, async (t) => {
   const { call, state, me, link, details, DB, env } = await fixture(t);
   await link();
-  const { order } = await call('POST', '/api/rift/purchase/order', me.token, details);
-  state.transactions.set(HASH, proof(order));
+  const { order } = await call('POST', '/api/rift/purchase/order', me.token, { ...details, method });
+  const received = proof(order);
+  if (method === 'usdt') received.receipt.logs = [{ address: FOUNDER.usdt, topics: [TRANSFER_TOPIC, pad(order.payer), pad(FOUNDER.treasury)], data: `0x${BigInt(order.wei).toString(16)}` }];
+  state.transactions.set(HASH, received);
   state.timestamp = order.expiresAt + 1000;
   assert.equal((await call('POST', '/api/rift/purchase', me.token, { tx: HASH })).error, 'orderExpired');
   const boss = Wallet.createRandom();
@@ -96,7 +98,7 @@ test('BNB tardío: revisión preserva el artículo del pedido y consume el pedid
   assert.equal((await call('POST', '/api/rift/purchase/review', owner.token, { id: options.id, signature: await boss.signMessage(options.message) })).status, 200);
   assert.equal((await DB.prepare('SELECT tx FROM purchase_orders WHERE id = ?').bind(order.id).first()).tx, HASH);
   const another = `0x${'98'.repeat(32)}`;
-  const payment = proof(order);
+  const payment = structuredClone(received);
   payment.tx.hash = payment.receipt.transactionHash = another;
   state.transactions.set(another, payment);
   assert.equal((await call('POST', '/api/rift/purchase/review/options', owner.token, { ...body, tx: another })).error, 'badOrder');
