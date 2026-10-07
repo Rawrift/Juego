@@ -12,7 +12,13 @@ y qué sigue. Lo de fondo de cada tema está en los demás archivos de `docs/`.
 | Codex | Implementación y pruebas en una rama propia |
 
 - Si Claude no está disponible, Codex toma la dirección hasta que vuelva.
-- Publicar en el juego en vivo se avisa antes a Rodrigo cuando el cambio lo afecta (por ejemplo, cerrar sesiones).
+- Rodrigo pidió (7/10, 19:11) no participar de las decisiones salvo extrema necesidad. Claude y Codex deciden
+  entre ellos y le dejan un resumen corto de lo hecho.
+- Se lo consulta solo si: hay que gastar plata; hay que usar su wallet, sus claves o crear una cuenta a su
+  nombre; el cambio no se puede deshacer (borrar datos de jugadores, lanzar el token); hay riesgo legal; o
+  Claude y Codex no se ponen de acuerdo.
+- Publicar en el juego en vivo ya no espera su aprobación: alcanza con que el otro haya revisado el cambio y
+  las pruebas pasen. Si el cambio lo afecta (por ejemplo, cerrar sesiones), se le avisa.
 - Las claves nunca van al chat ni al repositorio.
 
 ## Acuerdos de producto que no se tocan
