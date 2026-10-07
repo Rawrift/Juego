@@ -5,8 +5,8 @@
   "outputDirectory": ".vercel-proxy",
   "rewrites": [
     {
-      "source": "/:path*",
-      "destination": "https://riftgames.pages.dev/:path*"
+      "source": "/(.*)",
+      "destination": "https://riftgames.pages.dev/$1"
     }
   ]
 }
