@@ -319,7 +319,7 @@ test('dueño: con la wallet del dueño tiene todo desbloqueado y el Panel del du
     await expect(page.locator('#raReviewHash')).toBeVisible();
     await expect(page.locator('#raReviewItem')).toBeVisible();
     await expect(page.locator('#raReviewAmount')).toBeVisible();
-    await page.screenshot({ path: 'test-results/purchase-review-owner.png' });
+    await page.screenshot({ path: 'test-results/purchase-review-owner.png', animations: 'disabled' });
     await page.click('[data-ra="statsBack"]');
     await page.click('[data-ra="close"]');
     await page.locator('.profile').click();

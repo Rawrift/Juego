@@ -8,12 +8,39 @@ class Store {
   removeItem(k) { this.m.delete(k); }
   getItem(k) { return this.m.has(k) ? this.m.get(k) : null; }
   setItem(k, v) { this.m.set(k, String(v)); }
+  get length() { return this.m.size; }
+  key(i) { return [...this.m.keys()][i] ?? null; }
 }
 
 const chrome = {
   cores: 320, lifetimeCores: 2400, talents: { hull: 3, power: 2 }, riftMax: 2, parts: { 'hull:spark': 2 }, loadout: { hull: 'hull:spark' },
   runs: 14, bestScore: 5210, bestTime: 410, kills: 1900, bosses: 6, victories: 1, streak: 3, lastDay: '2026-10-06', updatedAt: 1000
 };
+
+test('mudanza: no reenvía tokens actuales, tokens anteriores ni parámetros de enlaces antiguos', async () => {
+  const { moveIfOldHost } = await import('../../src/rift/move.js');
+  const { unpackData } = await import('../../src/shared/pack.js');
+  const previous = { location: globalThis.location, storage: globalThis.localStorage, fetch: globalThis.fetch };
+  let destination;
+  globalThis.localStorage = new Store({ 'rift.session': 'S'.repeat(43), 'riftfall.token': 'legacy-secret', 'riftfall.pid': 'ab'.repeat(16), 'rift.account': '{}', 'riftfall.progress': JSON.stringify(chrome) });
+  globalThis.location = { hostname: 'riftgames.pages.dev', origin: 'https://riftgames.pages.dev', pathname: '/', search: '?ref=tiktok&rf=old-secret&mv=old-secret&rc=old&mc=old', replace: (url) => { destination = new URL(url); } };
+  globalThis.fetch = async () => Response.json({ ok: true, code: 'c'.repeat(43) });
+  try {
+    assert.equal(await moveIfOldHost(), true);
+    assert.equal(destination.searchParams.get('ref'), 'tiktok');
+    assert.equal(destination.searchParams.has('rf'), false);
+    assert.equal(destination.searchParams.has('rc'), false);
+    assert.equal(destination.searchParams.get('mc'), 'c'.repeat(43));
+    const data = await unpackData(destination.searchParams.get('mv'));
+    assert.deepEqual(Object.keys(data), ['riftfall.progress']);
+    assert.equal(JSON.parse(data['riftfall.progress']).bestScore, chrome.bestScore);
+    assert.equal(destination.href.includes('old-secret'), false);
+  } finally {
+    globalThis.fetch = previous.fetch;
+    if (previous.location === undefined) delete globalThis.location; else globalThis.location = previous.location;
+    if (previous.storage === undefined) delete globalThis.localStorage; else globalThis.localStorage = previous.storage;
+  }
+});
 
 test('al abrir el juego en MetaMask el progreso llega completo (nada se pierde)', async () => {
   const src = new Store({ 'riftfall.progress': JSON.stringify(chrome), 'riftfall.pid': 'ab'.repeat(16), 'riftfall.name': 'Rodri' });

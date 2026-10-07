@@ -31,6 +31,8 @@ export async function moveIfOldHost() {
   // El código se pide para la dirección nueva: en cualquier otro sitio no sirve.
   const [pack, code] = await Promise.all([packData(storageDump()).catch(() => ''), requestHandoff('move', { origin: CANONICAL })]);
   const url = new URL(location.pathname + location.search, CANONICAL);
+  // Los parámetros recibidos ya se aplicaron localmente: no reenviar paquetes viejos con secretos.
+  for (const key of [PARAM, 'rf', ...Object.values(HANDOFF_PARAM)]) url.searchParams.delete(key);
   if (pack) url.searchParams.set(PARAM, pack);
   if (code) url.searchParams.set(HANDOFF_PARAM.move, code);
   location.replace(url.toString());

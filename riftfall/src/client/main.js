@@ -1453,13 +1453,14 @@ async function boot() {
     if (!app.progress.runs) startRun('normal');
     return;
   }
-  // Dirección vieja del juego: se va a la nueva llevando todo lo guardado en este navegador.
+  // Progreso que llega en el link (por ejemplo, al abrir el juego dentro de MetaMask o al mudarse).
+  const moved = await receiveMove({ applyRiftfall: (d) => applyTransfer(d), applyCargo: applyCargoTransfer });
+  const received = await receiveTransfer();
+  // Aplicar primero el progreso entrante permite volver a empaquetarlo sin secretos al mudarse.
   if (await moveIfOldHost()) return;
   setupPwa();
   setupAnalytics();
-  // Progreso que llega en el link (por ejemplo, al abrir el juego dentro de MetaMask o al mudarse).
-  const moved = await receiveMove({ applyRiftfall: (d) => applyTransfer(d), applyCargo: applyCargoTransfer });
-  if ((await receiveTransfer()) || moved) {
+  if (received || moved) {
     app.progress = loadProgress();
     app.ship = loadShipChoice();
     readRiftChoice();

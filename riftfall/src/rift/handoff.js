@@ -16,7 +16,7 @@ const CODE = /^[A-Za-z0-9_-]{43}$/;
 export const GAME_KEYS = ['riftfall.progress', 'riftfall.founder', 'riftfall.skin', 'riftfall.name', 'riftcargo.save', 'riftcargo.style'];
 
 /** Claves que nunca viajan en un link: la sesión, la copia de la cuenta y el id secreto del ranking. */
-export const PRIVATE_KEYS = [TOKEN, CACHE, 'riftfall.pid'];
+export const PRIVATE_KEYS = [TOKEN, CACHE, 'riftfall.pid', 'riftfall.token'];
 
 const store = () => {
   try {
