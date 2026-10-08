@@ -644,7 +644,8 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
     },
 
     // ---------- Pago en pesos: pedido del jugador y reconocimiento firmado del dueño ----------
-    'GET /api/rift/fiat': async (ctx) => json({ ok: true, ...fiatConfig(ctx.env) }, 200, { 'cache-control': 'public, max-age=60' }),
+    // Sin caché: si el dueño apaga el cobro o cambia el destino, el botón tiene que reflejarlo enseguida.
+    'GET /api/rift/fiat': async (ctx) => json({ ok: true, ...fiatConfig(ctx.env) }),
 
     'POST /api/rift/fiat/order': async (ctx) => {
       const s = await needSession(ctx);

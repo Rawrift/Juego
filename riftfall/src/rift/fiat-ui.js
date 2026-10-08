@@ -38,6 +38,9 @@ const T = {
     cancelNo: 'Volver',
     cancelled: 'Pedido cancelado.',
     close: 'Cerrar',
+    history: 'Mis pagos en pesos',
+    historySub: 'Tus pedidos y en qué están. Tocá uno pendiente para ver su código.',
+    status: { pending: 'En revisión', expired: 'Vencido', paid: 'Acreditado', cancelled: 'Cancelado' },
     wait: 'Preparando…',
     legal: 'Es una compra de un objeto del juego. No es una inversión ni da ganancias.',
     err: {
@@ -100,6 +103,9 @@ const T = {
     cancelNo: 'Back',
     cancelled: 'Order cancelled.',
     close: 'Close',
+    history: 'My peso payments',
+    historySub: 'Your orders and their status. Tap a pending one to see its code.',
+    status: { pending: 'Under review', expired: 'Expired', paid: 'Credited', cancelled: 'Cancelled' },
     wait: 'Getting ready…',
     legal: 'This is a purchase of an in-game item. It is not an investment and pays no returns.',
     err: {
@@ -162,6 +168,9 @@ const T = {
     cancelNo: 'Voltar',
     cancelled: 'Pedido cancelado.',
     close: 'Fechar',
+    history: 'Meus pagamentos em pesos',
+    historySub: 'Seus pedidos e como estão. Toque em um pendente para ver o código.',
+    status: { pending: 'Em revisão', expired: 'Vencido', paid: 'Creditado', cancelled: 'Cancelado' },
     wait: 'Preparando…',
     legal: 'É a compra de um item do jogo. Não é um investimento nem dá ganhos.',
     err: {
@@ -207,6 +216,36 @@ const X = '<svg class="ra-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M1
 let config = { enabled: false, prices: {} };
 let host = { lang: () => 'es', toast: () => {}, openAccount: () => {}, onPaid: () => {} };
 let root = null;
+/** Mis pedidos y cuántos tiene pendientes el dueño: se traen al abrir la cuenta, con o sin configuración. */
+let mine = [];
+let ownerPending = 0;
+
+/**
+ * Trae los pedidos de esta cuenta (y, si es del dueño, los pendientes). Sirve aunque el cobro en pesos
+ * esté apagado: un pedido ya hecho se tiene que poder ver y reconocer igual. Devuelve true si cambió algo.
+ */
+export async function refreshFiat() {
+  if (!sessionToken()) return false;
+  const before = `${mine.length}:${ownerPending}`;
+  try {
+    mine = (await api('GET', '/api/rift/fiat/orders')).orders ?? [];
+  } catch {
+    /* sin servidor: queda lo que había */
+  }
+  if (account()?.player?.admin) {
+    try {
+      ownerPending = ((await api('GET', '/api/rift/fiat/pending')).orders ?? []).length;
+    } catch {
+      /* igual */
+    }
+  } else ownerPending = 0;
+  return before !== `${mine.length}:${ownerPending}`;
+}
+/** ¿Esta cuenta tiene pedidos en pesos para mostrar en su historial? */
+export const fiatHasOrders = () => mine.length > 0;
+/** La entrada del dueño aparece si el cobro está prendido o si quedaron pedidos por reconocer. */
+export const fiatOwnerOn = () => !!config.enabled || ownerPending > 0;
+export const fiatHistoryLabel = (lang = host.lang()) => (T[lang] ?? T.es).history;
 
 /** Cada juego dice cómo avisar, en qué idioma y cómo abrir la ventana de la cuenta. */
 export function configureFiat(h) {
@@ -400,6 +439,31 @@ function watch(box, order, sub, L) {
   box.fiatTimer = setInterval(async () => {
     if (!box.isConnected || (await check(box, order, sub, L))) clearInterval(box.fiatTimer);
   }, POLL_MS);
+}
+
+/**
+ * Historial de pedidos en pesos de esta cuenta. Funciona aunque el cobro esté apagado o haya cambiado:
+ * cada pedido se muestra con su importe y su destino propios. No arma pedidos nuevos.
+ */
+export async function openFiatHistory({ itemName = (kind, item) => `${kind}/${item}` } = {}) {
+  const L = T[host.lang()] ?? T.es;
+  const box = mount(`${head(L.history, L.historySub, L)}<p class="ra-note">${esc(L.wait)}</p>`, L.history);
+  await refreshFiat();
+  if (!box.isConnected) return;
+  const date = (ms) => new Date(ms).toLocaleDateString(host.lang(), { day: 'numeric', month: 'short' });
+  const state = (o) => L.status[o.status === 'pending' && o.expired ? 'expired' : o.status] ?? o.status;
+  const row = (o) => {
+    const text = `<b>${esc(itemName(o.kind, o.item))}</b><span>${esc(fmtArs(o.ars))} · ${esc(date(o.createdAt))} · ${esc(state(o))}</span>`;
+    // Solo los pendientes se abren (para ver el código o cancelar); los demás son historia.
+    return o.status === 'pending' ? `<li><button type="button" data-fx="order" data-id="${esc(o.id)}">${text}</button></li>` : `<li><div class="ra-fiat-row">${text}</div></li>`;
+  };
+  box.querySelector('.ra-card').innerHTML = `${head(L.history, L.historySub, L)}
+    ${mine.length ? `<ul class="ra-fiat-list">${mine.map(row).join('')}</ul>` : `<p class="ra-note">${esc(L.owner.none)}</p>`}
+    <button class="ra-btn ghost" data-fx="close">${esc(L.close)}</button>`;
+  box.querySelectorAll('[data-fx="order"]').forEach((b) => b.addEventListener('click', () => {
+    const order = mine.find((o) => o.id === b.dataset.id);
+    if (order) renderOrder(box, order, fill(L.sub, { name: itemName(order.kind, order.item) }), L);
+  }));
 }
 
 // ---------- Dueño ----------

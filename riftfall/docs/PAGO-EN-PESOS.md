@@ -36,6 +36,14 @@ los Pases Oro y Leyenda (traen planos de naves, y el Leyenda promete una nave NF
 7. Cancelar pide confirmación y avisa que es solo para quien no envió plata: cancelar no devuelve ni acredita
    ningún pago.
 
+## Pedidos ya hechos cuando el cobro se apaga o cambia
+
+- El jugador los reabre desde **Cuenta Rift → Mis pagos en pesos** (aparece solo si tiene pedidos). Ve su
+  código, su importe y el destino que tenía ese pedido. Desde ahí no se arman pedidos nuevos.
+- Un pedido vencido se ve sin destino ni instrucciones, con el aviso de no volver a pagar.
+- El dueño conserva la entrada **Pagos en pesos** de su panel mientras queden pedidos por reconocer.
+- El botón de compra desaparece apenas el dueño apaga el cobro (la configuración no se guarda en caché).
+
 ## Qué hace el dueño
 
 Cuenta Rift → Panel del dueño → **Pagos en pesos**. Busca el código que vino en el mensaje del pago, carga el
