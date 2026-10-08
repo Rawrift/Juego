@@ -15,6 +15,7 @@ import { applyTransfer } from '../client/transfer.js';
 import { start as startAccount, createSync, syncPurchases, isReloading } from '../rift/account.js';
 import { createAccountUI } from '../rift/account-ui.js';
 import { configureFiat, loadFiat } from '../rift/fiat-ui.js';
+import { configureMp, loadMp } from '../rift/mercadopago-ui.js';
 import { setStationSign } from './render/stationScene.js';
 import { step, acceptOffer, buyCargo, buyUpgrade, buyShip, evolveShip, setAuto, fastForward, newGame, ownerBoost } from './sim/sim.js';
 import { OFFLINE_MAX } from './sim/data.js';
@@ -65,13 +66,20 @@ const cloud = createSync('cargo', {
   delay: 60_000
 });
 const withTimeout = (p, ms) => Promise.race([p, new Promise((r) => setTimeout(() => r(null), ms))]);
-await withTimeout(startAccount().then((a) => (a ? cloud.pull().then(() => syncPurchases()) : null)), 3500);
+let refreshAfterSync = () => {};
+const accountReady = startAccount().then(async (a) => {
+  if (!a) return;
+  await cloud.pull();
+  const changed = await syncPurchases();
+  if (changed && !reloading) refreshAfterSync();
+});
+await withTimeout(accountReady, 3500);
 
 const { state, away } = load();
 // Desde acá, si la nube trae una partida que avanzó más, hay que recargar para jugarla.
 booted = true;
 // Estéticos: solo se muestra lo que el jugador tiene (compras y Pase Fundador).
-{
+function reconcileLooks() {
   const mine = owned();
   for (const s of state.ships) {
     if (s.baseName && !mine.has('plates')) s.name = s.baseName;
@@ -80,6 +88,7 @@ booted = true;
     if (!mine.has(`trail-${s.look.trail}`)) s.look.trail = 'cian';
   }
 }
+reconcileLooks();
 setStationSign(signText());
 const stage = createStage(document.getElementById('stage'));
 const station = createStation(stage, state);
@@ -182,6 +191,12 @@ const ui = createUI({
   }
 });
 
+// Si la cuenta tardó más que el límite de arranque, aplicar la compra al terminar igualmente.
+refreshAfterSync = () => {
+  reconcileLooks(); setStationSign(signText());
+  ui.refreshPurchases(false);
+};
+
 // Elegir naves tocándolas en la escena.
 stage.onClick((ndc) => {
   const id = view === 'map' ? map.pick(ndc) : station.pickShip(ndc);
@@ -218,6 +233,12 @@ const accountUI = createAccountUI({
 // Pago en pesos: solo aparece si el servidor lo tiene configurado.
 configureFiat({ lang: () => lang, toast: (msg, kind) => ui.toast(`<span>${msg.replace(/[<>&]/g, '')}</span>`, kind === 'err' ? 'err' : 'ok', 4200), openAccount: () => accountUI.open(), onPaid: () => ui.renderAll(true) });
 loadFiat().then((c) => c.enabled && ui.renderAll(true));
+configureMp({ lang: () => lang, toast: (msg, kind) => ui.toast(`<span>${msg.replace(/[<>&]/g, '')}</span>`, kind === 'err' ? 'err' : 'ok', 4200), openAccount: () => accountUI.open(), onPaid: (order) => {
+  reconcileLooks(); setStationSign(signText());
+  ui.refreshPurchases(order.state === 'paid');
+  save(state);
+} });
+loadMp().then((c) => c.enabled && ui.renderAll(true));
 
 let saveT = 0;
 stage.onFrame((dt, now, raw) => {

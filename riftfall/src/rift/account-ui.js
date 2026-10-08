@@ -10,6 +10,7 @@ import { openInMetaMask, setWalletFallback } from './open-in-metamask.js';
 import { remoteWallet, walletProvider } from './wallet.js';
 import { STYLE_ITEMS } from '../shared/cargo-style.js';
 import { fiatOwnerOn, fiatOwnerLabel, openFiatOwner, fiatHasOrders, fiatHistoryLabel, openFiatHistory, refreshFiat } from './fiat-ui.js';
+import { mpOn, mpHasOrders, mpHistoryLabel, openMpHistory, refreshMp } from './mercadopago-ui.js';
 
 const REVIEW = {
   es: { title: 'Reconocer una compra anterior', sub: 'Para pagos BNB sin pedido previo o pedidos BNB/USDT confirmados tarde. Revisá el comprobante: el pagador debe tener su wallet vinculada. Confirmás con una firma gratuita y queda registrado.',
@@ -452,6 +453,7 @@ export function createAccountUI({ game, lang = () => 'es', toast = () => {}, onC
         ${tier ? `<span class="ra-cred gold">${icon('star')}${fill(L.founder, { tier: L.tiers[tier] })}</span>` : ''}
         ${styles ? `<span class="ra-cred">${icon('star')}${fill(L.styles, { n: styles })}</span>` : ''}</div>` : ''}
       ${fiatHasOrders() ? btn('fiatMine', 'wallet', fiatHistoryLabel(lang())) : ''}
+      ${mpOn() || mpHasOrders() ? btn('mpMine', 'wallet', mpHistoryLabel(lang())) : ''}
       <p class="ra-privacy">${L.privacy}</p>
       ${guest ? '' : `<button class="ra-link" data-ra="logout">${icon('out')}${L.logout}</button>`}`}
     </div>`;
@@ -497,6 +499,7 @@ export function createAccountUI({ game, lang = () => 'es', toast = () => {}, onC
     const act = el.dataset.ra;
     if (act === 'fiatOwner' && account()?.player?.admin) return openFiatOwner({ itemName: fiatItemName });
     if (act === 'fiatMine') return openFiatHistory({ itemName: fiatItemName });
+    if (act === 'mpMine') return openMpHistory({ itemName: (item) => fiatItemName('style', item) });
     if (act === 'review' && account()?.player?.admin) {
       view = 'review';
       return render();
@@ -613,6 +616,7 @@ export function createAccountUI({ game, lang = () => 'es', toast = () => {}, onC
     root.querySelector('.ra-x')?.focus();
     // Pedidos en pesos de la cuenta (y pendientes del dueño): se muestran aunque el cobro esté apagado.
     refreshFiat().then((changed) => changed && !root.hidden && view === 'main' && render()).catch(() => {});
+    refreshMp().then((changed) => changed && !root.hidden && view === 'main' && render()).catch(() => {});
     const section = toOwner && root.querySelector('.ra-owner');
     if (section) {
       section.scrollIntoView({ block: 'start' });

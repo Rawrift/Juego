@@ -150,6 +150,9 @@
 /* Pago en pesos (comprador y dueño) */
 .ra-fiat .ra-card { width: min(440px, 100%); }
 .ra-fiat .ra-btn { width: 100%; margin-top: 8px; }
+.ra-mp .ra-card { width: min(440px, 100%); box-sizing: border-box; }
+.ra-mp .ra-btn { display: flex; width: 100%; box-sizing: border-box; margin-top: 8px; text-decoration: none; }
+.ra-mp .ra-note { overflow-wrap: anywhere; }
 .ra-fiat-data { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0 0 12px; padding: 12px 14px; border-radius: 13px; background: rgba(5, 6, 15, .7); border: 1px solid rgba(120, 200, 255, .22); }
 .ra-fiat-data dt { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--ra-ink3); align-self: center; }
 .ra-fiat-data dd { margin: 0; font-weight: 800; color: var(--ra-ink); text-align: right; overflow-wrap: anywhere; }

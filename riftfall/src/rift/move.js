@@ -8,7 +8,7 @@ import { packData, unpackData } from '../shared/pack.js';
 import { HANDOFF_PARAM, PRIVATE_KEYS, requestHandoff, redeemHandoff, takeHandoffParam } from './handoff.js';
 
 /** Dirección nueva del juego. Vacía = todavía no hay mudanza (el sitio funciona donde esté). */
-export const CANONICAL = 'https://riftfall.duckdns.org';
+export const CANONICAL = import.meta.env?.VITE_CANONICAL_SITE ?? 'https://riftfall.duckdns.org';
 const OLD_HOSTS = /(^|\.)vercel\.app$|(^|\.)pages\.dev$/;
 const PARAM = 'mv';
 

@@ -3,8 +3,10 @@
 
 import { ORDER_LIMIT } from '../src/shared/purchase-order.js';
 import { FIAT_MAX_PENDING, FIAT_MAX_PER_DAY, FIAT_REVIEW_WINDOW } from '../src/shared/fiat.js';
+import { MP_SCHEMA } from './mercadopago.mjs';
 
 const SCHEMA = [
+  ...MP_SCHEMA,
   `CREATE TABLE IF NOT EXISTS players (
     id TEXT PRIMARY KEY, pid TEXT NOT NULL UNIQUE, name TEXT NOT NULL DEFAULT '',
     created_at INTEGER NOT NULL, seen_at INTEGER NOT NULL)`,
@@ -273,8 +275,10 @@ export function createStore(db) {
       if (!changes(result[0]) || !changes(result[1]) || !changes(result[2])) throw new Conflict();
     },
     fiatReview: (orderId) => one('SELECT * FROM fiat_reviews WHERE order_id = ?', orderId),
-    hasPurchase: async (playerId, kind, item) => !!(await one('SELECT 1 AS x FROM purchases WHERE player_id = ? AND kind = ? AND item = ?', playerId, kind, item)),
-    purchases: (playerId) => all('SELECT tx, kind, item, usd, method, payer, at FROM purchases WHERE player_id = ? ORDER BY at', playerId),
+    hasPurchase: async (playerId, kind, item) => !!(await one(`SELECT 1 AS x FROM purchases p WHERE player_id = ? AND kind = ? AND item = ?
+      AND (COALESCE(method,'') <> 'ars-mp' OR EXISTS (SELECT 1 FROM mp_payments m WHERE p.tx = 'mp:' || m.id AND m.active = 1))`, playerId, kind, item)),
+    purchases: (playerId) => all(`SELECT tx, kind, item, usd, method, payer, at FROM purchases p WHERE player_id = ?
+      AND (COALESCE(method,'') <> 'ars-mp' OR EXISTS (SELECT 1 FROM mp_payments m WHERE p.tx = 'mp:' || m.id AND m.active = 1)) ORDER BY at`, playerId),
     purchase: (tx) => one('SELECT * FROM purchases WHERE tx = ?', tx),
     addPurchase: ({ tx, playerId, kind, item, usd, method, payer, now }) =>
       run('INSERT INTO purchases (tx, player_id, kind, item, usd, method, payer, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', tx, playerId, kind, item, usd, method, payer, now),
