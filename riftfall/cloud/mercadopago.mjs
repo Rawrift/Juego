@@ -164,7 +164,7 @@ export function createMercadoPago({ fetcher = fetch, needSession, readJson } = {
     if (!modeMatches && !order.live_mode && payment.live_mode === true
       && ctx.env.MP_LIVE_MODE === 'false' && ctx.env.MP_TEST_ACCOUNT === 'true') {
       const seller = await remote(ctx, '/users/me');
-      modeMatches = seller.test_user === true && String(seller.id) === order.collector_id;
+      modeMatches = Array.isArray(seller.tags) && seller.tags.includes('test_user') && String(seller.id) === order.collector_id;
     }
     if (String(payment.id) !== paymentId || payment.external_reference !== order.id
       || String(payment.collector_id) !== order.collector_id || !modeMatches

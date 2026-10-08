@@ -23,7 +23,7 @@ function setup(extra = {}) {
       return Response.json(preference);
     }
     if (failGet) throw new Error('offline');
-    if (u.pathname === '/users/me') return Response.json({ id: 123456, test_user: extra.fakeSellerTestUser === true });
+    if (u.pathname === '/users/me') return Response.json({ id: 123456, tags: extra.fakeSellerTestUser === true ? ['test_user', 'normal'] : ['normal'] });
     if (u.pathname === '/checkout/preferences/search') return Response.json({ elements: preference ? [preference] : [] });
     if (u.pathname.startsWith('/checkout/preferences/')) return Response.json(preference);
     if (u.pathname === '/v1/payments/search') return Response.json({ results: [...payments.values()].filter((p) => p.external_reference === u.searchParams.get('external_reference')) });
