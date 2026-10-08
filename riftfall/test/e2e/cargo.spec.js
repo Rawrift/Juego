@@ -234,8 +234,22 @@ test('Taller de estilo: se prueba la pintura, se envía el pedido USDT y el serv
   await expect(page.locator('.sty-buy').first()).toContainText('Pagar 0,003334 BNB');
   expect(await page.evaluate(() => window.__CARGO__.state.ships[0].look)).toBeUndefined();
 
+  // El aviso dura 4,6 segundos. Capturar su aparición antes del toque evita perderlo cuando el
+  // navegador sin GPU queda ocupado dibujando, sin dejar de comprobar que la interfaz lo emitió.
+  await page.evaluate(() => {
+    window.__purchaseNotices = [];
+    new MutationObserver((changes) => {
+      for (const change of changes) for (const node of change.addedNodes) {
+        if (node instanceof Element && node.matches('.toast')) window.__purchaseNotices.push(node.textContent);
+      }
+    }).observe(document.querySelector('#toasts'), { childList: true });
+  });
   await page.locator('.sty-buy').first().locator('text=Pagar US$ 2 en USDT').click();
-  await expect(page.locator('.toast').first()).toContainText('Pintura Aurora ya es tuyo', { timeout: 20_000 });
+  await expect.poll(() => page.evaluate(() => window.__purchaseNotices), { timeout: 30_000 })
+    .toEqual(expect.arrayContaining([expect.stringContaining('Pintura Aurora ya es tuyo')]));
+  // Además del aviso, comprobar el derecho permanente que acreditó el servidor.
+  expect(await site.env.DB.prepare('SELECT item, payer, method FROM purchases WHERE tx = ?').bind(HASH).first())
+    .toMatchObject({ item: 'liv-aurora', payer: PAYER, method: 'usdt' });
 
   // Se pidió una sola transferencia de 2 USDT a la wallet del creador, en la red principal, con la etiqueta.
   const sent = await page.evaluate(() => window.__sent);
