@@ -10,12 +10,14 @@ const CONFIG = { MP_ENABLED: 'true', MP_ACCESS_TOKEN: 'test-token-not-a-real-cre
   MP_COLLECTOR_ID: '123456', MP_LIVE_MODE: 'false', MP_PRICES: JSON.stringify({ 'style:trail-magenta': 1500, 'style:liv-aurora': 3000 }) };
 function setup(extra = {}) {
   let time = Date.UTC(2026, 9, 8, 15);
-  const payments = new Map(); const calls = []; let preference; let failPost = false; let failGet = false;
+  const payments = new Map(); const calls = []; let preference; let failPost = false; let failGet = false; let redirectPost = false;
   const fetcher = async (url, init) => {
     const u = new URL(url); calls.push({ path: u.pathname, method: init.method });
     assert.equal(u.origin, 'https://api.mercadopago.com');
     assert.equal(init.headers.authorization, `Bearer ${CONFIG.MP_ACCESS_TOKEN}`);
+    assert.equal(init.redirect, 'manual', 'Workers no admite redirect:error; nunca seguir otro destino con la clave');
     if (u.pathname === '/checkout/preferences' && init.method === 'POST') {
+      if (redirectPost) return new Response(null, { status: 302, headers: { location: 'https://other.example/collect' } });
       const b = JSON.parse(init.body); preference = { ...b, id: 'test-preference', collector_id: 123456, init_point: 'https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=test-preference' };
       if (failPost) throw new Error('connection lost after create');
       return Response.json(preference);
@@ -54,8 +56,16 @@ function setup(extra = {}) {
     const v1 = createHmac('sha256', env.MP_WEBHOOK_SECRET).update(`id:${payment.id};request-id:${requestId};ts:${ts};`).digest('hex');
     return call('POST', `/api/rift/mp/webhook?data.id=${payment.id}&type=payment`, { body, headers: { 'x-request-id': requestId, 'x-signature': `ts=${ts},v1=${v1}`, ...overrides } });
   };
-  return { env, calls, call, buyer, pay, webhook, tick: (ms = 31000) => time += ms, failPost: () => failPost = true, failGet: () => failGet = true };
+  return { env, calls, call, buyer, pay, webhook, tick: (ms = 31000) => time += ms, failPost: () => failPost = true, failGet: () => failGet = true, redirectPost: () => redirectPost = true };
 }
+
+test('MP: una redirección del proveedor no reenvía credenciales ni acredita una compra', async () => {
+  const s = setup(); const b = await s.buyer(); s.redirectPost();
+  const result = await s.call('POST', '/api/rift/mp/order', { token: b.token, body: { item: 'trail-magenta' } });
+  assert.equal(result.status, 503);
+  assert.equal(s.calls.length, 1);
+  assert.equal((await s.env.DB.prepare('SELECT COUNT(*) AS n FROM purchases').first()).n, 0);
+});
 
 test('MP: apagado sin configuración completa; solo cosméticos y destinos oficiales HTTPS', () => {
   assert.equal(mercadoPagoConfig({}).enabled, false);

@@ -135,7 +135,8 @@ export function createMercadoPago({ fetcher = fetch, needSession, readJson } = {
     const timer = setTimeout(() => ctl.abort(), 8000);
     try {
       const res = await fetcher(`https://api.mercadopago.com${path}`, {
-        method: body ? 'POST' : 'GET', redirect: 'error', signal: ctl.signal,
+        // Workers admite manual; una respuesta 3xx se rechaza sin reenviar la clave.
+        method: body ? 'POST' : 'GET', redirect: 'manual', signal: ctl.signal,
         headers: { authorization: `Bearer ${ctx.env.MP_ACCESS_TOKEN}`, 'content-type': 'application/json',
           ...(path.startsWith('/v1/chargebacks/') ? { 'x-caller-id': String(ctx.env.MP_COLLECTOR_ID) } : {}) },
         ...(body ? { body: JSON.stringify(body) } : {})
