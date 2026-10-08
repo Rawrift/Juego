@@ -838,7 +838,7 @@ test('pago en pesos apagado: sin configuración no aparece ningún botón', asyn
 });
 
 test('Mercado Pago: retorno falso no acredita; notificación verificada entrega el cosmético y se recupera al volver', async ({ browser }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(360_000); // Cuatro entradas a Cargo con renderizado 3D por software en CI.
   const secret = 'webhook-secret-only-for-tests';
   let preference; let payment;
   const site = await riftSite(4198, {
@@ -905,6 +905,11 @@ test('Mercado Pago: retorno falso no acredita; notificación verificada entrega 
     await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('riftcargo.style')).bought.map((p) => p.item))).toContain('liv-aurora');
     await page.locator('[data-mp="close"]').click();
     await page.evaluate(() => localStorage.removeItem('riftcargo.style'));
+    let delayedRestore = false;
+    await page.route('**/api/rift/me', async (route) => {
+      if (!delayedRestore) { delayedRestore = true; await new Promise((r) => setTimeout(r, 5000)); }
+      await route.continue();
+    });
     await page.reload(); await workshop();
     await expect(page.locator('[data-act="styLiv"][data-v="aurora"]')).toHaveClass(/has/);
     await expect(buy).toHaveCount(0);

@@ -66,7 +66,14 @@ const cloud = createSync('cargo', {
   delay: 60_000
 });
 const withTimeout = (p, ms) => Promise.race([p, new Promise((r) => setTimeout(() => r(null), ms))]);
-await withTimeout(startAccount().then((a) => (a ? cloud.pull().then(() => syncPurchases()) : null)), 3500);
+let refreshAfterSync = () => {};
+const accountReady = startAccount().then(async (a) => {
+  if (!a) return;
+  await cloud.pull();
+  const changed = await syncPurchases();
+  if (changed && !reloading) refreshAfterSync();
+});
+await withTimeout(accountReady, 3500);
 
 const { state, away } = load();
 // Desde acá, si la nube trae una partida que avanzó más, hay que recargar para jugarla.
@@ -183,6 +190,12 @@ const ui = createUI({
     }
   }
 });
+
+// Si la cuenta tardó más que el límite de arranque, aplicar la compra al terminar igualmente.
+refreshAfterSync = () => {
+  reconcileLooks(); setStationSign(signText());
+  ui.refreshPurchases(false);
+};
 
 // Elegir naves tocándolas en la escena.
 stage.onClick((ndc) => {
