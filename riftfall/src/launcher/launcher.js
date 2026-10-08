@@ -397,7 +397,9 @@ async function renderAdmin(st) {
   let pending = 0n;
   let signer = '';
   try {
-    [pending, signer] = await Promise.all([ui.provider.getBalance(A.RiftShips), vault.signer()]);
+    // Leer el saldo actual sin la caché de getBalance: el refresco tras cobrar puede ocurrir
+    // dentro de su ventana de caché y dejar visible el importe anterior hasta recargar.
+    [pending, signer] = await Promise.all([ui.provider.send('eth_getBalance', [A.RiftShips, 'latest']).then(BigInt), vault.signer()]);
   } catch {
     /* red no disponible */
   }
