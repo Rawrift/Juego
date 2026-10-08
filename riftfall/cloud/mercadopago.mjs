@@ -158,8 +158,16 @@ export function createMercadoPago({ fetcher = fetch, needSession, readJson } = {
   }
   async function reconcile(ctx, order, paymentId, fetched = null) {
     const payment = fetched ?? await remote(ctx, `/v1/payments/${paymentId}`);
+    let modeMatches = payment.live_mode === !!order.live_mode;
+    // Las credenciales de un vendedor ficticio pueden devolver live_mode:true.
+    // Solo admitirlo en pruebas explícitas y comprobando el vendedor en la API.
+    if (!modeMatches && !order.live_mode && payment.live_mode === true
+      && ctx.env.MP_LIVE_MODE === 'false' && ctx.env.MP_TEST_ACCOUNT === 'true') {
+      const seller = await remote(ctx, '/users/me');
+      modeMatches = seller.test_user === true && String(seller.id) === order.collector_id;
+    }
     if (String(payment.id) !== paymentId || payment.external_reference !== order.id
-      || String(payment.collector_id) !== order.collector_id || payment.live_mode !== !!order.live_mode
+      || String(payment.collector_id) !== order.collector_id || !modeMatches
       || payment.currency_id !== 'ARS' || !Number.isFinite(Number(payment.transaction_amount))
       || Number(payment.transaction_amount) * 100 !== order.ars * 100
       || !Number.isFinite(Date.parse(payment.date_created)) || !Number.isFinite(Date.parse(payment.date_last_updated))

@@ -23,6 +23,7 @@ function setup(extra = {}) {
       return Response.json(preference);
     }
     if (failGet) throw new Error('offline');
+    if (u.pathname === '/users/me') return Response.json({ id: 123456, test_user: extra.fakeSellerTestUser === true });
     if (u.pathname === '/checkout/preferences/search') return Response.json({ elements: preference ? [preference] : [] });
     if (u.pathname.startsWith('/checkout/preferences/')) return Response.json(preference);
     if (u.pathname === '/v1/payments/search') return Response.json({ results: [...payments.values()].filter((p) => p.external_reference === u.searchParams.get('external_reference')) });
@@ -58,6 +59,18 @@ function setup(extra = {}) {
   };
   return { env, calls, call, buyer, pay, webhook, tick: (ms = 31000) => time += ms, failPost: () => failPost = true, failGet: () => failGet = true, redirectPost: () => redirectPost = true };
 }
+
+test('MP: modo del vendedor ficticio se acepta solo tras verificarlo; vendedor real se rechaza', async () => {
+  for (const testUser of [false, true]) {
+    const s = setup({ MP_TEST_ACCOUNT: 'true', fakeSellerTestUser: testUser });
+    const b = await s.buyer();
+    const { order } = await s.call('POST', '/api/rift/mp/order', { token: b.token, body: { item: 'trail-magenta' } });
+    const payment = s.pay(order, { live_mode: true });
+    const result = await s.webhook(payment);
+    assert.equal(result.status, testUser ? 200 : 409);
+    assert.equal((await s.env.DB.prepare('SELECT COUNT(*) AS n FROM purchases').first()).n, testUser ? 1 : 0);
+  }
+});
 
 test('MP: una redirección del proveedor no reenvía credenciales ni acredita una compra', async () => {
   const s = setup(); const b = await s.buyer(); s.redirectPost();
