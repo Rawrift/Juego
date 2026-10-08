@@ -11,8 +11,11 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   workers: 1,
   use: {
+    // Usar Chromium completo también en CI, como las comprobaciones locales, en vez de headless shell.
+    channel: 'chromium',
     baseURL: 'http://127.0.0.1:4174',
     headless: true,
+    trace: 'retain-on-failure',
     locale: 'es-ES',
     viewport: { width: 1440, height: 900 },
     launchOptions: {

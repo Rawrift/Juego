@@ -30,10 +30,11 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
       - run: npm run test:e2e:chain
-      - name: Capturas
+      - name: Capturas y diagnóstico de fallos
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: RIFTFALL-SCREENSHOTS
-          path: riftfall/test-results/*.png
+          path: riftfall/test-results/
+          retention-days: 7
           if-no-files-found: ignore

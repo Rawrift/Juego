@@ -168,9 +168,13 @@ test('cuenta con huella: el papá juega en la compu, entra desde el celular con 
 
     // En el celular (la huella llega sincronizada, como con Google o iCloud) entra a la misma cuenta.
     const mobile = await cel.newPage();
+    mobile.on('pageerror', (e) => errors.push(`celular: ${e.message}`));
     const celAuth = await authenticator(mobile);
     const { credentials } = await pcAuth.cdp.send('WebAuthn.getCredentials', { authenticatorId: pcAuth.authenticatorId });
     await celAuth.cdp.send('WebAuthn.addCredential', { authenticatorId: celAuth.authenticatorId, credential: credentials[0] });
+    // La compu ya no se usa. Sin placa de video, su página sigue dibujando por software y le saca el
+    // procesador al celular: con ella abierta, Rift Cargo tardaba unos 2 minutos en cargar acá; cerrada, 4 segundos.
+    await dad.close();
     await mobile.goto(`${site.url}/`);
     await expect(mobile.locator('#accountBtn')).toHaveClass(/guest/);
     expect(await mobile.evaluate(() => window.__RIFTFALL__.app.progress.bestScore ?? 0)).toBe(0);
@@ -178,7 +182,25 @@ test('cuenta con huella: el papá juega en la compu, entra desde el celular con 
     await mobile.click('[data-ra="loginPasskey"]');
     // Recarga sola con el progreso de la cuenta.
     await expect(mobile.locator('#accountBtn b')).toHaveText('Papá', { timeout: 20_000 });
-    await expect.poll(() => mobile.evaluate(() => window.__RIFTFALL__?.app.progress.bestScore ?? 0).catch(() => 0), { timeout: 20_000 }).toBe(best);
+    try {
+      await expect.poll(() => mobile.evaluate(() => window.__RIFTFALL__?.app.progress.bestScore ?? 0).catch(() => 0), { timeout: 20_000 }).toBe(best);
+    } catch (err) {
+      // Si vuelve a fallar, que se sepa por qué: ¿recargó?, ¿hay sesión y cuenta?, ¿qué progreso quedó en
+      // el dispositivo y cuál en la nube? (sin el valor de la sesión).
+      const device = await mobile.evaluate(() => ({
+        url: location.href,
+        ready: document.readyState,
+        hook: !!window.__RIFTFALL__,
+        session: !!localStorage.getItem('rift.session'),
+        account: JSON.parse(localStorage.getItem('rift.account') ?? 'null')?.player ?? null,
+        progress: JSON.parse(localStorage.getItem('riftfall.progress') ?? 'null'),
+        inMemory: window.__RIFTFALL__?.app.progress ?? null
+      })).catch((e) => ({ error: String(e) }));
+      const cloud = await site.env.DB.prepare("SELECT player_id, rev, updated_at, data FROM saves WHERE game = 'riftfall' ORDER BY updated_at").all();
+      console.log('DIAGNÓSTICO cuenta con huella', JSON.stringify({ esperado: best, device, errors, cloud: cloud.results }, null, 1));
+      await mobile.screenshot({ path: 'test-results/cuenta-huella-fallo.png' }).catch(() => {});
+      throw err;
+    }
     await expect(mobile.locator('#rkList li.me')).toContainText('Papá');
 
     // También en Rift Cargo es la misma cuenta.
