@@ -15,6 +15,7 @@ import { applyTransfer } from '../client/transfer.js';
 import { start as startAccount, createSync, syncPurchases, isReloading } from '../rift/account.js';
 import { createAccountUI } from '../rift/account-ui.js';
 import { configureFiat, loadFiat } from '../rift/fiat-ui.js';
+import { configureMp, loadMp } from '../rift/mercadopago-ui.js';
 import { setStationSign } from './render/stationScene.js';
 import { step, acceptOffer, buyCargo, buyUpgrade, buyShip, evolveShip, setAuto, fastForward, newGame, ownerBoost } from './sim/sim.js';
 import { OFFLINE_MAX } from './sim/data.js';
@@ -71,7 +72,7 @@ const { state, away } = load();
 // Desde acá, si la nube trae una partida que avanzó más, hay que recargar para jugarla.
 booted = true;
 // Estéticos: solo se muestra lo que el jugador tiene (compras y Pase Fundador).
-{
+function reconcileLooks() {
   const mine = owned();
   for (const s of state.ships) {
     if (s.baseName && !mine.has('plates')) s.name = s.baseName;
@@ -80,6 +81,7 @@ booted = true;
     if (!mine.has(`trail-${s.look.trail}`)) s.look.trail = 'cian';
   }
 }
+reconcileLooks();
 setStationSign(signText());
 const stage = createStage(document.getElementById('stage'));
 const station = createStation(stage, state);
@@ -218,6 +220,12 @@ const accountUI = createAccountUI({
 // Pago en pesos: solo aparece si el servidor lo tiene configurado.
 configureFiat({ lang: () => lang, toast: (msg, kind) => ui.toast(`<span>${msg.replace(/[<>&]/g, '')}</span>`, kind === 'err' ? 'err' : 'ok', 4200), openAccount: () => accountUI.open(), onPaid: () => ui.renderAll(true) });
 loadFiat().then((c) => c.enabled && ui.renderAll(true));
+configureMp({ lang: () => lang, toast: (msg, kind) => ui.toast(`<span>${msg.replace(/[<>&]/g, '')}</span>`, kind === 'err' ? 'err' : 'ok', 4200), openAccount: () => accountUI.open(), onPaid: (order) => {
+  reconcileLooks(); setStationSign(signText());
+  ui.refreshPurchases(order.state === 'paid');
+  save(state);
+} });
+loadMp().then((c) => c.enabled && ui.renderAll(true));
 
 let saveT = 0;
 stage.onFrame((dt, now, raw) => {

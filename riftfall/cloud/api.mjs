@@ -13,6 +13,7 @@ import {
   verifyAuthenticationResponse
 } from '@simplewebauthn/server';
 import { createStore, ensureSchema, Conflict } from './store.mjs';
+import { createMercadoPago, MercadoPagoError } from './mercadopago.mjs';
 import { createChain } from './chain.mjs';
 import { quickVerify } from './quick-verify.mjs';
 import { createRunBoard } from '../server/run-board.mjs';
@@ -157,7 +158,7 @@ export function sessionCutoff(env = {}) {
 
 // ---------- Servidor ----------
 
-export function createApi({ now = () => Date.now(), chain = createChain() } = {}) {
+export function createApi({ now = () => Date.now(), chain = createChain(), mercadoPagoFetch = fetch } = {}) {
   async function handle(request, env = {}) {
     const url = new URL(request.url);
     try {
@@ -167,17 +168,18 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
       const ctx = { request, env, url, store, t: now() };
       if (Math.random() < 0.02) await store.sweep(ctx.t);
       const route = `${request.method} ${url.pathname.replace(/\/+$/, '')}`;
-      const fn = ROUTES[route];
+      const fn = MP_ROUTES[route] ?? ROUTES[route];
       if (!fn) throw new HttpError(404, 'not-found');
       return await fn(ctx);
     } catch (err) {
-      if (err instanceof HttpError) return json({ ok: false, error: err.code, ...err.extra }, err.status);
+      if (err instanceof HttpError || err instanceof MercadoPagoError) return json({ ok: false, error: err.code, ...err.extra }, err.status);
       console.error(err);
       return json({ ok: false, error: 'internal' }, 500);
     }
   }
 
   // ---------- Sesión ----------
+  const MP_ROUTES = createMercadoPago({ fetcher: mercadoPagoFetch, needSession, readJson });
 
   async function sessionOf(ctx) {
     const auth = ctx.request.headers.get('authorization') ?? '';

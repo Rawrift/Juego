@@ -3,6 +3,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Wallet } from 'ethers';
+import { createHmac } from 'node:crypto';
 import { createApi } from '../../cloud/api.mjs';
 import { createD1 } from '../../cloud/d1-node.mjs';
 import { ensureSchema } from '../../cloud/store.mjs';
@@ -11,10 +12,10 @@ import { ensureSchema } from '../../cloud/store.mjs';
 // Cloudflare (cloud/api.mjs) y una base SQLite en memoria. Se usa "localhost" porque las passkeys
 // no funcionan con direcciones IP.
 
-async function riftSite(port, extraEnv = {}) {
+async function riftSite(port, extraEnv = {}, apiOptions = {}) {
   const DIST = path.resolve('dist-e2e');
   const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.woff': 'font/woff', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webmanifest': 'application/manifest+json', '.json': 'application/json' };
-  const api = createApi({ chain: { payment: async () => ({ kind: null, reason: 'notFound' }) } });
+  const api = createApi({ chain: { payment: async () => ({ kind: null, reason: 'notFound' }) }, ...apiOptions });
   const env = { DB: createD1(), ...extraEnv };
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://localhost:${port}`);
@@ -834,4 +835,92 @@ test('pago en pesos apagado: sin configuración no aparece ningún botón', asyn
     await ctx.close();
     site.close();
   }
+});
+
+test('Mercado Pago: retorno falso no acredita; notificación verificada entrega el cosmético y se recupera al volver', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const secret = 'webhook-secret-only-for-tests';
+  let preference; let payment;
+  const site = await riftSite(4198, {
+    MP_ENABLED: 'true', MP_ACCESS_TOKEN: 'token-only-for-tests', MP_WEBHOOK_SECRET: secret,
+    MP_COLLECTOR_ID: '123456', MP_LIVE_MODE: 'false', MP_HOLDER: 'Titular de Prueba',
+    MP_PRICES: JSON.stringify({ 'style:liv-aurora': 3000 })
+  }, { mercadoPagoFetch: async (url, init) => {
+    const u = new URL(url);
+    if (init.method === 'POST') {
+      preference = { ...JSON.parse(init.body), id: 'test-preference', collector_id: 123456,
+        init_point: 'https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=test-preference' };
+      return Response.json(preference);
+    }
+    if (u.pathname === '/v1/payments/search') return Response.json({ results: payment ? [payment] : [] });
+    if (u.pathname === '/v1/payments/99999') return Response.json(payment);
+    return Response.json({}, { status: 404 });
+  } });
+  const ctx = await browser.newContext(desktop);
+  await withWallet(ctx, Wallet.createRandom());
+  const page = await ctx.newPage(); const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  const workshop = async () => {
+    await expect(page.locator('#tabs')).toBeVisible();
+    await page.evaluate(() => { window.__CARGO__.state.flags.tut = 99; document.querySelector('#coach').hidden = true; });
+    await page.click('#tabs [data-v="fleet"]');
+    await page.click('#panel .sty-cta[data-act="style"]');
+    await page.click('[data-act="styLiv"][data-v="aurora"]');
+  };
+  try {
+    await page.goto(`${site.url}/`);
+    await page.click('#accountBtn'); await page.click('[data-ra="wallet"]');
+    await expect(page.locator('.ra-status')).toContainText('protegida');
+    await page.goto(`${site.url}/cargo/`); await workshop();
+    const buy = page.locator('[data-act="styMp"][data-v="liv-aurora"]');
+    await expect(buy).toHaveText('Pagar con Mercado Pago · $ 3.000 ARS');
+    await buy.click();
+    await expect(page.locator('.ra-mp')).toContainText('Titular de Prueba');
+    await expect(page.locator('[data-mp="checkout"]')).toHaveAttribute('href', preference.init_point);
+    await page.screenshot({ path: 'test-results/cargo-mercadopago-payment.png', animations: 'disabled' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.locator('[data-mp="checkout"]')).toBeInViewport();
+    await expect(page.locator('[data-mp="close"]')).toBeInViewport();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: 'test-results/cargo-mercadopago-mobile.png', animations: 'disabled' });
+    await page.setViewportSize(desktop.viewport);
+    const orderId = preference.external_reference;
+    await page.goto(`${site.url}/cargo/?mp_order=${orderId}&status=approved&payment_id=99999`);
+    await expect(page.locator('[data-mp="state"]')).toContainText('Esperando la confirmación');
+    expect(page.url()).not.toContain('status=approved');
+    expect((await site.env.DB.prepare('SELECT COUNT(*) AS n FROM purchases').first()).n).toBe(0);
+    const at = new Date().toISOString();
+    payment = { id: 99999, external_reference: orderId, collector_id: 123456, live_mode: false, currency_id: 'ARS',
+      transaction_amount: 3000, transaction_amount_refunded: 0, status: 'approved', date_created: at, date_last_updated: at };
+    const requestId = 'test-request'; const ts = String(Math.floor(Date.now() / 1000));
+    const v1 = createHmac('sha256', secret).update(`id:99999;request-id:${requestId};ts:${ts};`).digest('hex');
+    const response = await ctx.request.post(`${site.url}/api/rift/mp/webhook?data.id=99999&type=payment`, {
+      headers: { 'x-request-id': requestId, 'x-signature': `ts=${ts},v1=${v1}` }, data: { type: 'payment', data: { id: 99999 } }
+    });
+    expect(response.status()).toBe(200);
+    await page.click('[data-mp="check"]');
+    await expect(page.locator('[data-mp="state"]')).toContainText('Pago aprobado', { timeout: 40000 });
+    await expect(page.locator('[data-mp="checkout"]')).toHaveCount(0);
+    expect(await site.env.DB.prepare('SELECT item, method FROM purchases').first()).toEqual({ item: 'liv-aurora', method: 'ars-mp' });
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('riftcargo.style')).bought.map((p) => p.item))).toContain('liv-aurora');
+    await page.locator('[data-mp="close"]').click();
+    await page.evaluate(() => localStorage.removeItem('riftcargo.style'));
+    await page.reload(); await workshop();
+    await expect(page.locator('[data-act="styLiv"][data-v="aurora"]')).toHaveClass(/has/);
+    await expect(buy).toHaveCount(0);
+    payment = { ...payment, status: 'refunded', transaction_amount_refunded: 3000,
+      date_last_updated: new Date(Date.now() + 1000).toISOString() };
+    const refund = await ctx.request.post(`${site.url}/api/rift/mp/webhook?data.id=99999&type=payment`, {
+      headers: { 'x-request-id': requestId, 'x-signature': `ts=${ts},v1=${v1}` }, data: { type: 'payment', data: { id: 99999 } }
+    });
+    expect(refund.status()).toBe(200);
+    await page.goto(`${site.url}/cargo/?mp_order=${orderId}`);
+    await expect(page.locator('[data-mp="state"]')).toContainText('El pago fue devuelto');
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('riftcargo.style')).bought.map((p) => p.item))).not.toContain('liv-aurora');
+    await page.locator('[data-mp="close"]').click(); await workshop();
+    await expect(page.locator('[data-act="styLiv"][data-v="aurora"]')).not.toHaveClass(/has/);
+    await expect(buy).toBeVisible();
+    expect((await site.env.DB.prepare('SELECT COUNT(*) AS n FROM purchases').first()).n).toBe(1);
+    expect(errors).toEqual([]);
+  } finally { await ctx.close(); site.close(); }
 });

@@ -301,6 +301,11 @@ export async function syncPurchases() {
   }
   const st = readJson('riftcargo.style') ?? { bought: [], sign: '', pending: [] };
   st.bought = Array.isArray(st.bought) ? st.bought : [];
+  // Reembolsos/contracargos de Mercado Pago: conservar el registro del servidor, retirar el derecho
+  // en este dispositivo al sincronizar. Las otras compras siguen sus propias reglas.
+  const activeMp = new Set(list.filter((p) => p.method === 'ars-mp').map((p) => p.tx));
+  const retained = st.bought.filter((p) => p.method !== 'ars-mp' || activeMp.has(p.tx));
+  if (retained.length !== st.bought.length) { st.bought = retained; changed = true; }
   for (const p of list.filter((x) => x.kind === 'style')) {
     if (st.bought.some((b) => String(b.tx).toLowerCase() === p.tx)) continue;
     st.bought.push({ item: p.item, tx: p.tx, payer: p.payer, usd: p.usd, method: p.method, at: p.at });
