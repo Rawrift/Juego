@@ -1646,7 +1646,8 @@ if (import.meta.env.DEV || import.meta.env.MODE === 'e2e' || import.meta.env.VIT
   fastForward(seconds) {
     const s = game.sim;
     const end = s.tick + seconds * 60;
-    while (s.tick < end && (s.phase === 'running' || s.phase === 'choice')) {
+    // Resuelve también la mejora abierta justo en el último tick del avance.
+    while ((s.tick < end || s.phase === 'choice') && (s.phase === 'running' || s.phase === 'choice')) {
       if (s.phase === 'choice') {
         const c = botChoice(s);
         game.rec.choice(c);

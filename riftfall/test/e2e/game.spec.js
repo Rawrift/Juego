@@ -563,6 +563,9 @@ test('versión para portales (CrazyGames): sin cripto, revivir y x2 Núcleos con
 
     // Cae: se ofrece revivir; con el anuncio completo, vuelve a la partida con medio casco.
     await page.evaluate(() => {
+      window.__RIFTFALL__.fastForward(0);
+      // Este escenario aísla revivir de una subida de nivel por recoger XP al volver.
+      window.__RIFTFALL__.game.sim.pickups.length = 0;
       const p = window.__RIFTFALL__.game.sim.player;
       p.invuln = 0;
       p.hp = -1;
@@ -579,6 +582,7 @@ test('versión para portales (CrazyGames): sin cripto, revivir y x2 Núcleos con
 
     // Segunda caída: ya no se ofrece; fin de partida con la opción de duplicar Núcleos.
     await page.evaluate(() => {
+      window.__RIFTFALL__.fastForward(0);
       const p = window.__RIFTFALL__.game.sim.player;
       p.invuln = 0;
       p.hp = -1;
@@ -904,6 +908,7 @@ test('portal en Basic Launch: sin anuncios (ni revivir, ni x2, ni entre partidas
     await expect(page.locator('#hud')).toBeVisible();
     await page.evaluate(() => window.__RIFTFALL__.fastForward(10));
     await page.evaluate(() => {
+      window.__RIFTFALL__.fastForward(0);
       const p = window.__RIFTFALL__.game.sim.player;
       p.invuln = 0;
       p.hp = -1;
