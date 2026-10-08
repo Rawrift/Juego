@@ -584,7 +584,8 @@ test('pago en pesos: el jugador pide el Pase Piloto, queda en revisión y recié
   const boss = Wallet.createRandom();
   const site = await riftSite(4196, {
     ADMIN_WALLETS: boss.address,
-    FIAT_PAY_URL: 'https://cafecito.app/riftgames',
+    FIAT_ALIAS: 'rift.juegos.mp',
+    FIAT_HOLDER: 'Titular de Prueba',
     FIAT_PRICES: JSON.stringify({ 'founder:pilot': 4500 })
   });
   const buyerCtx = await browser.newContext(desktop);
@@ -608,13 +609,15 @@ test('pago en pesos: el jugador pide el Pase Piloto, queda en revisión y recié
     await page.click('[data-ra="wallet"]');
     await expect(page.locator('.ra-status')).toContainText('protegida');
     await page.click('[data-ra="close"]');
-    // Ahora sí: importe, link de cobro y código. Queda en revisión y sin beneficio.
+    // Ahora sí: importe, alias, titular y código. Queda en revisión y sin beneficio.
     await pesos.click();
     const box = page.locator('.ra-fiat');
     await expect(box).toContainText('$ 4.500');
     await expect(box).toContainText('Pago en revisión');
-    await expect(box.locator('a.ra-btn')).toHaveAttribute('href', 'https://cafecito.app/riftgames');
-    await expect(box.locator('a.ra-btn')).toHaveAttribute('rel', 'noopener noreferrer');
+    await expect(box).toContainText('rift.juegos.mp');
+    await expect(box).toContainText('Titular de Prueba');
+    await expect(box.locator('[data-fx="verifyRecipient"]')).toContainText('destinatario coincida con este titular');
+    await expect(box.locator('[data-fx="copyAlias"]')).toBeVisible();
     const code = (await box.locator('[data-fx="code"]').textContent()).trim();
     expect(code).toMatch(/^RIFT-[A-Z2-9]{5}-[A-Z2-9]{5}$/);
     await page.click('.ra-fiat [data-fx="close"]');
@@ -626,7 +629,9 @@ test('pago en pesos: el jugador pide el Pase Piloto, queda en revisión y recié
     await pesos.click();
     await expect(page.locator('.ra-fiat [data-fx="code"]')).toHaveText(code);
     await expect(box).toContainText('$ 4.500');
-    await expect(box.locator('a.ra-btn')).toHaveAttribute('href', 'https://cafecito.app/riftgames');
+    await expect(box).toContainText('rift.juegos.mp');
+    await expect(box).toContainText('Titular de Prueba');
+    await expect(box.locator('a.ra-btn')).toHaveCount(0);
     // Cancelar avisa que es solo si no se envió plata, y se puede volver atrás.
     await box.locator('[data-fx="cancel"]').click();
     await expect(box).toContainText('Cancelá solo si no enviaste plata');

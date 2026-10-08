@@ -24,6 +24,7 @@ const T = {
     open: 'Abrir el link de pago',
     alias: 'Alias',
     holder: 'Titular',
+    verifyRecipient: 'Antes de transferir, comprobá en tu banco o billetera que el destinatario coincida con este titular.',
     copyCode: 'Copiar código',
     copyAlias: 'Copiar alias',
     copied: 'Copiado',
@@ -89,6 +90,7 @@ const T = {
     open: 'Open the payment link',
     alias: 'Alias',
     holder: 'Account holder',
+    verifyRecipient: 'Before transferring, check that your bank or wallet shows this account holder as the recipient.',
     copyCode: 'Copy code',
     copyAlias: 'Copy alias',
     copied: 'Copied',
@@ -154,6 +156,7 @@ const T = {
     open: 'Abrir o link de pagamento',
     alias: 'Alias',
     holder: 'Titular',
+    verifyRecipient: 'Antes de transferir, confira no banco ou carteira se o destinatário corresponde a este titular.',
     copyCode: 'Copiar código',
     copyAlias: 'Copiar alias',
     copied: 'Copiado',
@@ -369,6 +372,7 @@ function renderOrder(box, order, sub, L) {
     : to.payUrl
       ? `<a class="ra-btn primary" href="${esc(to.payUrl)}" target="_blank" rel="noopener noreferrer">${esc(L.open)}</a>`
       : `<dl class="ra-fiat-data"><dt>${esc(L.alias)}</dt><dd>${esc(to.alias)}</dd><dt>${esc(L.holder)}</dt><dd>${esc(to.holder)}</dd></dl>
+         <p class="ra-note" data-fx="verifyRecipient">${esc(L.verifyRecipient)}</p>
          <button class="ra-btn ghost" data-fx="copyAlias">${esc(L.copyAlias)}</button>`;
   const steps = order.expired ? '' : `<ol class="ra-fiat-steps"><li>${esc(fill(L.step1, { ars: amount }))}</li><li>${esc(L.step2)}</li><li>${esc(L.step3)}</li></ol>`;
   card.innerHTML = `${head(L.title, sub, L)}${data}${steps}${target}
