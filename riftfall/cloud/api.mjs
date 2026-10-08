@@ -21,12 +21,16 @@ import { replayRun } from '../src/sim/index.js';
 import { cleanName } from '../src/shared/duel.js';
 import { publicId } from '../src/shared/public-id.js';
 import { FOUNDER } from '../src/shared/founder.js';
+import { orderUsd } from '../src/shared/purchase-order.js';
 
 const DAY = 86_400_000;
 const SESSION_DAYS = 365;
 const GAMES = ['riftfall', 'cargo'];
 const MAX_SAVE = 400_000;
 const MAX_BODY = 1_500_000;
+/** Códigos para llevar la cuenta a otro navegador: de un solo uso y de vida corta. */
+const HANDOFF_TTL = 5 * 60_000;
+const HANDOFF_PURPOSES = ['open', 'move'];
 
 // ---------- Utilidades ----------
 
@@ -138,6 +142,18 @@ export function deviceKind(ua = '') {
   return /Mobi|Android|iPhone|iPad/i.test(ua) ? 'mobile' : 'desktop';
 }
 
+/**
+ * Fecha de corte de las sesiones (variable SESSIONS_NOT_BEFORE: milisegundos o una fecha ISO). Sirve
+ * para dar de baja las sesiones emitidas cuando todavía viajaban en los links. Sin la variable, no se
+ * revoca nada.
+ */
+export function sessionCutoff(env = {}) {
+  const raw = String(env.SESSIONS_NOT_BEFORE ?? '').trim();
+  if (!raw) return 0;
+  const n = /^\d+$/.test(raw) ? Number(raw) : Date.parse(raw);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 // ---------- Servidor ----------
 
 export function createApi({ now = () => Date.now(), chain = createChain() } = {}) {
@@ -169,6 +185,13 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
     const hash = await sha256hex(m[1]);
     const s = await ctx.store.session(hash, ctx.t);
     if (!s) return null;
+    // Revocación: las sesiones de antes de la fecha de corte dejan de valer para las cuentas que pueden
+    // volver a entrar (con wallet o huella). Los invitados no tienen otra forma de entrar: conservan la suya.
+    const cutoff = sessionCutoff(ctx.env);
+    if (cutoff && s.created_at < cutoff && (await ctx.store.hasCredentials(s.player_id))) {
+      await ctx.store.dropSession(hash);
+      return null;
+    }
     const player = await ctx.store.player(s.player_id);
     return player ? { hash, player } : null;
   }
@@ -348,6 +371,38 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
       return json({ ok: true });
     },
 
+    // ---------- Llevar la cuenta a otro navegador (MetaMask, mudanza) con un código de un solo uso ----------
+    'POST /api/rift/handoff': async (ctx) => {
+      const s = await needSession(ctx);
+      const { purpose, origin } = await readJson(ctx.request, 2000);
+      if (!HANDOFF_PURPOSES.includes(purpose)) throw new HttpError(400, 'purpose');
+      const target = siteOf(ctx, origin).origin;
+      if (origin && target !== origin) throw new HttpError(400, 'origin');
+      const kind = `handoff:${purpose}`;
+      // Un solo código vivo por jugador y por uso: pedir otro anula el anterior.
+      const code = b64url(randomBytes(32));
+      // Se guarda el resumen del código (no el código) y el sitio donde se va a usar.
+      await ctx.store.replaceChallenge({
+        id: await sha256hex(code),
+        kind,
+        value: JSON.stringify({ o: target }),
+        playerId: s.player.id,
+        expires: ctx.t + HANDOFF_TTL
+      });
+      return json({ ok: true, code, expires: ctx.t + HANDOFF_TTL });
+    },
+
+    'POST /api/rift/handoff/redeem': async (ctx) => {
+      const { code, purpose, origin } = await readJson(ctx.request, 2000);
+      if (!HANDOFF_PURPOSES.includes(purpose) || typeof code !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(code)) throw new HttpError(400, 'expired');
+      const ch = await ctx.store.takeChallenge(await sha256hex(code), `handoff:${purpose}`, ctx.t);
+      if (!ch?.player_id) throw new HttpError(400, 'expired');
+      // El código solo vale en el sitio para el que se pidió.
+      if (origin !== siteOf(ctx, origin).origin || JSON.parse(ch.value).o !== origin) throw new HttpError(400, 'expired');
+      if (!(await ctx.store.player(ch.player_id))) throw new HttpError(400, 'expired');
+      return json(await switchTo(ctx, await sessionOf(ctx), ch.player_id));
+    },
+
     // ---------- Wallet: firmar un mensaje (gratis) ----------
     'POST /api/rift/wallet/nonce': async (ctx) => {
       const { address = null, origin } = await readJson(ctx.request, 2000);
@@ -498,6 +553,68 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
     },
 
     // ---------- Compras (Pase Fundador, estéticos): verificadas en la cadena ----------
+    'POST /api/rift/purchase/order': async (ctx) => {
+      const s = await needSession(ctx);
+      const { kind, item, method, payer: rawPayer } = await readJson(ctx.request, 2000);
+      const payer = String(rawPayer ?? '').toLowerCase();
+      if (orderUsd(kind, item) == null || !['bnb', 'usdt'].includes(method)) throw new HttpError(400, 'badOrder');
+      if (!/^0x[0-9a-f]{40}$/.test(payer) || !(await ctx.store.wallets(s.player.id)).includes(payer)) throw new HttpError(403, 'linkWallet');
+      if (!(await ctx.store.canOrder(s.player.id, payer, ctx.t))) throw new HttpError(429, 'tooManyOrders');
+      let order;
+      try { order = await chain.quote({ id: randomHex(16), kind, item, method, payer, now: ctx.t }); }
+      catch { throw new HttpError(503, 'priceUnavailable'); }
+      try { await ctx.store.addOrder(s.player.id, order); }
+      catch (err) {
+        if (!(err instanceof Conflict)) throw err;
+        throw new HttpError(429, 'tooManyOrders');
+      }
+      return json({ ok: true, order });
+    },
+    'POST /api/rift/purchase/review/options': async (ctx) => {
+      const s = await needSession(ctx);
+      const admins = adminWallets(ctx.env);
+      if (!(await ctx.store.wallets(s.player.id)).some((w) => admins.has(w))) throw new HttpError(404, 'not-found');
+      const body = await readJson(ctx.request, 2000);
+      const tx = String(body.tx ?? '').toLowerCase();
+      if (!/^0x[0-9a-f]{64}$/.test(tx) || orderUsd(body.kind, body.item) == null) throw new HttpError(400, 'badOrder');
+      const prev = await ctx.store.purchase(tx);
+      if (prev) throw new HttpError(409, 'claimed');
+      const pay = await chain.payment(tx, { review: true, findOrder: (id) => ctx.store.order(id) });
+      if (pay.kind !== 'manual') throw new HttpError(400, pay.reason ?? 'badOrder');
+      const playerId = await ctx.store.walletOwner(pay.payer);
+      if (!playerId) throw new HttpError(400, 'linkWallet');
+      if (pay.tagItem ? body.kind !== 'style' || body.item !== pay.tagItem : body.kind !== 'founder') throw new HttpError(400, 'otherItem');
+      if (pay.lockedItem && (body.kind !== pay.lockedKind || body.item !== pay.lockedItem)) throw new HttpError(400, 'otherItem');
+      if (body.amountWei !== pay.amountWei) throw new HttpError(400, 'badOrder');
+      const reason = String(body.reason ?? '').trim();
+      if (reason.length < 10 || reason.length > 300) throw new HttpError(400, 'badOrder');
+      const id = randomHex(16);
+      const purchase = { tx, adminId: s.player.id, playerId, kind: body.kind, item: body.item,
+        amountWei: pay.amountWei, reason, payer: pay.payer, orderId: pay.orderId, method: `${pay.method ?? 'bnb'}-manual`, now: ctx.t };
+      const message = ['Rift: reconocer una compra anterior', `Sitio: ${ctx.url.host}`, `Transacción: ${tx}`,
+        `Artículo: ${body.kind}/${body.item}`, `Pagador: ${pay.payer}`, `${(pay.method ?? 'bnb').toUpperCase()} recibido (unidades mínimas): ${pay.amountWei}`,
+        `Motivo: ${reason}`, `Código: ${id}`, '', 'Solo registra un derecho en el juego. No mueve fondos.'].join('\n');
+      await ctx.store.addChallenge({ id, kind: 'purchase-review', playerId: s.player.id,
+        value: JSON.stringify({ purchase, message }), expires: ctx.t + 2 * 60_000 });
+      return json({ ok: true, id, message });
+    },
+    'POST /api/rift/purchase/review': async (ctx) => {
+      const s = await needSession(ctx);
+      const { id, signature } = await readJson(ctx.request, 4000);
+      const ch = await ctx.store.takeChallenge(String(id ?? ''), 'purchase-review', ctx.t);
+      if (!ch || ch.player_id !== s.player.id) throw new HttpError(400, 'expired');
+      const { purchase, message } = JSON.parse(ch.value);
+      let signer;
+      try { signer = verifyMessage(message, String(signature ?? '')).toLowerCase(); }
+      catch { throw new HttpError(401, 'signature'); }
+      if (!adminWallets(ctx.env).has(signer) || !(await ctx.store.wallets(s.player.id)).includes(signer)) throw new HttpError(403, 'signature');
+      if (await ctx.store.purchase(purchase.tx)) throw new HttpError(409, 'claimed');
+      // Confirmar nuevamente el bloque tras la firma, para no reconocer un pago reorganizado.
+      const pay = await chain.payment(purchase.tx, { review: true, findOrder: (id) => ctx.store.order(id) });
+      if (pay.kind !== 'manual' || pay.payer !== purchase.payer || pay.amountWei !== purchase.amountWei) throw new HttpError(400, pay.reason ?? 'badOrder');
+      await ctx.store.reviewPurchase({ ...purchase, now: ctx.t });
+      return json({ ok: true });
+    },
     'POST /api/rift/purchase': async (ctx) => {
       const s = await needSession(ctx);
       const tx = String((await readJson(ctx.request, 2000)).tx ?? '').toLowerCase();
@@ -507,12 +624,21 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
         if (prev.player_id !== s.player.id) throw new HttpError(409, 'claimed');
         return json({ ok: true, account: await account(ctx, s.player) });
       }
-      const pay = await chain.payment(tx);
+      const pay = await chain.payment(tx, { findOrder: (id) => ctx.store.order(id) });
       if (!pay.kind) throw new HttpError(400, pay.reason ?? 'notFound');
       // Solo el dueño de la wallet que pagó puede sumar la compra a su cuenta.
       const wallets = await ctx.store.wallets(s.player.id);
       if (!wallets.includes(pay.payer)) throw new HttpError(403, 'linkWallet', { payer: pay.payer });
-      await ctx.store.addPurchase({ tx, playerId: s.player.id, kind: pay.kind, item: pay.item, usd: pay.usd, method: pay.method, payer: pay.payer, now: ctx.t });
+      const purchase = { tx, playerId: s.player.id, kind: pay.kind, item: pay.item, usd: pay.usd, method: pay.method, payer: pay.payer, now: ctx.t };
+      try {
+        if (pay.orderId) await ctx.store.completeOrder(pay.orderId, purchase);
+        else await ctx.store.addPurchase(purchase);
+      } catch (err) {
+        const saved = await ctx.store.purchase(tx);
+        if (saved?.player_id === s.player.id) return json({ ok: true, account: await account(ctx, s.player) });
+        if (saved || err instanceof Conflict) throw new HttpError(409, 'claimed');
+        throw err;
+      }
       return json({ ok: true, account: await account(ctx, s.player) });
     },
 
@@ -565,6 +691,16 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
       const limit = Math.min(50, Number(ctx.url.searchParams.get('limit')) || 20);
       const runs = await ctx.store.pendingRuns(limit);
       return json({ ok: true, runs: runs.map((r) => ({ ...r, body: JSON.parse(r.body), claimed: JSON.parse(r.claimed) })) });
+    },
+    /** Antes de revocar: cuántas sesiones abiertas hay de antes de una fecha y cuántas se darían de baja. */
+    'GET /api/rift/audit/sessions': async (ctx) => {
+      audit(ctx);
+      const cutoff = sessionCutoff({ SESSIONS_NOT_BEFORE: ctx.url.searchParams.get('before') });
+      if (!cutoff) throw new HttpError(400, 'before');
+      const r = await ctx.store.sessionsBefore(cutoff, ctx.t);
+      const total = r?.total ?? 0;
+      const revoked = r?.withCredentials ?? 0;
+      return json({ ok: true, before: cutoff, active: sessionCutoff(ctx.env), total, revoked, kept: total - revoked });
     },
     'POST /api/rift/audit': async (ctx) => {
       audit(ctx);

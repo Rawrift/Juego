@@ -2,6 +2,9 @@ import { test, expect } from '@playwright/test';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { Wallet } from 'ethers';
+import { makeOrder } from '../../src/shared/purchase-order.js';
+import { riftSite } from './purchase-site.mjs';
 
 test('partida completa en el navegador verificada por el servidor', async ({ page }) => {
   const errors = [];
@@ -295,11 +298,21 @@ test('celular en horizontal: menú, mejoras y fin de partida entran en pantalla'
   expect(errors).toEqual([]);
 });
 
-test('Pase Fundador: pago en USDT verificado en la cadena, pintura dorada y restauración por hash', async ({ page }) => {
-  const PAYER = '0x1111111111111111111111111111111111111111';
+test('Pase Fundador: pedido USDT reconocido por el servidor, pintura dorada y restauración por hash', async ({ page }) => {
+  const wallet = Wallet.createRandom();
+  const PAYER = wallet.address.toLowerCase();
   const TREASURY = '0x09aF2acF700d6Be84009655fB814a5311DAEc7Dd';
   const USDT = '0x55d398326f99059fF775485246999027B3197955';
   const HASH = `0x${'ab'.repeat(32)}`;
+  let order;
+  const site = await riftSite(4198, {}, {
+    quote: async (details) => (order = makeOrder({ ...details, bnbUsd: 800 })),
+    payment: async (hash) => hash === HASH && order ? {
+      kind: order.kind, item: order.item, payer: order.payer, usd: order.usd, method: order.method, orderId: order.id
+    } : { kind: null, reason: 'notFound' }
+  });
+  try {
+  await page.exposeBinding('testSign', (_src, msg) => wallet.signMessage(msg));
   const pad = (a) => `0x${a.toLowerCase().replace(/^0x/, '').padStart(64, '0')}`;
   const word = (n) => BigInt(n).toString(16).padStart(64, '0');
   const tenUsdt = 10n * 10n ** 18n;
@@ -318,6 +331,7 @@ test('Pase Fundador: pago en USDT verificado en la cadena, pintura dorada y rest
         if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [payer];
         if (method === 'eth_chainId') return chain;
         if (method === 'net_version') return String(parseInt(chain, 16));
+        if (method === 'personal_sign') return window.testSign(new TextDecoder().decode(Uint8Array.from(params[0].slice(2).match(/../g), (h) => parseInt(h, 16))));
         if (method === 'wallet_switchEthereumChain') {
           chain = params[0].chainId;
           return null;
@@ -353,7 +367,7 @@ test('Pase Fundador: pago en USDT verificado en la cadena, pintura dorada y rest
       case 'eth_chainId': return '0x38';
       case 'eth_blockNumber': return '0x11';
       case 'eth_call': return `0x${word(800_000n * 10n ** 18n)}${word(1000n * 10n ** 18n)}${word(1)}`;
-      case 'eth_getTransactionByHash': return tx;
+      case 'eth_getTransactionByHash': return { ...tx, input: order?.data ?? tx.input };
       case 'eth_getTransactionReceipt': return receipt;
       default: return null;
     }
@@ -364,7 +378,7 @@ test('Pase Fundador: pago en USDT verificado en la cadena, pintura dorada y rest
     await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(out) });
   });
 
-  await page.goto('/');
+  await page.goto(site.url);
   await expect(page.locator('#founderChip')).toBeHidden();
   await page.click('#founderBanner');
   await expect(page.locator('#sheetTitle')).toHaveText('Pase Fundador');
@@ -378,7 +392,7 @@ test('Pase Fundador: pago en USDT verificado en la cadena, pintura dorada y rest
   expect(sent).toHaveLength(1);
   expect(sent[0].chain).toBe('0x38');
   expect(sent[0].to.toLowerCase()).toBe(USDT.toLowerCase());
-  expect(sent[0].data).toBe(tx.input);
+  expect(sent[0].data).toBe(order.data);
 
   await expect(page.locator('#founderChip')).toBeVisible();
   await expect(page.locator('.founder-status')).toContainText('Eres Fundador Oro');
@@ -387,13 +401,13 @@ test('Pase Fundador: pago en USDT verificado en la cadena, pintura dorada y rest
   expect(await page.evaluate(() => window.__RIFTFALL__.renderer.R.skin)).toBe('founder');
   expect(await page.evaluate(() => window.__RIFTFALL__.renderer.R.trailColor)).toBe('#ffd23d');
 
-  // Otro dispositivo: sin datos locales, se recupera con el hash del pago.
+  // Borrar el registro local no borra la compra reconocida en la cuenta.
   await page.evaluate(() => {
     localStorage.removeItem('riftfall.founder');
     localStorage.removeItem('riftfall.skin');
   });
   await page.reload();
-  await expect(page.locator('#founderChip')).toBeHidden();
+  await expect(page.locator('#founderChip')).toBeVisible();
   await page.click('#founderBanner');
   await page.fill('.hash-input', 'basura');
   await page.click('text=Verificar pago');
@@ -403,6 +417,7 @@ test('Pase Fundador: pago en USDT verificado en la cadena, pintura dorada y rest
   await expect(page.locator('.founder-status')).toContainText('Eres Fundador Oro');
   await expect(page.locator('#founderChip')).toBeVisible();
   expect(errors).toEqual([]);
+  } finally { site.close(); }
 });
 
 test('Desafío del Día sin servidor: misma semilla, reglas fijas, mejor marca y texto para compartir', async ({ browser }) => {
@@ -1193,7 +1208,9 @@ test('MetaMask en el celular: al conectar la wallet el progreso viaja al navegad
     expect(got.p.bestScore).toBe(4321);
     expect(got.p.runs).toBe(7);
     expect(got.name).toBe('Rodri');
-    expect(got.pid).toBe('cd'.repeat(16));
+    // Sin servidor se lleva el progreso, pero el id secreto del ranking nunca viaja en el enlace.
+    expect(got.pid).not.toBe('cd'.repeat(16));
+    expect(got.pid).toMatch(/^[a-f0-9]{32}$/);
     expect(got.url).not.toContain('rf=');
   } finally {
     await chromeCtx.close();

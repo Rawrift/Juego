@@ -1,4 +1,7 @@
 import { test, expect } from '@playwright/test';
+import { Wallet } from 'ethers';
+import { makeOrder } from '../../src/shared/purchase-order.js';
+import { riftSite } from './purchase-site.mjs';
 
 // Rift Cargo: el segundo juego, en /cargo/. Las pruebas adelantan la simulación desde la página
 // (window.__CARGO__) para no esperar los viajes en tiempo real.
@@ -84,6 +87,7 @@ test('mapa del sistema y mejoras', async ({ page }) => {
 });
 
 test('Hangar Rift: naves exclusivas con plano, construir con créditos y evolucionar a Mk II', async ({ page }) => {
+  test.setTimeout(240_000); // El render 3D por software del CI necesita más tiempo que una GPU.
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   // El jugador ya tiene el plano de la Raya (comprado antes en este navegador).
@@ -110,7 +114,6 @@ test('Hangar Rift: naves exclusivas con plano, construir con créditos y evoluci
   await page.locator('[data-act="hgModel"][data-v="raya"]').click();
   await page.locator('.modal-card.hangar [data-act="buyShip"]').click();
   await expect.poll(() => page.evaluate(() => window.__CARGO__.state.ships.filter((x) => x.model === 'raya').length)).toBe(1);
-  await page.screenshot({ path: 'test-results/cargo-hangar.png' });
   await page.locator('.modal-card.hangar [data-act="closeModal"]').click();
   // Evolucionar la nave desde su tarjeta.
   const id = await page.evaluate(() => window.__CARGO__.state.ships.find((x) => x.model === 'raya').id);
@@ -119,6 +122,7 @@ test('Hangar Rift: naves exclusivas con plano, construir con créditos y evoluci
   await expect.poll(() => page.evaluate((i) => window.__CARGO__.state.ships.find((x) => x.id === i).evo, id)).toBe(1);
   await expect(page.locator('#detail')).toContainText('Mk 2');
   expect(errors).toEqual([]);
+  await page.screenshot({ path: 'test-results/cargo-hangar.png', animations: 'disabled' });
 });
 
 test('Ruta Rift: quien ya jugó RIFTFALL recibe créditos en Rift Cargo (una sola vez)', async ({ page }) => {
@@ -149,16 +153,25 @@ test('celular: barra de pestañas y panel deslizable', async ({ browser }) => {
   await page.close();
 });
 
-test('Taller de estilo: se prueba la pintura, se paga en USDT verificado en la cadena y se restaura por hash', async ({ page }) => {
+test('Taller de estilo: se prueba la pintura, se envía el pedido USDT y el servidor reconoce y restaura la compra', async ({ page }) => {
   test.setTimeout(400_000); // la escena 3D en el navegador de pruebas (sin GPU) es lenta
-  const PAYER = '0x1111111111111111111111111111111111111111';
+  const wallet = Wallet.createRandom();
+  const PAYER = wallet.address.toLowerCase();
   const TREASURY = '0x09aF2acF700d6Be84009655fB814a5311DAEc7Dd';
   const USDT = '0x55d398326f99059fF775485246999027B3197955';
   const HASH = `0x${'ab'.repeat(32)}`;
   const pad = (a) => `0x${a.toLowerCase().replace(/^0x/, '').padStart(64, '0')}`;
   const word = (n) => BigInt(n).toString(16).padStart(64, '0');
   const twoUsdt = 2n * 10n ** 18n;
-  const tag = Buffer.from('RCS:liv-aurora').toString('hex');
+  let order;
+  const site = await riftSite(4199, {}, {
+    quote: async (details) => (order = makeOrder({ ...details, bnbUsd: 600 })),
+    payment: async (hash) => hash === HASH && order ? {
+      kind: order.kind, item: order.item, payer: order.payer, usd: order.usd, method: order.method, orderId: order.id
+    } : { kind: null, reason: 'notFound' }
+  });
+  try {
+  await page.exposeBinding('testSign', (_src, msg) => wallet.signMessage(msg));
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
 
@@ -173,6 +186,7 @@ test('Taller de estilo: se prueba la pintura, se paga en USDT verificado en la c
       async request({ method, params }) {
         if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [payer];
         if (method === 'eth_chainId') return chain;
+        if (method === 'personal_sign') return window.testSign(new TextDecoder().decode(Uint8Array.from(params[0].slice(2).match(/../g), (h) => parseInt(h, 16))));
         if (method === 'wallet_switchEthereumChain') {
           chain = params[0].chainId;
           return null;
@@ -187,7 +201,7 @@ test('Taller de estilo: se prueba la pintura, se paga en USDT verificado en la c
   }, PAYER);
 
   // Red principal simulada: BNB a 600 USD y el pago de 2 USDT (con la etiqueta de la pintura) ya minado.
-  const tx = { hash: HASH, from: PAYER, to: USDT, value: '0x0', input: `0xa9059cbb${pad(TREASURY).slice(2)}${word(twoUsdt)}${tag}` };
+  const tx = { hash: HASH, from: PAYER, to: USDT, value: '0x0', input: '0x' };
   const receipt = {
     transactionHash: HASH, status: '0x1',
     logs: [{ address: USDT, topics: ['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef', pad(PAYER), pad(TREASURY)], data: `0x${word(twoUsdt)}` }]
@@ -205,10 +219,10 @@ test('Taller de estilo: se prueba la pintura, se paga en USDT verificado en la c
   const openWorkshop = async () => {
     await skipTutorial(page);
     await page.click('#tabs [data-v="fleet"]');
-    await page.click('.sty-cta[data-act="style"]');
+    await page.click('#panel .sty-cta[data-act="style"]');
     await expect(page.locator('.modal-card.style')).toBeVisible();
   };
-  await page.goto('/cargo/');
+  await page.goto(`${site.url}/cargo/`);
   await page.locator('.tut-target').waitFor();
   await openWorkshop();
 
@@ -220,15 +234,29 @@ test('Taller de estilo: se prueba la pintura, se paga en USDT verificado en la c
   await expect(page.locator('.sty-buy').first()).toContainText('Pagar 0,003334 BNB');
   expect(await page.evaluate(() => window.__CARGO__.state.ships[0].look)).toBeUndefined();
 
+  // El aviso dura 4,6 segundos. Capturar su aparición antes del toque evita perderlo cuando el
+  // navegador sin GPU queda ocupado dibujando, sin dejar de comprobar que la interfaz lo emitió.
+  await page.evaluate(() => {
+    window.__purchaseNotices = [];
+    new MutationObserver((changes) => {
+      for (const change of changes) for (const node of change.addedNodes) {
+        if (node instanceof Element && node.matches('.toast')) window.__purchaseNotices.push(node.textContent);
+      }
+    }).observe(document.querySelector('#toasts'), { childList: true });
+  });
   await page.locator('.sty-buy').first().locator('text=Pagar US$ 2 en USDT').click();
-  await expect(page.locator('.toast').first()).toContainText('Pintura Aurora ya es tuyo', { timeout: 20_000 });
+  await expect.poll(() => page.evaluate(() => window.__purchaseNotices), { timeout: 30_000 })
+    .toEqual(expect.arrayContaining([expect.stringContaining('Pintura Aurora ya es tuyo')]));
+  // Además del aviso, comprobar el derecho permanente que acreditó el servidor.
+  expect(await site.env.DB.prepare('SELECT item, payer, method FROM purchases WHERE tx = ?').bind(HASH).first())
+    .toMatchObject({ item: 'liv-aurora', payer: PAYER, method: 'usdt' });
 
   // Se pidió una sola transferencia de 2 USDT a la wallet del creador, en la red principal, con la etiqueta.
   const sent = await page.evaluate(() => window.__sent);
   expect(sent).toHaveLength(1);
   expect(sent[0].chain).toBe('0x38');
   expect(sent[0].to.toLowerCase()).toBe(USDT.toLowerCase());
-  expect(sent[0].data).toBe(tx.input);
+  expect(sent[0].data).toBe(order.data);
 
   // La nave quedó pintada (también la malla 3D de la estación) y se guarda.
   await expect(aurora).toHaveClass(/has/);
@@ -251,7 +279,7 @@ test('Taller de estilo: se prueba la pintura, se paga en USDT verificado en la c
   await expect(page.locator('.sty-plate')).toHaveText('LA NANDU');
   await expect.poll(() => page.evaluate((i) => window.__CARGO__.station.ships.get(i)?.key, id)).toContain('LA NANDU');
 
-  // Otro dispositivo: sin datos locales, la compra se recupera con el hash del pago.
+  // Borrar el registro local no borra el derecho reconocido por el servidor.
   await page.evaluate(() => {
     localStorage.removeItem('riftcargo.style');
     localStorage.removeItem('riftfall.founder');
@@ -259,7 +287,7 @@ test('Taller de estilo: se prueba la pintura, se paga en USDT verificado en la c
   await page.reload();
   await page.locator('.tut-target, .ops').first().waitFor();
   await openWorkshop();
-  await expect(aurora).toHaveClass(/lock/);
+  await expect(aurora).toHaveClass(/has/);
   await page.click('.sty-restore summary');
   await page.fill('#styHash', 'basura');
   await page.click('[data-act="styRestore"]');
@@ -275,6 +303,7 @@ test('Taller de estilo: se prueba la pintura, se paga en USDT verificado en la c
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('riftcargo.style'))), { timeout: 30_000 })
     .toMatchObject({ bought: [{ item: 'liv-aurora', tx: HASH }], pending: [] });
   expect(errors).toEqual([]);
+  } finally { site.close(); }
 });
 
 test('celular sin wallet: pagar pide conectar la wallet y, si no anda, abre el juego en MetaMask con la partida y los estéticos', async ({ browser }) => {
@@ -308,7 +337,7 @@ test('celular sin wallet: pagar pide conectar la wallet y, si no anda, abre el j
     await route.fulfill({ status: 200, contentType: 'text/html', body: '<p>MetaMask</p>' });
   });
   await phone.locator('.mtabs [data-v="fleet"]').tap();
-  await phone.locator('.sty-cta[data-act="style"]').tap();
+  await phone.locator('#panel .sty-cta[data-act="style"]').tap();
   await phone.locator('[data-act="styTrail"][data-v="magenta"]').tap();
   await phone.locator('.sty-buy').first().locator('text=Pagar US$ 1 en USDT').tap();
   // Se pide conectar la wallet; si no anda, el plan B abre el juego dentro de MetaMask.

@@ -21,11 +21,11 @@ import { TO_CARGO, pending as bridgePending, riftfallProgress } from '../rift/br
 
 await document.fonts.load('800 100px "Plus Jakarta Sans"').catch(() => {});
 
-// Dirección vieja del juego: se va a la nueva llevando todo lo guardado en este navegador.
-if (await moveIfOldHost()) await new Promise(() => {});
 // Si se llegó desde el link de MetaMask (o de la mudanza), primero se trae la partida y los estéticos.
 await receiveMove({ applyRiftfall: (d) => applyTransfer(d), applyCargo: applyCargoTransfer });
-if (new URLSearchParams(location.search).has('rf')) await receiveCargoTransfer();
+await receiveCargoTransfer();
+// Aplicar antes de mudarse conserva el progreso entrante y permite reenviarlo sin secretos.
+if (await moveIfOldHost()) await new Promise(() => {});
 
 // Cuenta Rift: antes de cargar la partida se trae la de la nube (si la de otro dispositivo avanzó
 // más, se juega esa). Sin servidor o sin conexión, se sigue con la del dispositivo.
@@ -287,5 +287,5 @@ if (/(^|\.)duckdns\.org$|\.vercel\.app$/.test(location.hostname)) {
   document.head.appendChild(sc);
 }
 
-// Gancho para pruebas automáticas (no se usa en el juego).
-window.__CARGO__ = { state, stage, station, setView, step, fastForward, newGame, get view() { return view; }, get map() { return map; } };
+// Solo desarrollo y pruebas: el build publicado no expone el estado ni los controles de simulación.
+if (import.meta.env.DEV || import.meta.env.MODE === 'e2e') window.__CARGO__ = { state, stage, station, setView, step, fastForward, newGame, get view() { return view; }, get map() { return map; } };

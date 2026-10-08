@@ -139,7 +139,10 @@ test('Lanzador: crea token y contratos desde la wallet, reanuda tras un rechazo 
     await game.click('#walletBtn');
     await expect(game.locator('#walletBtn')).toContainText('0x9965', { timeout: 20_000 });
     await expect(game.locator('#menuRift')).not.toHaveText('0');
-    await game.click('.nav-grid [data-open="hangar"]');
+    // En hosting estático, conectar la wallet abre el hangar automáticamente.
+    // El diálogo ya abierto impide pulsar la navegación que queda detrás.
+    await expect(game.locator('#sheet')).toBeVisible();
+    await expect(game.locator('#sheetBody')).toContainText('VANGUARD');
     await game.locator('.ship-card', { hasText: 'VANGUARD' }).locator('button', { hasText: 'ETH' }).click();
     await expect(game.locator('.toast.ok', { hasText: 'VANGUARD es tuya' })).toBeVisible({ timeout: 30_000 });
 

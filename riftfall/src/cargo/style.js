@@ -3,12 +3,14 @@
 // verificación del pago en la cadena y cómo llevar todo al navegador de MetaMask en el celular.
 // Habla con la wallet y con la red por JSON-RPC directo (sin librerías) para que el juego cargue liviano.
 
-import { FOUNDER, tierRank, bnbPriceFromReserves, bnbWeiForUsd, erc20TransferData } from '../shared/founder.js';
-import { STYLE_ITEMS, ownedSet, styleTagHex, styleFromPayment } from '../shared/cargo-style.js';
+import { FOUNDER, tierRank, bnbPriceFromReserves, bnbWeiForUsd } from '../shared/founder.js';
+import { STYLE_ITEMS, ownedSet } from '../shared/cargo-style.js';
 import { packData, unpackData } from '../shared/pack.js';
 import { injected } from '../client/injected.js';
 import { isAdmin } from '../rift/account.js';
 import { walletProvider } from '../rift/wallet.js';
+import { preparePurchase, confirmedPurchase } from '../rift/purchases.js';
+import { HANDOFF_PARAM, linkQuery, requestHandoff, redeemHandoff, takeHandoffParam } from '../rift/handoff.js';
 
 const KEY = 'riftcargo.style';
 const PARAM = 'rf';
@@ -120,19 +122,15 @@ export function bnbFor(item, price) {
 const fail = (code) => Object.assign(new Error(code), { code });
 
 /** Verifica un pago por su hash y, si es de un estético, lo guarda. Devuelve el registro. */
-export async function verifyStylePayment(hash, expectPayer = null) {
+export async function verifyStylePayment(hash, expectPayer = null, options = {}) {
   hash = String(hash ?? '').trim();
   if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) throw fail('badHash');
   const st = loadStyle();
-  const prev = st.bought.find((b) => b.tx.toLowerCase() === hash.toLowerCase());
-  if (prev) return prev;
-  const [tx, receipt, price] = await Promise.all([rpc('eth_getTransactionByHash', [hash]), rpc('eth_getTransactionReceipt', [hash]), bnbPrice()]);
-  if (!tx) throw fail('notFound');
-  const res = styleFromPayment({ tx, receipt, bnbUsd: price });
-  if (!res.item) throw fail(res.reason);
-  if (expectPayer && res.payer !== expectPayer.toLowerCase()) throw fail('otherPayer');
-  const rec = { item: res.item, tx: hash, payer: res.payer, usd: res.usd, method: res.method, at: Date.now() };
-  st.bought.push(rec);
+  const p = await confirmedPurchase(hash, 'style', expectPayer, options);
+  const rec = { item: p.item, tx: p.tx, payer: p.payer, usd: p.usd, method: p.method, at: p.at };
+  const index = st.bought.findIndex((b) => b.tx.toLowerCase() === rec.tx.toLowerCase());
+  if (index >= 0) st.bought[index] = rec;
+  else st.bought.push(rec);
   st.pending = st.pending.filter((h) => h.toLowerCase() !== hash.toLowerCase());
   saveStyle(st);
   return rec;
@@ -156,7 +154,7 @@ export async function retryPending() {
       done.push(await verifyStylePayment(hash));
     } catch (err) {
       // Si la red dice que no es un pago válido, se deja de intentar; si todavía no aparece, se sigue.
-      if (!['pending', 'notFound'].includes(err?.code) && err?.code) setPending(hash, false);
+      if (!['pending', 'notFound', 'offline', 'manualReview', 'priceUnavailable'].includes(err?.code) && err?.code) setPending(hash, false);
     }
   }
   return done;
@@ -213,22 +211,14 @@ export async function buyStyle(item, method, onStage = () => {}) {
     if (!eth) throw fail('noWallet');
     const [from] = await eth.request({ method: 'eth_requestAccounts' });
     await ensureBsc(eth);
-    const usd = STYLE_ITEMS[item].usd;
-    const tag = styleTagHex(item);
-    let tx;
-    if (method === 'usdt') {
-      const amount = BigInt(Math.round(usd * 1e6)) * 10n ** 12n;
-      tx = { from, to: FOUNDER.usdt, data: erc20TransferData(FOUNDER.treasury, amount) + tag, value: '0x0', gas: '0x186a0' };
-    } else {
-      const price = await bnbPrice();
-      tx = { from, to: FOUNDER.treasury, data: `0x${tag}`, value: `0x${bnbWeiForUsd(usd, price).toString(16)}`, gas: '0x9c40' };
-    }
+    const order = await preparePurchase('style', item, method, from, eth);
+    const tx = { from, to: order.to, data: order.data, value: order.value, gas: method === 'usdt' ? '0x186a0' : '0x9c40' };
     onStage('wallet');
     const hash = await eth.request({ method: 'eth_sendTransaction', params: [tx] });
     setPending(hash, true);
     onStage('confirm');
     await waitReceipt(hash);
-    return await verifyStylePayment(hash, from);
+    return await verifyStylePayment(hash, from, { wait: true });
   } catch (err) {
     if (err?.code === 4001 || err?.code === 'ACTION_REJECTED') throw fail('rejected');
     throw err;
@@ -239,23 +229,21 @@ export async function buyStyle(item, method, onStage = () => {}) {
 
 // ---------- Llevar la partida al navegador de MetaMask (celular) ----------
 
-// La sesión de la Cuenta Rift también: en MetaMask entrás a la misma cuenta.
-const CARRY = ['riftcargo.save', 'riftcargo.style', 'riftcargo.lang', 'riftfall.founder', 'rift.session'];
+// La cuenta no va en los datos: viaja con un código de un solo uso (src/rift/handoff.js).
+const CARRY = ['riftcargo.save', 'riftcargo.style', 'riftcargo.lang', 'riftfall.founder'];
 
-/** Link que abre Rift Cargo dentro de la app de MetaMask con la partida y los estéticos. */
+/**
+ * Link que abre Rift Cargo dentro de la app de MetaMask con la partida, los estéticos y, con un código
+ * de un solo uso, la misma cuenta.
+ */
 export async function metamaskLink() {
-  let pack = '';
-  try {
-    const data = {};
-    for (const k of CARRY) {
-      const v = read(k);
-      if (v != null) data[k] = v;
-    }
-    pack = await packData(data);
-  } catch {
-    pack = '';
+  const data = {};
+  for (const k of CARRY) {
+    const v = read(k);
+    if (v != null) data[k] = v;
   }
-  return `https://metamask.app.link/dapp/${location.host}${location.pathname}${pack ? `?${PARAM}=${pack}` : ''}`;
+  const [pack, code] = await Promise.all([packData(data).catch(() => ''), requestHandoff('open')]);
+  return `https://metamask.app.link/dapp/${location.host}${location.pathname}${linkQuery({ [PARAM]: pack, [HANDOFF_PARAM.open]: code })}`;
 }
 
 const parse = (s) => {
@@ -286,16 +274,19 @@ export function applyCargoTransfer(data) {
   const f = parse(data['riftfall.founder']);
   if (f && tierRank(f.tier) > tierRank(parse(read('riftfall.founder'))?.tier)) write('riftfall.founder', data['riftfall.founder']);
   if (data['riftcargo.lang'] && read('riftcargo.lang') == null) write('riftcargo.lang', data['riftcargo.lang']);
-  if (/^[A-Za-z0-9_-]{20,100}$/.test(data['rift.session'] ?? '')) write('rift.session', data['rift.session']);
 }
 
 /** Si la página se abrió con datos en el link, los aplica y limpia la dirección. */
 export async function receiveCargoTransfer() {
   const url = new URL(location.href);
   const text = url.searchParams.get(PARAM);
-  if (!text) return false;
+  const code = takeHandoffParam(url, 'open');
+  if (!text && !code) return false;
   url.searchParams.delete(PARAM);
   history.replaceState(null, '', url.pathname + url.search + url.hash);
+  // Primero la cuenta: si en este navegador había otra, lo suyo se borra antes de traer la partida.
+  const entered = code ? !!(await redeemHandoff(code, 'open')) : false;
+  if (!text) return entered;
   try {
     applyCargoTransfer(await unpackData(text));
     return true;

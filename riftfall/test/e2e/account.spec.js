@@ -5,6 +5,7 @@ import path from 'node:path';
 import { Wallet } from 'ethers';
 import { createApi } from '../../cloud/api.mjs';
 import { createD1 } from '../../cloud/d1-node.mjs';
+import { ensureSchema } from '../../cloud/store.mjs';
 
 // Cuenta Rift de punta a punta: el sitio publicado (dist-e2e) con el mismo servidor que corre en
 // Cloudflare (cloud/api.mjs) y una base SQLite en memoria. Se usa "localhost" porque las passkeys
@@ -167,9 +168,13 @@ test('cuenta con huella: el papá juega en la compu, entra desde el celular con 
 
     // En el celular (la huella llega sincronizada, como con Google o iCloud) entra a la misma cuenta.
     const mobile = await cel.newPage();
+    mobile.on('pageerror', (e) => errors.push(`celular: ${e.message}`));
     const celAuth = await authenticator(mobile);
     const { credentials } = await pcAuth.cdp.send('WebAuthn.getCredentials', { authenticatorId: pcAuth.authenticatorId });
     await celAuth.cdp.send('WebAuthn.addCredential', { authenticatorId: celAuth.authenticatorId, credential: credentials[0] });
+    // La compu ya no se usa. Sin placa de video, su página sigue dibujando por software y le saca el
+    // procesador al celular: con ella abierta, Rift Cargo tardaba unos 2 minutos en cargar acá; cerrada, 4 segundos.
+    await dad.close();
     await mobile.goto(`${site.url}/`);
     await expect(mobile.locator('#accountBtn')).toHaveClass(/guest/);
     expect(await mobile.evaluate(() => window.__RIFTFALL__.app.progress.bestScore ?? 0)).toBe(0);
@@ -177,7 +182,25 @@ test('cuenta con huella: el papá juega en la compu, entra desde el celular con 
     await mobile.click('[data-ra="loginPasskey"]');
     // Recarga sola con el progreso de la cuenta.
     await expect(mobile.locator('#accountBtn b')).toHaveText('Papá', { timeout: 20_000 });
-    await expect.poll(() => mobile.evaluate(() => window.__RIFTFALL__?.app.progress.bestScore ?? 0).catch(() => 0), { timeout: 20_000 }).toBe(best);
+    try {
+      await expect.poll(() => mobile.evaluate(() => window.__RIFTFALL__?.app.progress.bestScore ?? 0).catch(() => 0), { timeout: 20_000 }).toBe(best);
+    } catch (err) {
+      // Si vuelve a fallar, que se sepa por qué: ¿recargó?, ¿hay sesión y cuenta?, ¿qué progreso quedó en
+      // el dispositivo y cuál en la nube? (sin el valor de la sesión).
+      const device = await mobile.evaluate(() => ({
+        url: location.href,
+        ready: document.readyState,
+        hook: !!window.__RIFTFALL__,
+        session: !!localStorage.getItem('rift.session'),
+        account: JSON.parse(localStorage.getItem('rift.account') ?? 'null')?.player ?? null,
+        progress: JSON.parse(localStorage.getItem('riftfall.progress') ?? 'null'),
+        inMemory: window.__RIFTFALL__?.app.progress ?? null
+      })).catch((e) => ({ error: String(e) }));
+      const cloud = await site.env.DB.prepare("SELECT player_id, rev, updated_at, data FROM saves WHERE game = 'riftfall' ORDER BY updated_at").all();
+      console.log('DIAGNÓSTICO cuenta con huella', JSON.stringify({ esperado: best, device, errors, cloud: cloud.results }, null, 1));
+      await mobile.screenshot({ path: 'test-results/cuenta-huella-fallo.png' }).catch(() => {});
+      throw err;
+    }
     await expect(mobile.locator('#rkList li.me')).toContainText('Papá');
 
     // También en Rift Cargo es la misma cuenta.
@@ -315,6 +338,12 @@ test('dueño: con la wallet del dueño tiene todo desbloqueado y el Panel del du
     await expect(page.locator('.ra-stats .ra-row').first()).toBeVisible();
     await page.click('[data-ra="statsBack"]');
     await expect(page.locator('.ra-owner')).toBeVisible();
+    await page.click('[data-ra="review"]');
+    await expect(page.locator('#raReviewHash')).toBeVisible();
+    await expect(page.locator('#raReviewItem')).toBeVisible();
+    await expect(page.locator('#raReviewAmount')).toBeVisible();
+    await page.screenshot({ path: 'test-results/purchase-review-owner.png', animations: 'disabled' });
+    await page.click('[data-ra="statsBack"]');
     await page.click('[data-ra="close"]');
     await page.locator('.profile').click();
     await expect(page.locator('#menu [data-act="owner"]')).toContainText('Panel del dueño');
@@ -468,13 +497,38 @@ test('celular con Chrome: cancelar, y si la conexión no anda, abrir el juego de
     const open = page.locator('.ra-mm [data-mm="open"]');
     await expect(open).toHaveText('Abrir en MetaMask');
     const href = await open.getAttribute('href');
-    expect(href).toMatch(/^https:\/\/metamask\.app\.link\/dapp\/localhost:4194\/\?rf=/);
+    expect(href).toMatch(/^https:\/\/metamask\.app\.link\/dapp\/localhost:4194\/\?rf=[\w-]+&rc=[\w-]{43}$/);
+    // El link no lleva la sesión (ni entera ni adentro de los datos): lleva un código de un solo uso.
+    expect(href).not.toContain(token);
+    const packed = new URL(href).searchParams.get('rf');
+    const inside = await page.evaluate(async (text) => {
+      const bytes = Uint8Array.from(atob(text.slice(1).replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+      const raw = text[0] === 'z' ? await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text() : new TextDecoder().decode(bytes);
+      return raw;
+    }, packed);
+    expect(inside).not.toContain(token);
+    expect(inside).not.toContain('session');
+    expect(inside).not.toContain('"pid"');
+    const me = await page.evaluate(() => JSON.parse(localStorage.getItem('rift.account')).player.id);
     const mm = await browser.newContext(phone);
     const p2 = await mm.newPage();
     await p2.goto(`http://${href.split('/dapp/')[1]}`);
     await expect(p2.locator('#accountBtn')).toBeVisible();
-    expect(await p2.evaluate(() => localStorage.getItem('rift.session'))).toBe(token);
+    // Misma cuenta, con una sesión propia de ese navegador; la dirección queda limpia.
+    const got = await p2.evaluate(() => ({ token: localStorage.getItem('rift.session'), id: JSON.parse(localStorage.getItem('rift.account')).player.id, search: location.search }));
+    expect(got.id).toBe(me);
+    expect(got.token).toBeTruthy();
+    expect(got.token).not.toBe(token);
+    expect(got.search).toBe('');
     await mm.close();
+    // El mismo link, abierto otra vez por otra persona: el código ya se usó y no entra a la cuenta.
+    const thief = await browser.newContext(phone);
+    const p3 = await thief.newPage();
+    await p3.goto(`http://${href.split('/dapp/')[1]}`);
+    await expect(p3.locator('#accountBtn')).toBeVisible();
+    await expect.poll(() => p3.evaluate(() => JSON.parse(localStorage.getItem('rift.account') ?? 'null')?.player?.id ?? null)).not.toBeNull();
+    expect(await p3.evaluate(() => JSON.parse(localStorage.getItem('rift.account')).player.id)).not.toBe(me);
+    await thief.close();
     expect(errors).toEqual([]);
   } finally {
     await ctx.close();
@@ -488,6 +542,8 @@ test('mudanza: quien abre otra dirección (Vercel o Cloudflare) pasa al link de 
   const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg' };
   const api = createApi({ chain: { payment: async () => ({ kind: null, reason: 'notFound' }) } });
   const env = { DB: createD1() };
+  // La consulta directa del test no debe adelantarse a la primera petición que crea las tablas.
+  await ensureSchema(env.DB);
   const ctx = await browser.newContext(phone);
   // Las tres direcciones se sirven desde el build de prueba (sin red); duckdns es la de siempre.
   await ctx.route(/^https?:\/\/(riftfall-chi\.vercel\.app|riftgames\.pages\.dev|riftfall\.duckdns\.org)\//, async (route) => {
@@ -518,6 +574,28 @@ test('mudanza: quien abre otra dirección (Vercel o Cloudflare) pasa al link de 
     expect(page.url()).not.toContain('mv=');
     // Y el progreso queda en la cuenta (nube) del sitio nuevo.
     await expect.poll(async () => (await env.DB.prepare("SELECT data FROM saves WHERE game = 'riftfall'").first())?.data ?? '', { timeout: 30_000 }).toContain('"bestScore":7777');
+
+    // Con cuenta en la dirección vieja (Cloudflare): llega a la de siempre adentro de la misma cuenta,
+    // con un código de un solo uso. La sesión no pasa por ningún link.
+    const made = await api.handle(new Request('https://riftgames.pages.dev/api/rift/guest', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Vieja' }) }), env);
+    const old = await made.json();
+    await ctx.addInitScript((token) => {
+      if (location.hostname === 'riftgames.pages.dev') localStorage.setItem('rift.session', token);
+    }, old.token);
+    const seen = [];
+    page.on('framenavigated', (f) => f === page.mainFrame() && seen.push(f.url()));
+    await page.goto('https://riftgames.pages.dev/');
+    await page.waitForURL(/^https:\/\/riftfall\.duckdns\.org\//, { timeout: 60_000 });
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('rift.account') ?? 'null')?.player?.id ?? null).catch(() => null), { timeout: 60_000 }).toBe(old.account.player.id);
+    const arrived = seen.find((u) => u.startsWith('https://riftfall.duckdns.org/') && u.includes('mc='));
+    expect(arrived, 'la mudanza llevó un código').toBeTruthy();
+    expect(seen.join(' ')).not.toContain(old.token);
+    expect(page.url()).not.toContain('mc=');
+    expect(await page.evaluate(() => localStorage.getItem('rift.session'))).not.toBe(old.token);
+    // Ese código ya no sirve.
+    const code = new URL(arrived).searchParams.get('mc');
+    const again = await api.handle(new Request('https://riftfall.duckdns.org/api/rift/handoff/redeem', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code, purpose: 'move', origin: 'https://riftfall.duckdns.org' }) }), env);
+    expect(again.status).toBe(400);
   } finally {
     await ctx.close();
   }

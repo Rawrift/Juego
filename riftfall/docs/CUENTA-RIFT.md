@@ -51,6 +51,50 @@
 - **Sin servidor** (por ejemplo, la versión para portales o un sitio sin la nube) el juego funciona igual
   con lo guardado en el dispositivo, y el botón de la cuenta no aparece.
 
+## La cuenta nunca viaja en un link
+
+Abrir el juego dentro de MetaMask, o llegar desde una dirección vieja, lleva el progreso en el link, pero
+**no la sesión ni el id secreto del ranking**. Para entrar a la misma cuenta del otro lado se usa un código:
+
+1. El navegador que tiene la cuenta pide un código (`POST /api/rift/handoff`, con su sesión).
+2. El link lleva ese código (`rc=` al abrir en MetaMask, `mc=` en la mudanza).
+3. El navegador que abre el link lo cambia por una **sesión nueva** (`POST /api/rift/handoff/redeem`) y
+   limpia la dirección.
+
+| Regla | Valor |
+|---|---|
+| Usos | Uno solo. El canje lo borra en la misma operación: dos pedidos a la vez, entra uno |
+| Vida | 5 minutos |
+| Códigos vivos | Uno por jugador y por uso; pedir otro anula el anterior |
+| Uso | `open` (otro navegador) o `move` (mudanza); no se cruzan |
+| Sitio | Solo vale en el sitio para el que se pidió, y ese sitio tiene que estar en la lista del servidor |
+| En la base | Se guarda el resumen (SHA-256) del código, no el código |
+
+- El link para **copiar y pegar en otro dispositivo** ("Copiar link de mi progreso") no lleva código: ahí se
+  entra con la wallet o con huella / Face ID.
+- Un link viejo que traiga una sesión o un id adentro se sigue pudiendo abrir: el progreso se mezcla y lo
+  demás se ignora. Nadie puede cambiarle la cuenta a otro mandándole un link.
+- Código: `src/rift/handoff.js` (navegador), `cloud/api.mjs` (rutas) y `cloud/store.mjs` (`takeChallenge`).
+
+### Dar de baja las sesiones de cuando viajaban en links
+
+Hasta este cambio, el link de MetaMask llevaba la sesión. Las sesiones de esa época se pueden dar de baja con
+la variable `SESSIONS_NOT_BEFORE` en Cloudflare (una fecha ISO, por ejemplo `2026-10-08T03:00:00Z`, o
+milisegundos). **Sin la variable no se revoca nada.**
+
+- Afecta solo a las cuentas que pueden volver a entrar (tienen wallet o huella): al abrir el juego quedan
+  como invitado nuevo, entran con su wallet o su huella y encuentran su cuenta, su progreso y sus compras.
+- Los invitados conservan su sesión: es su única llave y no tienen compras ni credenciales que robar.
+- Antes de aplicarla se mide a cuántos afecta (no cambia nada):
+
+  ```bash
+  curl -H "authorization: Bearer $AUDIT_TOKEN" "https://riftgames.pages.dev/api/rift/audit/sessions?before=2026-10-08T03:00:00Z"
+  # { total: sesiones abiertas de antes, revoked: las que se darían de baja, kept: las de invitados }
+  ```
+
+- Orden para aplicarla: publicar esta versión, esperar a que los jugadores la tengan (un día alcanza), medir
+  y recién ahí poner la variable con la fecha de la publicación.
+
 ## Archivos
 
 | Parte | Archivo |
@@ -63,6 +107,7 @@
 | Cliente de la cuenta (los dos juegos) | `src/rift/account.js` |
 | Ventana "Cuenta Rift" | `src/rift/account-ui.js`, `src/rift/account.css` |
 | Mudanza desde la dirección vieja | `src/rift/move.js` |
+| Llevar la cuenta a otro navegador (código de un solo uso) | `src/rift/handoff.js` |
 | Wallet sin extensión (WalletConnect) | `src/rift/wallet.js`, `src/rift/wallet-ui.js`, `src/rift/open-in-metamask.js` |
 | Pruebas | `test/unit/cloud.test.mjs`, `test/e2e/account.spec.js` |
 
@@ -94,7 +139,8 @@
 - **Por qué no se usa riftgames.pages.dev como dirección:** MetaMask marca como peligrosas las direcciones
   gratuitas compartidas (`*.pages.dev`, `*.vercel.app`, `*.workers.dev`, `*.github.io`), porque cualquiera
   puede crear una. riftfall.duckdns.org no figura como peligrosa. Quien abre la de Cloudflare o la de
-  Vercel pasa a riftfall.duckdns.org con todo lo que tenía guardado en ese navegador (`src/rift/move.js`).
+  Vercel pasa a riftfall.duckdns.org con lo que tenía guardado en ese navegador (`src/rift/move.js`) y con su
+  cuenta (por un código de un solo uso, no por el link).
 - **Al publicar hay que subir las dos partes seguidas** (Cloudflare con el juego y Vercel con el reenvío).
 
 ## Publicar una versión nueva
