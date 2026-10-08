@@ -153,6 +153,70 @@ test('celular: barra de pestañas y panel deslizable', async ({ browser }) => {
   await page.close();
 });
 
+test('celular, jugador nuevo: el primer pedido del tutorial se ve entero, nada lo tapa y el toque lo envía', async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'es-ES' });
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/cargo/');
+  await expect(page.locator('.mtabs')).toBeVisible();
+  await expect(page.locator('#coach')).toBeVisible();
+  const send = page.locator('.tut-target .btn.primary');
+  // El panel se abre solo y el botón queda entero dentro de la pantalla (después de la animación).
+  await expect(send).toBeInViewport({ ratio: 1 });
+  await expect.poll(() => send.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return r.top >= 0 && r.left >= 0 && r.bottom <= window.innerHeight && r.right <= window.innerWidth;
+  })).toBe(true);
+  // Nada lo tapa: ni el cartel del tutorial ni la barra de pestañas. Se mira el centro y las cuatro esquinas.
+  await expect.poll(() => send.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    // Las esquinas son redondeadas: se mira 12 px hacia adentro.
+    const points = [[r.left + r.width / 2, r.top + r.height / 2], [r.left + 12, r.top + 12], [r.right - 12, r.top + 12], [r.left + 12, r.bottom - 12], [r.right - 12, r.bottom - 12]];
+    return points.every(([x, y]) => el.contains(document.elementFromPoint(x, y)));
+  })).toBe(true);
+  // El cartel tampoco tapa la barra de pestañas de abajo.
+  expect(await page.evaluate(() => {
+    const c = document.querySelector('#coach').getBoundingClientRect();
+    const tabs = document.querySelector('.mtabs').getBoundingClientRect();
+    return c.bottom <= tabs.top || c.top >= tabs.bottom;
+  })).toBe(true);
+  // El pedido del tutorial es el primero de la lista y el cartel no le tapa el título.
+  expect(await page.evaluate(() => document.querySelector('.offer') === document.querySelector('.tut-target'))).toBe(true);
+  expect(await page.evaluate(() => {
+    const c = document.querySelector('#coach').getBoundingClientRect();
+    const h = document.querySelector('.tut-target').getBoundingClientRect();
+    const b = document.querySelector('.tut-target .btn.primary').getBoundingClientRect();
+    return c.top >= b.bottom || c.bottom <= h.top;
+  })).toBe(true);
+  await page.screenshot({ path: 'test-results/cargo-mobile-tutorial.png' });
+  // Un toque de verdad en el botón acepta el pedido y el tutorial avanza.
+  await send.tap();
+  await expect.poll(() => page.evaluate(() => window.__CARGO__.state.ships.some((s) => s.job))).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__CARGO__.state.flags.tut)).toBeGreaterThanOrEqual(1);
+  expect(errors).toEqual([]);
+  await page.close();
+
+  // Si el jugador cierra el panel antes de enviar, no se le vuelve a abrir solo.
+  const again = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'es-ES' });
+  const secondErrors = [];
+  again.on('pageerror', (e) => secondErrors.push(e.message));
+  await again.goto('/cargo/');
+  try {
+    await expect(again.locator('.mtabs')).toBeVisible();
+    await expect(again.locator('.tut-target .btn.primary')).toBeInViewport({ ratio: 1 });
+  } catch (e) {
+    console.log('SECOND MOBILE PAGE', JSON.stringify({ errors: secondErrors, url: again.url(), body: await again.locator('body').innerText() }));
+    await again.screenshot({ path: 'test-results/cargo-second-mobile-failure.png', animations: 'disabled' });
+    throw e;
+  }
+  await again.locator('.mtabs [data-v="orders"]').tap();
+  await expect(again.locator('.tut-target .btn.primary')).not.toBeInViewport();
+  await again.waitForTimeout(2500);
+  await expect(again.locator('.tut-target .btn.primary')).not.toBeInViewport();
+  expect(await again.evaluate(() => window.__CARGO__.state.flags.tut ?? 0)).toBe(0);
+  await again.close();
+});
+
 test('Taller de estilo: se prueba la pintura, se envía el pedido USDT y el servidor reconoce y restaura la compra', async ({ page }) => {
   test.setTimeout(400_000); // la escena 3D en el navegador de pruebas (sin GPU) es lenta
   const wallet = Wallet.createRandom();

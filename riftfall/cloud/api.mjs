@@ -22,6 +22,7 @@ import { cleanName } from '../src/shared/duel.js';
 import { publicId } from '../src/shared/public-id.js';
 import { FOUNDER } from '../src/shared/founder.js';
 import { orderUsd } from '../src/shared/purchase-order.js';
+import { fiatConfig, fiatKey, fiatSellable, fiatCode, parseFiatCode, parseFiatRef, fiatReviewMessage, FIAT_ORDER_TTL, FIAT_REVIEW_WINDOW } from '../src/shared/fiat.js';
 
 const DAY = 86_400_000;
 const SESSION_DAYS = 365;
@@ -642,6 +643,100 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
       return json({ ok: true, account: await account(ctx, s.player) });
     },
 
+    // ---------- Pago en pesos: pedido del jugador y reconocimiento firmado del dueño ----------
+    // Sin caché: si el dueño apaga el cobro o cambia el destino, el botón tiene que reflejarlo enseguida.
+    'GET /api/rift/fiat': async (ctx) => json({ ok: true, ...fiatConfig(ctx.env) }),
+
+    'POST /api/rift/fiat/order': async (ctx) => {
+      const s = await needSession(ctx);
+      const cfg = fiatConfig(ctx.env);
+      if (!cfg.enabled) throw new HttpError(404, 'not-found');
+      const { kind, item } = await readJson(ctx.request, 2000);
+      const ars = fiatSellable(kind, item) ? cfg.prices[fiatKey(kind, item)] : undefined;
+      if (!ars) throw new HttpError(400, 'badOrder');
+      // La compra queda en la cuenta: tiene que poder volver a entrar (huella o wallet) antes de pagar.
+      if (!(await ctx.store.hasCredentials(s.player.id))) throw new HttpError(403, 'protect');
+      if (await ctx.store.hasPurchase(s.player.id, kind, item)) throw new HttpError(409, 'owned');
+      // Si ya hay un pedido abierto de este artículo (aunque haya vencido), es ese: puede estar pagado y
+      // esperando al dueño. No se arma otro para que nadie pague dos veces.
+      const open = await ctx.store.openFiatOrder(s.player.id, kind, item, ctx.t);
+      if (open) return json({ ok: true, existing: true, order: fiatOrderView(open, ctx.t) });
+      // El destino del cobro queda fijado en el pedido, igual que el importe y el artículo.
+      const order = {
+        id: randomHex(16), code: fiatCode(randomBytes(10)), playerId: s.player.id, kind, item, ars, now: ctx.t, expires: ctx.t + FIAT_ORDER_TTL,
+        payUrl: cfg.payUrl ?? null, alias: cfg.alias ?? null, holder: cfg.holder ?? null
+      };
+      try {
+        await ctx.store.addFiatOrder(order);
+      } catch (err) {
+        if (!(err instanceof Conflict)) throw err;
+        // Dos pedidos a la vez del mismo artículo: queda el que entró primero.
+        const first = await ctx.store.openFiatOrder(s.player.id, kind, item, ctx.t);
+        if (first) return json({ ok: true, existing: true, order: fiatOrderView(first, ctx.t) });
+        throw new HttpError(429, 'tooManyOrders');
+      }
+      return json({ ok: true, order: fiatOrderView(await ctx.store.fiatOrder(order.id), ctx.t) });
+    },
+
+    'GET /api/rift/fiat/orders': async (ctx) => {
+      const s = await needSession(ctx);
+      return json({ ok: true, orders: (await ctx.store.fiatOrders(s.player.id)).map((o) => fiatOrderView(o, ctx.t)) });
+    },
+
+    'POST /api/rift/fiat/cancel': async (ctx) => {
+      const s = await needSession(ctx);
+      const id = String((await readJson(ctx.request, 2000)).id ?? '');
+      if (!/^[0-9a-f]{32}$/.test(id) || !(await ctx.store.cancelFiatOrder(id, s.player.id))) throw new HttpError(400, 'badOrder');
+      return json({ ok: true });
+    },
+
+    'GET /api/rift/fiat/pending': async (ctx) => {
+      await needAdmin(ctx);
+      return json({ ok: true, orders: (await ctx.store.pendingFiatOrders(ctx.t)).map((o) => fiatOrderView(o, ctx.t)) });
+    },
+
+    'POST /api/rift/fiat/review/options': async (ctx) => {
+      const s = await needAdmin(ctx);
+      const body = await readJson(ctx.request, 2000);
+      const code = parseFiatCode(body.code);
+      const ref = parseFiatRef(body.ref);
+      const reason = String(body.reason ?? '').trim();
+      if (!code || !ref || reason.length < 10 || reason.length > 300) throw new HttpError(400, 'badOrder');
+      const order = await ctx.store.fiatOrderByCode(code);
+      if (!order || order.created_at <= ctx.t - FIAT_REVIEW_WINDOW) throw new HttpError(404, 'noOrder');
+      if (order.status !== 'pending') throw new HttpError(409, order.status === 'paid' ? 'claimed' : 'cancelled');
+      // El dueño carga lo que cobró: tiene que ser el importe del pedido, ni más ni menos.
+      if (body.ars !== order.ars) throw new HttpError(400, 'amount');
+      if (await ctx.store.fiatRefUsed(ref)) throw new HttpError(409, 'refUsed');
+      const id = randomHex(16);
+      const message = fiatReviewMessage({ host: ctx.url.host, order, ref, reason, nonce: id });
+      await ctx.store.addChallenge({ id, kind: 'fiat-review', playerId: s.player.id, value: JSON.stringify({ orderId: order.id, ref, reason, message }), expires: ctx.t + 2 * 60_000 });
+      return json({ ok: true, id, message, order: fiatOrderView(order, ctx.t) });
+    },
+
+    'POST /api/rift/fiat/review': async (ctx) => {
+      const s = await needAdmin(ctx);
+      const { id, signature } = await readJson(ctx.request, 4000);
+      const ch = await ctx.store.takeChallenge(String(id ?? ''), 'fiat-review', ctx.t);
+      if (!ch || ch.player_id !== s.player.id) throw new HttpError(400, 'expired');
+      const { orderId, ref, reason, message } = JSON.parse(ch.value);
+      let signer;
+      try {
+        signer = verifyMessage(message, String(signature ?? '')).toLowerCase();
+      } catch {
+        throw new HttpError(401, 'signature');
+      }
+      // Firma la wallet del dueño, y esa wallet tiene que estar en la cuenta que está reconociendo.
+      if (!adminWallets(ctx.env).has(signer) || !(await ctx.store.wallets(s.player.id)).includes(signer)) throw new HttpError(403, 'signature');
+      try {
+        await ctx.store.payFiatOrder({ orderId, ref, adminId: s.player.id, signer, reason, now: ctx.t });
+      } catch (err) {
+        if (!(err instanceof Conflict)) throw err;
+        throw new HttpError(409, 'claimed');
+      }
+      return json({ ok: true });
+    },
+
     // ---------- Ranking de partidas normales (RIFTFALL) ----------
     'GET /api/ranking': async (ctx) => {
       const board = await boardFor(ctx, 'runs', createRunBoard);
@@ -710,6 +805,26 @@ export function createApi({ now = () => Date.now(), chain = createChain() } = {}
       return json({ ok: true });
     }
   };
+
+  /** Sesión de una cuenta del dueño (tiene la wallet que cobra). Para los demás, la ruta no existe. */
+  async function needAdmin(ctx) {
+    const s = await needSession(ctx);
+    const admins = adminWallets(ctx.env);
+    if (!(await ctx.store.wallets(s.player.id)).some((w) => admins.has(w))) throw new HttpError(404, 'not-found');
+    return s;
+  }
+
+  /** Lo que se muestra de un pedido en pesos (nunca a quién pertenece). */
+  function fiatOrderView(o, now) {
+    return {
+      id: o.id, code: o.code, kind: o.kind, item: o.item, ars: o.ars,
+      status: o.status ?? 'pending', createdAt: o.created_at, expiresAt: o.expires_at,
+      expired: (o.status ?? 'pending') === 'pending' && o.expires_at <= now,
+      // A dónde había que pagar cuando se hizo el pedido (no cambia aunque después cambie la configuración).
+      target: o.pay_url ? { payUrl: o.pay_url } : { alias: o.pay_alias ?? null, holder: o.pay_holder ?? null },
+      ...(o.paid_at ? { paidAt: o.paid_at } : {})
+    };
+  }
 
   function audit(ctx) {
     const token = ctx.env.AUDIT_TOKEN;

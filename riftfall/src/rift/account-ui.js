@@ -9,6 +9,7 @@ import { injected } from '../client/injected.js';
 import { openInMetaMask, setWalletFallback } from './open-in-metamask.js';
 import { remoteWallet, walletProvider } from './wallet.js';
 import { STYLE_ITEMS } from '../shared/cargo-style.js';
+import { fiatOwnerOn, fiatOwnerLabel, openFiatOwner, fiatHasOrders, fiatHistoryLabel, openFiatHistory, refreshFiat } from './fiat-ui.js';
 
 const REVIEW = {
   es: { title: 'Reconocer una compra anterior', sub: 'Para pagos BNB sin pedido previo o pedidos BNB/USDT confirmados tarde. Revisá el comprobante: el pagador debe tener su wallet vinculada. Confirmás con una firma gratuita y queda registrado.',
@@ -432,6 +433,7 @@ export function createAccountUI({ game, lang = () => 'es', toast = () => {}, onC
       ${admin && tools.length ? `<section class="ra-owner"><h3 class="ra-h3">${icon('crown')}${L.owner}</h3><p class="ra-note">${L.ownerHint}</p>
         ${btn('stats', 'chart', L.st.open, 'primary')}
         ${btn('review', 'wallet', (REVIEW[lang()] ?? REVIEW.es).title)}
+        ${fiatOwnerOn() ? btn('fiatOwner', 'wallet', fiatOwnerLabel(lang())) : ''}
         <div class="ra-tools">${tools.map((k) => btn(`owner:${k}`, 'star', L.tools[k] ?? k)).join('')}</div></section>` : ''}
       <label class="ra-label">${L.name}</label>
       <div class="ra-field"><input id="raName" maxlength="16" autocomplete="nickname" value="${esc(a.player.name)}" /><button class="ra-btn ghost sm" data-ra="name">${L.save}</button></div>
@@ -449,9 +451,19 @@ export function createAccountUI({ game, lang = () => 'es', toast = () => {}, onC
       ${tier || styles ? `<h3 class="ra-h3">${L.purchases}</h3><div class="ra-creds">
         ${tier ? `<span class="ra-cred gold">${icon('star')}${fill(L.founder, { tier: L.tiers[tier] })}</span>` : ''}
         ${styles ? `<span class="ra-cred">${icon('star')}${fill(L.styles, { n: styles })}</span>` : ''}</div>` : ''}
+      ${fiatHasOrders() ? btn('fiatMine', 'wallet', fiatHistoryLabel(lang())) : ''}
       <p class="ra-privacy">${L.privacy}</p>
       ${guest ? '' : `<button class="ra-link" data-ra="logout">${icon('out')}${L.logout}</button>`}`}
     </div>`;
+  }
+
+  /** Nombre de un artículo para las ventanas de pago en pesos (Pase Fundador o estético de Cargo). */
+  function fiatItemName(kind, item) {
+    const L = tx();
+    if (kind === 'founder') return fill(L.founder, { tier: L.tiers[item] ?? item });
+    const R = REVIEW[lang()] ?? REVIEW.es;
+    for (const [prefix, name] of [['liv-', R.paint], ['trail-', R.trail]]) if (item.startsWith(prefix)) return `${name} ${item.slice(prefix.length)}`;
+    return R[item] ?? item;
   }
 
   function errText(err) {
@@ -483,6 +495,8 @@ export function createAccountUI({ game, lang = () => 'es', toast = () => {}, onC
     const el = ev.target.closest('[data-ra]');
     if (!el || el.disabled) return;
     const act = el.dataset.ra;
+    if (act === 'fiatOwner' && account()?.player?.admin) return openFiatOwner({ itemName: fiatItemName });
+    if (act === 'fiatMine') return openFiatHistory({ itemName: fiatItemName });
     if (act === 'review' && account()?.player?.admin) {
       view = 'review';
       return render();
@@ -597,6 +611,8 @@ export function createAccountUI({ game, lang = () => 'es', toast = () => {}, onC
     render();
     root.hidden = false;
     root.querySelector('.ra-x')?.focus();
+    // Pedidos en pesos de la cuenta (y pendientes del dueño): se muestran aunque el cobro esté apagado.
+    refreshFiat().then((changed) => changed && !root.hidden && view === 'main' && render()).catch(() => {});
     const section = toOwner && root.querySelector('.ra-owner');
     if (section) {
       section.scrollIntoView({ block: 'start' });

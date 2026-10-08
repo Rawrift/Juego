@@ -2,6 +2,7 @@
 // primera vez. Todo pasa por esta capa para que los tests usen SQLite de Node con la misma interfaz.
 
 import { ORDER_LIMIT } from '../src/shared/purchase-order.js';
+import { FIAT_MAX_PENDING, FIAT_MAX_PER_DAY, FIAT_REVIEW_WINDOW } from '../src/shared/fiat.js';
 
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS players (
@@ -34,6 +35,16 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS purchase_reviews (
     tx TEXT PRIMARY KEY, admin_id TEXT NOT NULL, player_id TEXT NOT NULL,
     kind TEXT NOT NULL, item TEXT NOT NULL, amount_wei TEXT NOT NULL, reason TEXT NOT NULL, at INTEGER NOT NULL)`,
+  // Pedidos de pago en pesos (el dueño los reconoce a mano) y el registro de cada reconocimiento.
+  `CREATE TABLE IF NOT EXISTS fiat_orders (
+    id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, player_id TEXT NOT NULL, kind TEXT NOT NULL, item TEXT NOT NULL,
+    ars INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, paid_at INTEGER,
+    pay_url TEXT, pay_alias TEXT, pay_holder TEXT)`,
+  `CREATE INDEX IF NOT EXISTS fiat_orders_player ON fiat_orders (player_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS fiat_orders_status ON fiat_orders (status, created_at)`,
+  `CREATE TABLE IF NOT EXISTS fiat_reviews (
+    order_id TEXT PRIMARY KEY, payment_ref TEXT NOT NULL UNIQUE, admin_id TEXT NOT NULL, signer TEXT NOT NULL, player_id TEXT NOT NULL,
+    kind TEXT NOT NULL, item TEXT NOT NULL, ars INTEGER NOT NULL, reason TEXT NOT NULL, at INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS docs (key TEXT PRIMARY KEY, json TEXT NOT NULL, v INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT, board TEXT NOT NULL, player_pid TEXT NOT NULL, body TEXT NOT NULL,
@@ -211,6 +222,58 @@ export function createStore(db) {
       const result = await db.batch(statements);
       if (!changes(result[0])) throw new Conflict();
     },
+    // ---------- Pago en pesos ----------
+    /** Crea el pedido si la cuenta no pasó el límite de pendientes ni el de pedidos por día (en una sola operación). */
+    async addFiatOrder({ id, code, playerId, kind, item, ars, now, expires, payUrl = null, alias = null, holder = null }) {
+      const r = await run(`INSERT INTO fiat_orders (id, code, player_id, kind, item, ars, created_at, expires_at, pay_url, pay_alias, pay_holder)
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE
+        NOT EXISTS (SELECT 1 FROM fiat_orders WHERE player_id = ? AND kind = ? AND item = ? AND status = 'pending' AND created_at > ?) AND
+        (SELECT COUNT(*) FROM fiat_orders WHERE player_id = ? AND status = 'pending' AND expires_at > ?) < ?
+        AND (SELECT COUNT(*) FROM fiat_orders WHERE player_id = ? AND created_at > ?) < ?`,
+      id, code, playerId, kind, item, ars, now, expires, payUrl, alias, holder,
+      playerId, kind, item, now - FIAT_REVIEW_WINDOW,
+      playerId, now, FIAT_MAX_PENDING, playerId, now - 86_400_000, FIAT_MAX_PER_DAY);
+      if (!changes(r)) throw new Conflict();
+    },
+    fiatOrder: (id) => one('SELECT * FROM fiat_orders WHERE id = ?', id),
+    fiatOrderByCode: (code) => one('SELECT * FROM fiat_orders WHERE code = ?', code),
+    /** El pedido abierto de un artículo (aunque haya vencido: puede estar pagado y esperando al dueño). */
+    openFiatOrder: (playerId, kind, item, now) =>
+      one("SELECT * FROM fiat_orders WHERE player_id = ? AND kind = ? AND item = ? AND status = 'pending' AND created_at > ? ORDER BY created_at DESC LIMIT 1", playerId, kind, item, now - FIAT_REVIEW_WINDOW),
+    fiatOrders: (playerId) => all('SELECT * FROM fiat_orders WHERE player_id = ? ORDER BY created_at DESC LIMIT 12', playerId),
+    async cancelFiatOrder(id, playerId) {
+      return changes(await run("UPDATE fiat_orders SET status = 'cancelled' WHERE id = ? AND player_id = ? AND status = 'pending'", id, playerId)) > 0;
+    },
+    /** Pendientes que el dueño todavía puede reconocer (incluye los vencidos hace poco: el pago puede llegar tarde). */
+    pendingFiatOrders: (now, limit = 50) =>
+      all("SELECT id, code, kind, item, ars, created_at, expires_at, pay_url, pay_alias, pay_holder FROM fiat_orders WHERE status = 'pending' AND created_at > ? ORDER BY created_at DESC LIMIT ?", now - FIAT_REVIEW_WINDOW, limit),
+    fiatRefUsed: async (ref) => !!(await one('SELECT 1 AS x FROM fiat_reviews WHERE payment_ref = ?', ref)),
+    /**
+     * Acredita un pedido en pesos: la compra, el registro del reconocimiento y el pedido pagado, todo
+     * junto o nada. No acredita dos veces el mismo pedido ni usa dos veces la misma referencia de cobro.
+     */
+    async payFiatOrder({ orderId, ref, adminId, signer, reason, now }) {
+      const tx = `fiat:${orderId}`;
+      const result = await db.batch([
+        db.prepare(`INSERT INTO purchases (tx, player_id, kind, item, usd, method, payer, at)
+          SELECT ?, player_id, kind, item, NULL, 'ars-manual', NULL, ? FROM fiat_orders
+          WHERE id = ? AND status = 'pending' AND created_at > ?
+          AND NOT EXISTS (SELECT 1 FROM fiat_reviews WHERE payment_ref = ? OR order_id = ?)
+          AND NOT EXISTS (SELECT 1 FROM purchases WHERE tx = ?)`)
+          .bind(tx, now, orderId, now - FIAT_REVIEW_WINDOW, ref, orderId, tx),
+        db.prepare(`INSERT INTO fiat_reviews (order_id, payment_ref, admin_id, signer, player_id, kind, item, ars, reason, at)
+          SELECT id, ?, ?, ?, player_id, kind, item, ars, ?, ? FROM fiat_orders
+          WHERE id = ? AND status = 'pending' AND EXISTS (SELECT 1 FROM purchases WHERE tx = ? AND at = ?)
+          AND NOT EXISTS (SELECT 1 FROM fiat_reviews WHERE payment_ref = ? OR order_id = ?)`)
+          .bind(ref, adminId, signer, reason, now, orderId, tx, now, ref, orderId),
+        db.prepare(`UPDATE fiat_orders SET status = 'paid', paid_at = ? WHERE id = ? AND status = 'pending'
+          AND EXISTS (SELECT 1 FROM fiat_reviews WHERE order_id = ? AND at = ?)`)
+          .bind(now, orderId, orderId, now)
+      ]);
+      if (!changes(result[0]) || !changes(result[1]) || !changes(result[2])) throw new Conflict();
+    },
+    fiatReview: (orderId) => one('SELECT * FROM fiat_reviews WHERE order_id = ?', orderId),
+    hasPurchase: async (playerId, kind, item) => !!(await one('SELECT 1 AS x FROM purchases WHERE player_id = ? AND kind = ? AND item = ?', playerId, kind, item)),
     purchases: (playerId) => all('SELECT tx, kind, item, usd, method, payer, at FROM purchases WHERE player_id = ? ORDER BY at', playerId),
     purchase: (tx) => one('SELECT * FROM purchases WHERE tx = ?', tx),
     addPurchase: ({ tx, playerId, kind, item, usd, method, payer, now }) =>

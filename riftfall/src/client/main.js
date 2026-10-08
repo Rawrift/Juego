@@ -57,6 +57,7 @@ import { moveIfOldHost, receiveMove } from '../rift/move.js';
 import { applyCargoTransfer } from '../cargo/style.js';
 import { start as startAccount, createSync, onAccount, account as rgAccount, setName as setAccountName, syncPurchases, loginWallet, reloadForAccount, isOnline as isAccountOnline } from '../rift/account.js';
 import { createAccountUI } from '../rift/account-ui.js';
+import { configureFiat, loadFiat } from '../rift/fiat-ui.js';
 import { openInMetaMask, isTouch } from '../rift/open-in-metamask.js';
 import { remoteWallet, remoteAddress } from '../rift/wallet.js';
 import { dailyNumber, dailySeed, DAILY_RULES, msToNextDaily } from '../shared/daily.js';
@@ -1572,6 +1573,18 @@ function setupAccount() {
     }
   });
   $('#accountBtn').addEventListener('click', () => accountUI.open());
+  // Pago en pesos: solo aparece si el servidor lo tiene configurado.
+  configureFiat({
+    lang: () => lang,
+    toast,
+    openAccount: () => accountUI.open(),
+    // Se acreditó con la ventana abierta: el Pase ya está en este dispositivo.
+    onPaid: () => {
+      applyCosmetics();
+      updateMenu();
+    }
+  });
+  loadFiat();
   const sync = createSync('riftfall', {
     get: () => loadProgress(),
     merge: mergeProgress,

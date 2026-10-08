@@ -600,3 +600,238 @@ test('mudanza: quien abre otra dirección (Vercel o Cloudflare) pasa al link de 
     await ctx.close();
   }
 });
+
+test('pago en pesos: el jugador pide el Pase Piloto, queda en revisión y recién lo tiene cuando el dueño reconoce el pago con su firma', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const boss = Wallet.createRandom();
+  const site = await riftSite(4196, {
+    ADMIN_WALLETS: boss.address,
+    FIAT_ALIAS: 'rift.juegos.mp',
+    FIAT_HOLDER: 'Titular de Prueba',
+    FIAT_PRICES: JSON.stringify({ 'founder:pilot': 4500 })
+  });
+  const buyerCtx = await browser.newContext(desktop);
+  await withWallet(buyerCtx, Wallet.createRandom());
+  const bossCtx = await browser.newContext(desktop);
+  await withWallet(bossCtx, boss);
+  try {
+    const page = await buyerCtx.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto(`${site.url}/`);
+    await expect(page.locator('#accountBtn')).toBeVisible();
+    // Invitado: el botón existe, pero antes de pagar hay que proteger la cuenta.
+    await page.click('#founderBanner');
+    const pesos = page.locator('.tier-pilot button', { hasText: 'Pagar en pesos' });
+    await expect(pesos).toHaveText('Pagar en pesos · $ 4.500');
+    await expect(page.locator('.tier-gold button', { hasText: 'Pagar en pesos' })).toHaveCount(0);
+    await pesos.click();
+    await expect(page.locator('.ra-fiat')).toContainText('protegé tu cuenta');
+    await page.click('.ra-fiat [data-fx="protect"]');
+    await page.click('[data-ra="wallet"]');
+    await expect(page.locator('.ra-status')).toContainText('protegida');
+    await page.click('[data-ra="close"]');
+    // Ahora sí: importe, alias, titular y código. Queda en revisión y sin beneficio.
+    await pesos.click();
+    const box = page.locator('.ra-fiat');
+    await expect(box).toContainText('$ 4.500');
+    await expect(box).toContainText('Pago en revisión');
+    await expect(box).toContainText('rift.juegos.mp');
+    await expect(box).toContainText('Titular de Prueba');
+    await expect(box.locator('[data-fx="verifyRecipient"]')).toContainText('destinatario coincida con este titular');
+    await expect(box.locator('[data-fx="copyAlias"]')).toBeVisible();
+    const code = (await box.locator('[data-fx="code"]').textContent()).trim();
+    expect(code).toMatch(/^RIFT-[A-Z2-9]{5}-[A-Z2-9]{5}$/);
+    await page.click('.ra-fiat [data-fx="close"]');
+    expect(await page.evaluate(() => localStorage.getItem('riftfall.founder'))).toBeNull();
+    // El dueño cambia el link de cobro y el precio después del pedido: el pedido conserva los suyos.
+    site.env.FIAT_PAY_URL = 'https://mpago.la/otro-link';
+    site.env.FIAT_PRICES = JSON.stringify({ 'founder:pilot': 6000 });
+    // Volver a tocar no crea otro pedido: muestra el mismo, con su importe y su destino.
+    await pesos.click();
+    await expect(page.locator('.ra-fiat [data-fx="code"]')).toHaveText(code);
+    await expect(box).toContainText('$ 4.500');
+    await expect(box).toContainText('rift.juegos.mp');
+    await expect(box).toContainText('Titular de Prueba');
+    await expect(box.locator('a.ra-btn')).toHaveCount(0);
+    // Cancelar avisa que es solo si no se envió plata, y se puede volver atrás.
+    await box.locator('[data-fx="cancel"]').click();
+    await expect(box).toContainText('Cancelá solo si no enviaste plata');
+    await expect(box).toContainText('cancelar no devuelve el pago');
+    await box.locator('[data-fx="cancelNo"]').click();
+    await expect(box).toContainText('Pago en revisión');
+    // La ventana queda abierta mientras el dueño revisa.
+    expect((await site.env.DB.prepare('SELECT COUNT(*) AS n FROM fiat_orders').first()).n).toBe(1);
+    expect((await site.env.DB.prepare('SELECT COUNT(*) AS n FROM purchases').first()).n).toBe(0);
+
+    // El dueño ve el pedido en su panel y lo reconoce con su firma.
+    const owner = await bossCtx.newPage();
+    owner.on('pageerror', (e) => errors.push(e.message));
+    await owner.goto(`${site.url}/`);
+    await expect(owner.locator('#accountBtn')).toBeVisible();
+    await owner.click('#accountBtn');
+    await owner.click('[data-ra="wallet"]');
+    await expect(owner.locator('.ra-owner')).toContainText('Panel del dueño');
+    await owner.click('[data-ra="fiatOwner"]');
+    const panel = owner.locator('.ra-fiat');
+    await expect(panel.locator('.ra-fiat-list')).toContainText(code);
+    await panel.locator('[data-fx="pick"]').click();
+    await expect(panel.locator('#fxCode')).toHaveValue(code);
+    // Importe equivocado: no se acredita.
+    await panel.locator('#fxArs').fill('4000');
+    await panel.locator('#fxRef').fill('OP-778899');
+    await panel.locator('#fxReason').fill('Visto en la app de cobros');
+    await panel.locator('[data-fx="submit"]').click();
+    await expect(owner.locator('.toast').last()).toContainText('importe no coincide');
+    expect((await site.env.DB.prepare('SELECT COUNT(*) AS n FROM purchases').first()).n).toBe(0);
+    await panel.locator('#fxArs').fill('4.500');
+    await panel.locator('[data-fx="submit"]').click();
+    await expect(owner.locator('.toast').last()).toContainText('Pago reconocido');
+    const row = await site.env.DB.prepare('SELECT tx, kind, item, method FROM purchases').first();
+    expect([row.kind, row.item, row.method]).toEqual(['founder', 'pilot', 'ars-manual']);
+    expect((await site.env.DB.prepare('SELECT payment_ref, ars FROM fiat_reviews').first())).toEqual({ payment_ref: 'op-778899', ars: 4500 });
+
+    // El comprador tenía la ventana abierta: pasa sola a "acreditado", sin recargar, y ya no ofrece
+    // pagar ni cancelar. El Pase queda aplicado en este dispositivo.
+    await expect(box.locator('[data-fx="state"]')).toContainText('Pago acreditado', { timeout: 40_000 });
+    await expect(box.locator('a.ra-btn')).toHaveCount(0);
+    await expect(box.locator('[data-fx="cancel"]')).toHaveCount(0);
+    await expect(box.locator('.ra-fiat-steps')).toHaveCount(0);
+    expect(JSON.parse(await page.evaluate(() => localStorage.getItem('riftfall.founder'))).tier).toBe('pilot');
+    await expect(page.locator('#founderChip')).not.toHaveClass(/hidden/);
+    await box.locator('.ra-btn[data-fx="close"]').click();
+    // Volver a pedirlo ya no se puede: lo tiene.
+    await pesos.click();
+    await expect(page.locator('.toast').last()).toContainText('ya lo tenés');
+    // Al volver a abrir el juego sigue siendo Fundador Piloto.
+    await page.reload();
+    await expect(page.locator('#founderChip')).toBeVisible({ timeout: 30_000 });
+    expect(JSON.parse(await page.evaluate(() => localStorage.getItem('riftfall.founder'))).tier).toBe('pilot');
+    await page.click('#founderBanner');
+    await expect(page.locator('.tier-pilot')).toHaveClass(/owned/);
+    expect(errors).toEqual([]);
+  } finally {
+    await buyerCtx.close();
+    await bossCtx.close();
+    site.close();
+  }
+});
+
+test('pago en pesos, recuperación: con el cobro apagado el jugador reabre su pedido desde la cuenta y el dueño lo reconoce igual', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const boss = Wallet.createRandom();
+  const site = await riftSite(4198, {
+    ADMIN_WALLETS: boss.address,
+    FIAT_PAY_URL: 'https://cafecito.app/riftgames',
+    FIAT_PRICES: JSON.stringify({ 'founder:pilot': 4500 })
+  });
+  const buyerCtx = await browser.newContext(phone);
+  await withWallet(buyerCtx, Wallet.createRandom());
+  const bossCtx = await browser.newContext(desktop);
+  await withWallet(bossCtx, boss);
+  try {
+    const page = await buyerCtx.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto(`${site.url}/`);
+    await expect(page.locator('#accountBtn')).toBeVisible();
+    // Sin pedidos, la cuenta no muestra el historial.
+    await page.click('#accountBtn');
+    await page.click('[data-ra="wallet"]');
+    await expect(page.locator('.ra-status')).toContainText('protegida');
+    await expect(page.locator('[data-ra="fiatMine"]')).toHaveCount(0);
+    await page.click('[data-ra="close"]');
+    await page.click('#founderBanner');
+    await page.locator('.tier-pilot button', { hasText: 'Pagar en pesos' }).click();
+    const code = (await page.locator('.ra-fiat [data-fx="code"]').textContent()).trim();
+    await page.click('.ra-fiat [data-fx="close"]');
+
+    // El dueño apaga el cobro en pesos y cambia el destino.
+    site.env.FIAT_PRICES = '';
+    site.env.FIAT_PAY_URL = 'https://mpago.la/otro-link';
+    await page.reload();
+    await expect(page.locator('#accountBtn')).toBeVisible();
+    // No se puede comprar de nuevo: el botón no está.
+    await page.click('#founderBanner');
+    await expect(page.locator('.tier-pilot')).toBeVisible();
+    await expect(page.locator('button', { hasText: 'Pagar en pesos' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    // Pero el pedido se reabre desde la cuenta, con su código, su importe y su destino de entonces.
+    await page.click('#accountBtn');
+    await page.click('[data-ra="fiatMine"]');
+    const box = page.locator('.ra-fiat');
+    await expect(box.locator('.ra-fiat-list')).toContainText('Pase Fundador Piloto');
+    await expect(box.locator('.ra-fiat-list')).toContainText('En revisión');
+    await box.locator('[data-fx="order"]').click();
+    await expect(box.locator('[data-fx="code"]')).toHaveText(code);
+    await expect(box).toContainText('$ 4.500');
+    await expect(box.locator('a.ra-btn')).toHaveAttribute('href', 'https://cafecito.app/riftgames');
+    await box.locator('.ra-x').click();
+
+    // Vencido: se sigue viendo, sin destino ni instrucciones, y dice que no vuelva a pagar.
+    await site.env.DB.prepare('UPDATE fiat_orders SET expires_at = ?').bind(Date.now() - 1000).run();
+    await page.click('[data-ra="fiatMine"]');
+    await expect(box.locator('.ra-fiat-list')).toContainText('Vencido');
+    await box.locator('[data-fx="order"]').click();
+    await expect(box.locator('[data-fx="code"]')).toHaveText(code);
+    await expect(box).toContainText('no vuelvas a pagar');
+    await expect(box.locator('a.ra-btn')).toHaveCount(0);
+    await expect(box.locator('.ra-fiat-steps')).toHaveCount(0);
+    expect(await box.textContent()).not.toContain('mpago.la');
+    expect((await site.env.DB.prepare('SELECT COUNT(*) AS n FROM fiat_orders').first()).n).toBe(1);
+
+    // El dueño, con el cobro apagado, todavía tiene la entrada y reconoce el pago tardío.
+    const owner = await bossCtx.newPage();
+    owner.on('pageerror', (e) => errors.push(e.message));
+    await owner.goto(`${site.url}/`);
+    await expect(owner.locator('#accountBtn')).toBeVisible();
+    await owner.click('#accountBtn');
+    await owner.click('[data-ra="wallet"]');
+    await expect(owner.locator('.ra-owner')).toContainText('Panel del dueño');
+    await owner.click('[data-ra="close"]');
+    await owner.click('#accountBtn');
+    await owner.click('[data-ra="fiatOwner"]');
+    const panel = owner.locator('.ra-fiat');
+    await expect(panel.locator('.ra-fiat-list')).toContainText(code);
+    await expect(panel.locator('.ra-fiat-list')).toContainText('vencido');
+    await panel.locator('[data-fx="pick"]').click();
+    await panel.locator('#fxArs').fill('4500');
+    await panel.locator('#fxRef').fill('OP-551122');
+    await panel.locator('#fxReason').fill('Pago tardío visto en la app');
+    await panel.locator('[data-fx="submit"]').click();
+    await expect(owner.locator('.toast').last()).toContainText('Pago reconocido');
+
+    // El jugador, con su ventana abierta, lo ve acreditado sin haber pagado de nuevo.
+    await expect(box.locator('[data-fx="state"]')).toContainText('Pago acreditado', { timeout: 40_000 });
+    expect(JSON.parse(await page.evaluate(() => localStorage.getItem('riftfall.founder'))).tier).toBe('pilot');
+    expect((await site.env.DB.prepare('SELECT COUNT(*) AS n FROM purchases').first()).n).toBe(1);
+    expect(errors).toEqual([]);
+  } finally {
+    await buyerCtx.close();
+    await bossCtx.close();
+    site.close();
+  }
+});
+
+test('pago en pesos apagado: sin configuración no aparece ningún botón', async ({ browser }) => {
+  const boss = Wallet.createRandom();
+  const site = await riftSite(4197, { ADMIN_WALLETS: boss.address });
+  const ctx = await browser.newContext(desktop);
+  await withWallet(ctx, boss);
+  try {
+    const page = await ctx.newPage();
+    await page.goto(`${site.url}/`);
+    await expect(page.locator('#accountBtn')).toBeVisible();
+    await page.click('#founderBanner');
+    await expect(page.locator('.tier-pilot')).toBeVisible();
+    await expect(page.locator('button', { hasText: 'Pagar en pesos' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await page.click('#accountBtn');
+    await page.click('[data-ra="wallet"]');
+    await expect(page.locator('.ra-owner')).toContainText('Panel del dueño');
+    await expect(page.locator('[data-ra="fiatOwner"]')).toHaveCount(0);
+  } finally {
+    await ctx.close();
+    site.close();
+  }
+});

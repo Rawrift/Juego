@@ -20,6 +20,7 @@ import { loadFounder, founderRank, buyFounder, verifyPayment, bnbPrice, currentS
 import { explainError } from './wallet.js';
 import { injected } from './injected.js';
 import { metamaskLink, continueLink } from './transfer.js';
+import { fiatLabel, openFiatPay } from '../rift/fiat-ui.js';
 import { claimPurchase } from '../rift/account.js';
 import { WORLD, myPublicId, fetchRunBoard, fetchWorldDaily } from './world.js';
 import { dailyNumber } from '../shared/daily.js';
@@ -263,8 +264,8 @@ export function createPanels(app) {
           out.push(
             el('div', { class: 'founder-status' }, [
               el('b', {}, `★ ${t('f.youAre', { tier: t(`f.tier.${rec.tier}`) })}`),
-              rec.owner
-                ? el('small', {}, t('f.owner'))
+              rec.owner || !/^0x[0-9a-fA-F]{64}$/.test(rec.tx ?? '')
+                ? el('small', {}, rec.owner ? t('f.owner') : '')
                 : el('a', { href: `${FOUNDER.explorer}/tx/${rec.tx}`, target: '_blank', rel: 'noopener' }, t('f.viewTx')),
               skins.length > 1
                 ? el('div', { class: 'skin-row' }, [
@@ -328,6 +329,13 @@ export function createPanels(app) {
               usdt.addEventListener('click', buy(usdt, 'usdt'));
               bnb.addEventListener('click', buy(bnb, 'bnb'));
               card.append(el('div', { class: 'row' }, [usdt, bnb]));
+              // Pago en pesos (solo si el dueño lo configuró y este nivel se vende así).
+              const pesos = fiatLabel('founder', tier.id, lang);
+              if (pesos) {
+                const ars = el('button', { class: 'btn ghost small' }, pesos);
+                ars.addEventListener('click', () => openFiatPay({ kind: 'founder', item: tier.id, name: `${t('f.title')} ${t(`f.tier.${tier.id}`)}` }));
+                card.append(el('div', { class: 'row' }, [ars]));
+              }
               return card;
             })
           )
